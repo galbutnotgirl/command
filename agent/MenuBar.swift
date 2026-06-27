@@ -115,11 +115,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let m = NSMenu()
         // Action items inserted at top by menuWillOpen.
         m.addItem(.separator())
-        let s = add(m, "Settings", #selector(openSettings), key: ",")
-        s.keyEquivalentModifierMask = .command
-        // macOS auto-decorates a menu item titled "Settings" with a gearshape
-        // icon; an explicit empty image overrides it so the row is text-only.
-        s.image = NSImage()
+        // Title is "Open Settings" (not bare "Settings") so macOS doesn't
+        // auto-decorate the row with a gearshape icon. No image + no key
+        // equivalent → the label sits flush-left like the other rows.
+        add(m, "Open Settings", #selector(openSettings))
         add(m, "Quit Claude Command", #selector(quit), key: "q")
         return m
     }

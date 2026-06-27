@@ -15,16 +15,16 @@ set -uo pipefail
 # action(worker ACTION) | "Service menu name" | hotkey tokens
 # Tip: you can also rebind these visually in the menu-bar window (Shortcuts tab).
 HOTKEYS=(
+  "add|Claude - Add|F8"
   "go|Claude - Go|cmd F8"
-  "comment|Claude - Comment|F8"
-  "add|Claude - Add|opt F8"
+  "comment|Claude - Comment|opt F8"
+  "shotadd|Claude - Screenshot Add|F7"
   "shotgo|Claude - Screenshot Go|cmd F7"
-  "shotcomment|Claude - Screenshot Comment|F7"
-  "shotadd|Claude - Screenshot Add|opt F7"
+  "shotcomment|Claude - Screenshot Comment|opt F7"
   "cliphistory|Claude - Clipboard History|F6"
   "todo|Claude - To-Do|cmd F6"
-  # Dictation: no default key by request. Bind it in the menu-bar window
-  # (Shortcuts tab) — actions "dictate" and "dictateadd" appear there unbound.
+  "dictate|Claude - Dictate|opt F9"
+  "dictateadd|Claude - Dictate to Claude|cmd F9"
 )
 
 CFG="${HOME}/.claude/state/command-hotkeys.json"
