@@ -26,6 +26,42 @@ var GITHUB_REPO_URL: String { GH_OWNER.isEmpty ? "" : "https://github.com/\(GH_O
 // Where install-agent.sh puts the running app. The swapper replaces this path.
 let INSTALL_PATH = (NSHomeDirectory() as NSString).appendingPathComponent("Applications/ClaudeCommand.app")
 
+// ── Release channels ────────────────────────────────────────────────────────
+// Mapped onto GitHub release tags: prod = plain "vX.Y.Z", beta = "vX.Y.Z-beta.N",
+// alpha = "vX.Y.Z-alpha.N". A channel sees its own builds AND everything more
+// stable (alpha → alpha+beta+prod, beta → beta+prod, prod → prod only), so a
+// tester always lands on the newest build they've opted into.
+enum UpdateChannel: String, CaseIterable {
+    case alpha, beta, prod
+    var label: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
+    // Channels this selection is allowed to receive (self + more stable).
+    var accepts: Set<UpdateChannel> {
+        switch self {
+        case .alpha: return [.alpha, .beta, .prod]
+        case .beta:  return [.beta, .prod]
+        case .prod:  return [.prod]
+        }
+    }
+    // Which channel a release tag belongs to.
+    static func of(tag: String) -> UpdateChannel {
+        let t = tag.lowercased()
+        if t.contains("alpha") { return .alpha }
+        if t.contains("beta")  { return .beta }
+        return .prod
+    }
+}
+
+// Prod has no public release yet → keep the Prod option disabled in the UI.
+// Flip to true once a stable vX.Y.Z release is cut.
+let PROD_AVAILABLE = false
+
+func currentChannel() -> UpdateChannel {
+    UpdateChannel(rawValue: UserDefaults.standard.string(forKey: "updateChannel") ?? "alpha") ?? .alpha
+}
+func setUpdateChannel(_ c: UpdateChannel) {
+    UserDefaults.standard.set(c.rawValue, forKey: "updateChannel")
+}
+
 struct UpdateInfo {
     let latestVersion: String
     let currentVersion: String
@@ -65,12 +101,15 @@ final class Updater {
     static let shared = Updater()
     private(set) var busy = false
 
-    // ── 1. Check the latest release ─────────────────────────────────────────
+    // ── 1. Check the newest release on the selected channel ──────────────────
     func check(_ completion: @escaping (UpdateCheckResult) -> Void) {
+        let channel = currentChannel()
         guard !GH_OWNER.isEmpty, !GH_REPO.isEmpty else {
             completion(.failed("No update repo configured yet.")); return
         }
-        guard let url = URL(string: "https://api.github.com/repos/\(GH_OWNER)/\(GH_REPO)/releases/latest") else {
+        // Pull the release list (newest-first) and filter by channel ourselves —
+        // /releases/latest only ever returns the newest stable build.
+        guard let url = URL(string: "https://api.github.com/repos/\(GH_OWNER)/\(GH_REPO)/releases?per_page=30") else {
             completion(.failed("Bad update URL.")); return
         }
         var req = URLRequest(url: url, timeoutInterval: 15)
@@ -84,14 +123,23 @@ final class Updater {
                 guard let http = resp as? HTTPURLResponse else { completion(.failed("No response.")); return }
                 if http.statusCode == 404 { completion(.failed("No releases published yet.")); return }
                 guard http.statusCode == 200, let data = data,
-                      let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let tag = obj["tag_name"] as? String else {
+                      let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
                     completion(.failed("Update check failed (HTTP \(http.statusCode)).")); return
+                }
+                // First release (list is newest-first) that this channel accepts
+                // and that isn't a draft.
+                let match = arr.first { rel in
+                    guard (rel["draft"] as? Bool) != true, let tag = rel["tag_name"] as? String
+                    else { return false }
+                    return channel.accepts.contains(UpdateChannel.of(tag: tag))
+                }
+                guard let rel = match, let tag = rel["tag_name"] as? String else {
+                    completion(.failed("No \(channel.label) release published yet.")); return
                 }
                 let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
                 let cur = currentAppVersion()
                 var dl: String? = nil
-                if let assets = obj["assets"] as? [[String: Any]] {
+                if let assets = rel["assets"] as? [[String: Any]] {
                     for a in assets where (a["name"] as? String)?.hasSuffix(".zip") == true {
                         dl = a["browser_download_url"] as? String; break
                     }
@@ -99,10 +147,11 @@ final class Updater {
                 let info = UpdateInfo(
                     latestVersion: latest,
                     currentVersion: cur,
-                    isNewer: versionGreater(latest, cur),
-                    releaseURL: (obj["html_url"] as? String) ?? GITHUB_REPO_URL,
+                    // Newest build on the channel that isn't the one we're running.
+                    isNewer: latest != cur,
+                    releaseURL: (rel["html_url"] as? String) ?? GITHUB_REPO_URL,
                     downloadURL: dl,
-                    notes: (obj["body"] as? String) ?? "")
+                    notes: (rel["body"] as? String) ?? "")
                 completion(info.isNewer ? .available(info) : .upToDate(current: cur))
             }
         }.resume()

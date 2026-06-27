@@ -142,10 +142,6 @@ struct SettingsRootView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Image(systemName: "command").foregroundColor(.accentColor)
-                Text("Claude Command").font(.headline)
-            }.padding(.bottom, 10)
             tabButton(.setup, "Set Up", "checklist")
             tabButton(.shortcuts, "Shortcuts", "keyboard")
             tabButton(.history, "History", "clock.arrow.circlepath")
@@ -392,6 +388,9 @@ struct DictationView: View {
     @State private var micGranted       = micPermissionGranted()
     @State private var speechGranted    = speechPermissionGranted()
     @State private var whisperEnabled   = whisperPostProcessEnabled()
+    @State private var whisperFound     = whisperAvailable()
+    @State private var installingWhisper = false
+    @State private var whisperInstallMsg = ""
 
     var body: some View {
         ScrollView {
@@ -459,12 +458,24 @@ struct DictationView: View {
                         Toggle("Refine with whisper-cli (better accuracy)", isOn: $whisperEnabled)
                             .onChange(of: whisperEnabled) { _, v in setWhisperPostProcess(v) }
 
-                        if whisperAvailable() {
+                        if whisperFound {
                             Text("whisper-cli found ✓")
                                 .font(.caption).foregroundColor(.green)
+                        } else if installingWhisper {
+                            HStack(spacing: 6) {
+                                ProgressView().scaleEffect(0.6)
+                                Text("Installing whisper-cli…").font(.caption).foregroundColor(.secondary)
+                            }
                         } else {
-                            Text("whisper-cli not found — install with: brew install whisper-cpp")
-                                .font(.caption).foregroundColor(.secondary)
+                            HStack(spacing: 8) {
+                                Text("whisper-cli not found").font(.caption).foregroundColor(.secondary)
+                                Button("Install") { installWhisper() }
+                                    .buttonStyle(.bordered).controlSize(.small)
+                            }
+                        }
+                        if !whisperInstallMsg.isEmpty {
+                            Text(whisperInstallMsg).font(.caption2).foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Text("When enabled, SFSpeechRecognizer shows text live while whisper refines the final result for proper nouns and acronyms.")
@@ -492,7 +503,7 @@ struct DictationView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(!vocabDirty)
 
-                        Text("Stored at ~/.claude/state/dictation-vocab.json")
+                        Text("Your own terms, stored locally at ~/.claude/state/dictation-vocab.json.")
                             .font(.caption).foregroundColor(.secondary)
                     }
                     .padding(.vertical, 6).padding(.horizontal, 2)
@@ -504,6 +515,30 @@ struct DictationView: View {
             micGranted     = micPermissionGranted()
             speechGranted  = speechPermissionGranted()
             whisperEnabled = whisperPostProcessEnabled()
+            whisperFound   = whisperAvailable()
+        }
+    }
+
+    // Install whisper-cli via Homebrew (provides better dictation accuracy).
+    private func installWhisper() {
+        installingWhisper = true; whisperInstallMsg = ""
+        DispatchQueue.global(qos: .userInitiated).async {
+            let brew = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"].first { fileExists($0) }
+            guard let brew else {
+                DispatchQueue.main.async {
+                    installingWhisper = false
+                    whisperInstallMsg = "Homebrew not found — install it from brew.sh, then try again."
+                }
+                return
+            }
+            let r = runShell(brew, ["install", "whisper-cpp"])
+            DispatchQueue.main.async {
+                installingWhisper = false
+                whisperFound = whisperAvailable()
+                whisperInstallMsg = whisperFound
+                    ? "whisper-cli installed ✓"
+                    : "Install failed (exit \(r.code)). In Terminal: brew install whisper-cpp"
+            }
         }
     }
 }
@@ -735,6 +770,40 @@ struct HistoryView: View {
     }
 }
 
+// ---- channel picker (segmented; Prod greyed until a stable release exists) --
+struct ChannelPicker: View {
+    @Binding var channel: UpdateChannel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(UpdateChannel.allCases.enumerated()), id: \.element) { idx, c in
+                let disabled = (c == .prod && !PROD_AVAILABLE)
+                let selected = channel == c
+                Button {
+                    channel = c
+                    setUpdateChannel(c)
+                } label: {
+                    Text(c.label)
+                        .font(.system(size: 12, weight: selected ? .semibold : .regular))
+                        .frame(width: 62)
+                        .padding(.vertical, 4)
+                        .background(selected ? Color.accentColor : Color.clear)
+                        .foregroundColor(disabled ? Color.secondary.opacity(0.45)
+                                                  : (selected ? .white : .primary))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(disabled)
+                if idx < UpdateChannel.allCases.count - 1 {
+                    Divider().frame(height: 16)
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.3), lineWidth: 1))
+    }
+}
+
 // ---- About ------------------------------------------------------------------
 struct AboutView: View {
     @ObservedObject var model: SettingsModel
@@ -745,9 +814,18 @@ struct AboutView: View {
     @State private var checking = false
     @State private var installing = false
     @State private var available: UpdateInfo? = nil
+    @State private var channel = currentChannel()
 
     private var version: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
+    }
+
+    private var channelHint: String {
+        switch channel {
+        case .alpha: return "Alpha — earliest builds, least tested."
+        case .beta:  return "Beta — pre-release builds for testing."
+        case .prod:  return "Stable releases only."
+        }
     }
 
     var body: some View {
@@ -764,6 +842,16 @@ struct AboutView: View {
                         .buttonStyle(.bordered).controlSize(.small)
                         .disabled(checking || installing)
                 }
+
+                // Update channel
+                HStack(spacing: 10) {
+                    Text("Channel").font(.caption).foregroundColor(.secondary)
+                    ChannelPicker(channel: $channel)
+                        .disabled(checking || installing)
+                    Spacer()
+                }
+                Text(channelHint).font(.caption2).foregroundColor(.secondary)
+
                 if let info = available {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.down.circle.fill").foregroundColor(.accentColor)

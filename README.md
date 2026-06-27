@@ -86,17 +86,27 @@ SIGN_ID="My Cert Name" ./build-helper.sh
 
 ## Updates
 
-Built-in. **Settings → About → Check for Updates** queries this repo's GitHub Releases, and if a newer version is published it downloads and installs it in place, then restarts. No third-party framework.
+Built-in. **Settings → About → Check for Updates** queries this repo's GitHub Releases, downloads the newest build on your channel, installs it in place, and restarts. No third-party framework.
+
+**Channels** — pick one in Settings → About:
+
+| Channel | Gets | Release tag |
+|---------|------|-------------|
+| **Alpha** | everything (alpha + beta + stable) | `v1.2.0-alpha.1` |
+| **Beta** | beta + stable | `v1.2.0-beta.1` |
+| **Prod** | stable only | `v1.2.0` |
+
+A channel always sees its own builds plus everything more stable, so a tester lands on the newest build they opted into. Prod is disabled in the UI until the first stable release is cut (flip `PROD_AVAILABLE` in `agent/Updater.swift`).
 
 Releasing a new build (maintainers):
 
 ```bash
-# bump VERSION first, then:
+# bump VERSION first (e.g. 1.2.0-alpha.1), then:
 ./release.sh                                   # builds + zips dist/ClaudeCommand-<version>.zip
-gh release create "v$(cat VERSION)" dist/ClaudeCommand-*.zip --generate-notes
+gh release create "v$(cat VERSION)" dist/ClaudeCommand-*.zip --prerelease --generate-notes
 ```
 
-Mark a release as **pre-release** on GitHub to ship it to beta testers without pushing it to everyone — `Check for Updates` only offers the latest **stable** release.
+Tag with `-alpha`/`-beta` (and `--prerelease`) for those channels; a plain `vX.Y.Z` is a stable/prod release.
 
 ---
 
