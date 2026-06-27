@@ -77,17 +77,18 @@ struct OnboardingView: View {
                     .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
 
             case .accessibility:
-                AccessibilityStepView(onOpen: {
-                    requestAccessibility()              // triggers system permission dialog
-                    openPrivacyPane("Privacy_Accessibility")
-                })
+                AccessibilityStepView(
+                    onRequest: { requestAccessibility() },              // show the system alert only
+                    onOpenSettings: { openPrivacyPane("Privacy_Accessibility") }   // separate, on demand
+                )
                 .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
                 .onAppear { startPollingAccessibility() }
                 .onDisappear { polling?.invalidate() }
 
             case .screenRecording:
                 ScreenRecordingStepView(
-                    onOpen: { openPrivacyPane("Privacy_ScreenCapture") },
+                    onRequest: { requestScreenRecording() },            // show the system alert (was missing)
+                    onOpenSettings: { openPrivacyPane("Privacy_ScreenCapture") },
                     onDone: {
                         withAnimation(.easeInOut(duration: 0.3)) { step = .microphone }
                     }
@@ -311,8 +312,9 @@ struct KeyCapView: View {
 // ---- accessibility step -----------------------------------------------------
 
 struct AccessibilityStepView: View {
-    let onOpen: () -> Void
-    @State private var opened = false
+    let onRequest: () -> Void
+    let onOpenSettings: () -> Void
+    @State private var requested = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -332,13 +334,13 @@ struct AccessibilityStepView: View {
 
             // Mockup of what the user will see in System Settings
             SettingsMockup(
-                appName: "CommandAgent",
-                description: "Find CommandAgent in the list and flip the switch ON.",
+                appName: "Claude Command",
+                description: "Find Claude Command in the list and flip the switch ON.",
                 switchColor: .blue
             )
 
-            if !opened {
-                Button(action: { opened = true; onOpen() }) {
+            if !requested {
+                Button(action: { requested = true; onRequest() }) {
                     Label("Request Access", systemImage: "lock.open")
                 }
                 .buttonStyle(.borderedProminent)
@@ -347,10 +349,11 @@ struct AccessibilityStepView: View {
                 VStack(spacing: 8) {
                     HStack(spacing: 6) {
                         ProgressView().scaleEffect(0.7)
-                        Text("Waiting — flip the CommandAgent switch in System Settings...")
+                        Text("In the alert, choose Open System Settings, then flip the Claude Command switch ON.")
                             .font(.subheadline).foregroundColor(.secondary)
+                            .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                     }
-                    Button("Open Settings Again") { onOpen() }
+                    Button("Open System Settings") { onOpenSettings() }
                         .buttonStyle(.bordered).controlSize(.small)
                 }
             }
@@ -362,9 +365,10 @@ struct AccessibilityStepView: View {
 // ---- screen recording step --------------------------------------------------
 
 struct ScreenRecordingStepView: View {
-    let onOpen: () -> Void
+    let onRequest: () -> Void
+    let onOpenSettings: () -> Void
     let onDone: () -> Void
-    @State private var opened = false
+    @State private var requested = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -383,23 +387,24 @@ struct ScreenRecordingStepView: View {
                 .frame(maxWidth: 420)
 
             SettingsMockup(
-                appName: "CommandAgent",
-                description: "Find CommandAgent in the list and flip the switch ON.",
+                appName: "Claude Command",
+                description: "Find Claude Command in the list and flip the switch ON.",
                 switchColor: .purple
             )
 
-            if !opened {
-                Button(action: { opened = true; onOpen() }) {
-                    Label("Open Screen Recording Settings", systemImage: "arrow.up.right.square")
+            if !requested {
+                Button(action: { requested = true; onRequest() }) {
+                    Label("Request Access", systemImage: "lock.open")
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             } else {
                 VStack(spacing: 10) {
-                    Text("Once you've enabled it, tap Continue.")
+                    Text("In the alert, choose Open System Settings and enable Claude Command, then tap Continue.")
                         .font(.subheadline).foregroundColor(.secondary)
+                        .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 10) {
-                        Button("Open Settings Again") { onOpen() }
+                        Button("Open System Settings") { onOpenSettings() }
                             .buttonStyle(.bordered).controlSize(.small)
                         Button("Continue ->") { onDone() }
                             .buttonStyle(.borderedProminent).controlSize(.regular)

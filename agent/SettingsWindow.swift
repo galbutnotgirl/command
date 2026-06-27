@@ -295,7 +295,7 @@ struct Step: Identifiable {
 struct StepDiagram: View {
     private let steps: [Step] = [
         Step(id: 1, icon: "magnifyingglass", title: "Open the pane", sub: "Privacy & Security in System Settings"),
-        Step(id: 2, icon: "switch.2",        title: "Flip it on",    sub: "Enable CommandAgent in the list"),
+        Step(id: 2, icon: "switch.2",        title: "Flip it on",    sub: "Enable Claude Command in the list"),
         Step(id: 3, icon: "checkmark.seal",  title: "Re-check here", sub: "Rows turn green when granted"),
     ]
     var body: some View {
@@ -621,14 +621,14 @@ struct TroubleshootingView: View {
             DiagItem(
                 title: "Accessibility",
                 ok: axTrusted(),
-                fix: "Open System Settings > Privacy & Security > Accessibility. Find CommandAgent and flip it ON. Then Re-scan.",
+                fix: "Open System Settings > Privacy & Security > Accessibility. Find Claude Command and flip it ON. Then Re-scan.",
                 action: { requestAccessibility(); openPrivacyPane("Privacy_Accessibility") },
                 actionLabel: "Open Settings"
             ),
             DiagItem(
                 title: "Screen Recording",
                 ok: screenRecordingOK(),
-                fix: "Open System Settings > Privacy & Security > Screen Recording. Toggle CommandAgent ON. Then Re-scan.",
+                fix: "Open System Settings > Privacy & Security > Screen Recording. Toggle Claude Command ON. Then Re-scan.",
                 action: { openPrivacyPane("Privacy_ScreenCapture") },
                 actionLabel: "Open Settings"
             ),
