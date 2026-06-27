@@ -5,6 +5,7 @@
 
 import Cocoa
 import SwiftUI
+import Combine
 
 let onboardingWindow = OnboardingWindowController()
 
@@ -57,9 +58,9 @@ struct OnboardingView: View {
     let onDismiss: () -> Void
 
     @State private var step: OnbStep = .welcome
-    @State private var polling: Timer? = nil
     @State private var countdown = 3
-    @State private var screenRecordingDone = false   // user manually confirmed
+    // One always-on ticker drives both live grant-detection and the done-countdown.
+    private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,10 +80,11 @@ struct OnboardingView: View {
             case .accessibility:
                 // Request only → macOS shows its alert; the user opens System
                 // Settings from that alert. The app never opens Settings itself.
-                AccessibilityStepView(onRequest: { requestAccessibility() })
+                AccessibilityStepView(
+                    onRequest: { requestAccessibility() },
+                    onContinue: { advanceFromAccessibility() }   // manual fallback if live-detect misses
+                )
                 .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-                .onAppear { startPollingAccessibility() }
-                .onDisappear { polling?.invalidate() }
 
             case .screenRecording:
                 ScreenRecordingStepView(
@@ -97,8 +99,8 @@ struct OnboardingView: View {
                 MicrophoneStepView(
                     onEnable: { requestMicAndSpeech() },
                     onContinue: {
+                        countdown = 3
                         withAnimation(.easeInOut(duration: 0.3)) { step = .done }
-                        beginCountdown()
                     }
                 )
                 .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
@@ -111,7 +113,7 @@ struct OnboardingView: View {
             Spacer()
         }
         .frame(width: 560, height: 520)
-        .onDisappear { polling?.invalidate() }
+        .onReceive(ticker) { _ in tick() }
     }
 
     // ── numbered step header (1 · 2 · 3 · 4)
@@ -155,30 +157,28 @@ struct OnboardingView: View {
             .animation(.easeInOut, value: step)
     }
 
-    // ── Accessibility can be detected in-process (takes effect immediately)
-    private func startPollingAccessibility() {
-        polling?.invalidate()
-        polling = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) { _ in
-            guard axTrusted() else { return }
-            polling?.invalidate()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    step = screenRecordingOK() ? .done : .screenRecording
-                }
-                if step == .done { beginCountdown() }
-            }
-        }
-    }
-
-    private func beginCountdown() {
-        countdown = 3
-        polling = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { t in
+    // Fires every second (whatever step we're on).
+    private func tick() {
+        switch step {
+        case .accessibility:
+            // Live-detect the grant. Note macOS often only reflects it after a
+            // relaunch — the manual Continue button covers that, and the final
+            // Done countdown restarts the agent so the grant goes live anyway.
+            if axTrusted() { advanceFromAccessibility() }
+        case .done:
             countdown -= 1
             if countdown <= 0 {
-                t.invalidate()
                 onDismiss()
                 exit(0)     // LaunchAgent KeepAlive re-launches with fresh TCC grants live
             }
+        default:
+            break
+        }
+    }
+
+    private func advanceFromAccessibility() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            step = screenRecordingOK() ? .microphone : .screenRecording
         }
     }
 }
@@ -311,6 +311,7 @@ struct KeyCapView: View {
 
 struct AccessibilityStepView: View {
     let onRequest: () -> Void
+    let onContinue: () -> Void
     @State private var requested = false
 
     var body: some View {
@@ -345,12 +346,16 @@ struct AccessibilityStepView: View {
             } else {
                 HStack(spacing: 6) {
                     ProgressView().scaleEffect(0.7)
-                    Text("In the alert, choose Open System Settings, then flip the Claude Command switch ON.")
+                    Text("In the alert, choose Open System Settings, then flip the Claude Command switch ON. This screen advances on its own once it's on.")
                         .font(.subheadline).foregroundColor(.secondary)
                         .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                 }
-                Button("Ask again") { onRequest() }
-                    .buttonStyle(.bordered).controlSize(.small)
+                HStack(spacing: 10) {
+                    Button("Ask again") { onRequest() }
+                        .buttonStyle(.bordered).controlSize(.small)
+                    Button("I've enabled it ->") { onContinue() }
+                        .buttonStyle(.borderedProminent).controlSize(.regular)
+                }
             }
         }
         .padding(.horizontal, 40)
@@ -447,10 +452,12 @@ struct SettingsMockup: View {
 
             // App row
             HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.accentColor.opacity(0.2))
+                // The real app icon, so the row matches what the user sees in System Settings.
+                Image(nsImage: NSApp.applicationIconImage ?? NSImage())
+                    .resizable()
+                    .interpolation(.high)
                     .frame(width: 26, height: 26)
-                    .overlay(Image(systemName: "terminal").font(.system(size: 12)).foregroundColor(.accentColor))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 Text(appName).font(.system(size: 12, weight: .medium))
                 Spacer()
                 // Toggle in ON state
