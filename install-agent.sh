@@ -1,62 +1,77 @@
 #!/bin/zsh
-# install-agent.sh — load CommandAgent as a per-user LaunchAgent (starts now +
-# at login, kept alive). Generates the plist from the CURRENT path, so it's safe
-# to re-run after moving this folder. Re-run also picks up a rebuilt binary.
+# install-agent.sh — write a LaunchAgent plist, bootstrap it, and start ClaudeCommand.
+# launchd owns the process so KeepAlive (restart on non-zero exit) works.
+# Re-run after every rebuild to pick up the new binary.
 emulate -L zsh
 set -uo pipefail
 
 DIR="${0:A:h}"
 LABEL="com.claudecommand"
-# Install app to ~/Applications so macOS shows its icon in Background Activity.
-INSTALL_APP="${HOME}/Applications/ClaudeCommand.app"
-BIN="${INSTALL_APP}/Contents/MacOS/ClaudeCommand"
-DEST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
+APP="${DIR}/ClaudeCommand.app"
+BIN="${APP}/Contents/MacOS/ClaudeCommand"
+PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
+OLD_CLIPWATCH="${HOME}/Library/LaunchAgents/com.claudecommand.clipwatch.plist"
 
-SRC_APP="${DIR}/ClaudeCommand.app"
-[ -x "${SRC_APP}/Contents/MacOS/ClaudeCommand" ] || { print -- "[agent] missing ClaudeCommand.app — run ./build-agent.sh first"; exit 1; }
+[ -x "$BIN" ] || { print -- "[agent] missing ClaudeCommand.app — run ./build-agent.sh first"; exit 1; }
 
-# Copy app to ~/Applications so macOS can show its icon in Background Activity.
-mkdir -p "${HOME}/Applications"
-rm -rf "$INSTALL_APP"
-cp -aR "$SRC_APP" "$INSTALL_APP"
-print -- "[agent] installed -> ${INSTALL_APP}"
+print -- "[agent] using app at ${APP}"
 
-# Refresh Launch Services so the app icon shows correctly in System Settings
-# (Privacy & Security panes) and Background Activity instead of a generic icon.
+# Register with Launch Services so the app icon shows in System Settings privacy panes.
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
-[ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$INSTALL_APP" 2>/dev/null || true
+[ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$APP" 2>/dev/null || true
 
-mkdir -p "${HOME}/Library/LaunchAgents" "${HOME}/.claude/logs" "${HOME}/.claude/state"
+mkdir -p "${HOME}/.claude/logs" "${HOME}/.claude/state"
 
-cat > "$DEST" <<PLIST
+UID_NUM="$(id -u)"
+
+# Remove stale clipwatch LaunchAgent (now a subprocess, not a separate agent).
+if [ -f "$OLD_CLIPWATCH" ]; then
+    print -- "[agent] removing old clipwatch LaunchAgent (now bundled subprocess)"
+    launchctl bootout "gui/${UID_NUM}/com.claudecommand.clipwatch" 2>/dev/null || true
+    rm -f "$OLD_CLIPWATCH"
+fi
+
+# Kill any running instance.
+pkill -x ClaudeCommand 2>/dev/null || true
+sleep 0.3
+
+# Unload existing LaunchAgent if loaded (bootout is idempotent on failure).
+launchctl bootout "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
+sleep 0.2
+
+# Write the LaunchAgent plist. BIN is the absolute path so launchd resolves it
+# correctly regardless of what directory it was bootstrapped from.
+cat > "$PLIST" <<APLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 	<key>Label</key><string>${LABEL}</string>
-	<key>ProgramArguments</key>
-	<array>
-		<string>${BIN}</string>
-	</array>
+	<key>Program</key><string>${BIN}</string>
 	<key>RunAtLoad</key><true/>
-	<key>KeepAlive</key><true/>
+	<key>KeepAlive</key>
+	<dict><key>SuccessfulExit</key><false/></dict>
 	<key>ProcessType</key><string>Interactive</string>
-	<key>StandardErrorPath</key><string>${HOME}/.claude/logs/claude-command.err</string>
-	<key>StandardOutPath</key><string>${HOME}/.claude/logs/claude-command.out</string>
+	<key>StandardErrorPath</key><string>${HOME}/.claude/logs/command-agent.err</string>
+	<key>StandardOutPath</key><string>${HOME}/.claude/logs/command-agent.out</string>
 </dict>
 </plist>
-PLIST
-print -- "[agent] wrote plist -> $DEST (points at $BIN)"
+APLIST
+print -- "[agent] wrote ${PLIST}"
 
-UID_NUM="$(id -u)"
-launchctl bootout "gui/${UID_NUM}/${LABEL}" 2>/dev/null
-launchctl bootstrap "gui/${UID_NUM}" "$DEST" 2>/dev/null || launchctl load -w "$DEST" 2>/dev/null
-launchctl kickstart -k "gui/${UID_NUM}/${LABEL}" 2>/dev/null
+# Bootstrap and kickstart — launchd now owns the process; KeepAlive is active.
+launchctl bootstrap "gui/${UID_NUM}" "$PLIST"
+launchctl kickstart "gui/${UID_NUM}/${LABEL}"
 
-sleep 1
+# Wait for socket (launchd-started instance binds it on startup).
+for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    [ -S "${HOME}/.claude/state/command-agent.sock" ] && break
+    sleep 0.2
+done
+
 if [ -S "${HOME}/.claude/state/command-agent.sock" ]; then
-  print -- "[agent] ✓ running — socket up at ~/.claude/state/command-agent.sock"
+    print -- "[agent] ✓ running under launchd — restart-on-exit active"
+    print -- "[agent] Login Item: System Settings → General → Login Items"
 else
-  print -- "[agent] ⚠ socket not up yet — check ~/.claude/logs/command-agent.err (likely needs Accessibility grant)"
+    print -- "[agent] ⚠ socket not up yet — check ~/.claude/logs/command-agent.err"
 fi
-print -- "Uninstall: launchctl bootout gui/${UID_NUM}/${LABEL}; rm '$DEST'"

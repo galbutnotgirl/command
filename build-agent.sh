@@ -50,13 +50,18 @@ cat > "${APP}/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Bundle send-to-claude.sh into Resources.
+# Bundle send-to-claude.sh + clipwatch.py into Resources.
+mkdir -p "${APP}/Contents/Resources"
 SEND="${DIR}/send-to-claude.sh"
 if [ -f "$SEND" ]; then
-  mkdir -p "${APP}/Contents/Resources"
   cp "$SEND" "${APP}/Contents/Resources/send-to-claude.sh"
   chmod +x "${APP}/Contents/Resources/send-to-claude.sh"
   print -- "[agent] bundled send-to-claude.sh"
+fi
+CLIPWATCH="${DIR}/clipwatch.py"
+if [ -f "$CLIPWATCH" ]; then
+  cp "$CLIPWATCH" "${APP}/Contents/Resources/clipwatch.py"
+  print -- "[agent] bundled clipwatch.py"
 fi
 
 # App icon (orbital-ring star). Build AppIcon.icns from agent/icon.png if present.

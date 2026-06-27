@@ -1,4 +1,4 @@
-// CommandAgent — the one persistent piece of Claude Command. A single
+// CommandAgent — the one persistent piece of ClaudeCommand. A single
 // always-running, LSUIElement background app with its OWN stable TCC identity
 // (com.claudecommand.agent), granted Accessibility once. It does everything
 // the short-lived Service/helper processes couldn't do reliably:
@@ -76,7 +76,7 @@ func runWorker(_ action: String, source: String) {
             openPrivacyPane("Privacy_ScreenCapture")
             settingsWindow.show(tab: .setup)
             notify("Screen Recording needed",
-                   "Enable Claude Command, then menu-bar icon ▸ Restart Agent to apply it.")
+                   "Enable ClaudeCommand, then menu-bar icon ▸ Restart Agent to apply it.")
         }
         return
     }
@@ -92,13 +92,44 @@ func runWorker(_ action: String, source: String) {
 }
 
 // ---- clipboard history picker (built in) -----------------------------------
-struct Clip { let type: String; let file: String; let preview: String; let full: String; let ts: Double }
+
+enum FilterMode { case all, images, text }
+enum PickerTheme: String { case auto, light, dark }
+enum PasteTarget { case prev, claude, claudeNew }
+
+var iconCache: [String: NSImage] = [:]
+
+func pickerTheme() -> PickerTheme {
+    PickerTheme(rawValue: UserDefaults.standard.string(forKey: "pickerTheme") ?? "auto") ?? .auto
+}
+func setPickerTheme(_ t: PickerTheme) { UserDefaults.standard.set(t.rawValue, forKey: "pickerTheme") }
+
+func appIcon(bundle: String) -> NSImage? {
+    guard !bundle.isEmpty else { return nil }
+    if let cached = iconCache[bundle] { return cached }
+    guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return nil }
+    let img = NSWorkspace.shared.icon(forFile: url.path)
+    iconCache[bundle] = img
+    return img
+}
+
+func ageString(_ ts: Double) -> String {
+    let d = Date().timeIntervalSince1970 - ts
+    if d < 60 { return "now" }
+    if d < 3600 { return "\(Int(d / 60))m" }
+    if d < 86400 { return "\(Int(d / 3600))h" }
+    return "\(Int(d / 86400))d"
+}
+
+struct Clip {
+    let type: String; let file: String; let preview: String
+    let full: String; let ts: Double; let bundle: String
+}
 
 func loadClips() -> [Clip] {
     let idx = (CLIPS as NSString).appendingPathComponent("index.json")
     guard let data = FileManager.default.contents(atPath: idx),
           let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
-    // Hide anything past the retention window even if the daemon hasn't pruned yet.
     let cutoff = Date().timeIntervalSince1970 - Double(readRetentionDays()) * 86400
     return arr.compactMap { d in
         guard let t = d["type"] as? String, let f = d["file"] as? String else { return nil }
@@ -107,33 +138,46 @@ func loadClips() -> [Clip] {
         return Clip(type: t, file: f,
                     preview: (d["preview"] as? String) ?? "",
                     full: (d["full"] as? String) ?? "",
-                    ts: ts)
+                    ts: ts,
+                    bundle: (d["bundle"] as? String) ?? "")
     }
 }
+
+let CLAUDE_BUNDLE = "com.anthropic.claudefordesktop"
+let pickerW: CGFloat = 640
+let pickerH: CGFloat = 440
+let listColW: CGFloat = 230
+let pickerRowH: CGFloat = 40
 
 final class PickerPanel: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }
 final class PickRow: NSView {
-    var onPick: ((Bool) -> Void)?     // Bool = sticky (⌘ held)
-    override func layout() { super.layout(); layer?.cornerRadius = 9 }
-    @objc func clicked() { onPick?(NSEvent.modifierFlags.contains(.command)) }
+    var onPick: ((PasteTarget) -> Void)?
+    override func layout() { super.layout(); layer?.cornerRadius = 6; layer?.cornerCurve = .continuous }
+    @objc func clicked() {
+        let mods = NSEvent.modifierFlags
+        let target: PasteTarget = mods.contains(.command) && mods.contains(.shift) ? .claudeNew
+                                 : mods.contains(.command) ? .claude : .prev
+        onPick?(target)
+    }
 }
 
-final class Picker {
+final class ClipPicker {
     var win: PickerPanel!
     var fx: NSVisualEffectView!
     let listStack = NSStackView()
+    var previewPane: NSView!
+    var listWidthConstraint: NSLayoutConstraint?
     var all: [Clip] = [], shown: [Clip] = [], rows: [PickRow] = []
-    var selected = 0, imagesOnly = false, prevBundle = "", query = ""
-    var previewBox: NSView!
-    let W: CGFloat = 600, rowH: CGFloat = 46, pad: CGFloat = 14, headerH: CGFloat = 52, previewH: CGFloat = 150
+    var selected = 0, filterMode: FilterMode = .all, prevBundle = "", query = ""
 
     func show(prev: String) {
         prevBundle = prev
-        all = loadClips(); imagesOnly = false; selected = 0; query = ""
+        all = loadClips(); filterMode = .all; selected = 0; query = ""
         if win == nil { build() }
+        applyTheme()
         refresh()
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
@@ -141,106 +185,302 @@ final class Picker {
 
     var isVisible: Bool { win != nil && win.isVisible }
 
+    func applyTheme() {
+        switch pickerTheme() {
+        case .light: fx.appearance = NSAppearance(named: .aqua)
+        case .dark:  fx.appearance = NSAppearance(named: .darkAqua)
+        case .auto:  fx.appearance = nil
+        }
+    }
+
     func build() {
-        win = PickerPanel(contentRect: NSRect(x: 0, y: 0, width: W, height: 320),
+        win = PickerPanel(contentRect: NSRect(x: 0, y: 0, width: pickerW, height: pickerH),
                           styleMask: [.borderless], backing: .buffered, defer: false)
         win.isOpaque = false; win.backgroundColor = .clear; win.hasShadow = true
         win.level = .floating; win.isMovableByWindowBackground = true
         win.collectionBehavior = [.canJoinAllSpaces, .transient]
 
+        let container = NSView()
+        container.wantsLayer = true
+        container.layer?.cornerRadius = 14; container.layer?.cornerCurve = .continuous
+        container.layer?.masksToBounds = true
+        container.layer?.borderWidth = 0.5; container.layer?.borderColor = NSColor.separatorColor.cgColor
+        win.contentView = container
+
         fx = NSVisualEffectView()
-        fx.material = .hudWindow; fx.blendingMode = .behindWindow; fx.state = .active
-        fx.wantsLayer = true
-        fx.layer?.cornerRadius = 16; fx.layer?.masksToBounds = true
-        fx.layer?.borderWidth = 1; fx.layer?.borderColor = NSColor.white.withAlphaComponent(0.10).cgColor
-        win.contentView = fx
-
-        listStack.orientation = .vertical; listStack.alignment = .leading
-        listStack.spacing = 4; listStack.translatesAutoresizingMaskIntoConstraints = false
-    }
-
-    // What to show: images-only mode → images; a query → matching text clips
-    // (images hidden); otherwise the most recent clips.
-    func filteredClips() -> [Clip] {
-        if imagesOnly { return all.filter { $0.type == "image" } }
-        if !query.isEmpty {
-            let q = query.lowercased()
-            return all.filter { $0.type != "image" &&
-                ($0.full.lowercased().contains(q) || $0.preview.lowercased().contains(q)) }
-        }
-        return all
-    }
-
-    // Search box + hint line (the header rebuilt each refresh).
-    func makeHeader() -> NSView {
-        let box = NSView(); box.wantsLayer = true
-        box.layer?.cornerRadius = 8
-        box.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
-        box.translatesAutoresizingMaskIntoConstraints = false
-        box.heightAnchor.constraint(equalToConstant: 30).isActive = true
-
-        let glyph = NSTextField(labelWithString: imagesOnly ? "🖼" : "🔍")
-        glyph.font = .systemFont(ofSize: 13); glyph.translatesAutoresizingMaskIntoConstraints = false
-        let q = NSTextField(labelWithString:
-            imagesOnly ? "Images — ↑↓ to browse" : (query.isEmpty ? "Search clipboard…" : query))
-        q.font = .systemFont(ofSize: 13)
-        q.textColor = (!imagesOnly && query.isEmpty) ? .tertiaryLabelColor : .labelColor
-        q.lineBreakMode = .byTruncatingTail
-        q.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        q.translatesAutoresizingMaskIntoConstraints = false
-        let inner = NSStackView(views: [glyph, q])
-        inner.orientation = .horizontal; inner.alignment = .centerY; inner.spacing = 8
-        inner.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
-        inner.translatesAutoresizingMaskIntoConstraints = false
-        box.addSubview(inner)
+        fx.material = .sidebar; fx.blendingMode = .behindWindow; fx.state = .active
+        fx.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(fx)
         NSLayoutConstraint.activate([
-            inner.leadingAnchor.constraint(equalTo: box.leadingAnchor),
-            inner.trailingAnchor.constraint(equalTo: box.trailingAnchor),
-            inner.centerYAnchor.constraint(equalTo: box.centerYAnchor),
+            fx.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            fx.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            fx.topAnchor.constraint(equalTo: container.topAnchor),
+            fx.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
 
-        let hint = NSTextField(labelWithString: "⏎ paste · ⌘⏎ keep open · ⌘I images · esc")
-        hint.font = .systemFont(ofSize: 10); hint.textColor = .tertiaryLabelColor
-        hint.translatesAutoresizingMaskIntoConstraints = false
+        listStack.orientation = .vertical; listStack.alignment = .leading
+        listStack.spacing = 2; listStack.translatesAutoresizingMaskIntoConstraints = false
+    }
 
-        let v = NSStackView(views: [box, hint])
-        v.orientation = .vertical; v.alignment = .leading; v.spacing = 5
+    func refresh() {
+        shown = Array(filteredClips().prefix(14))
+        selected = min(selected, max(0, shown.count - 1))
+        fx.subviews.forEach { $0.removeFromSuperview() }
+        rows.removeAll()
+
+        listStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        if shown.isEmpty {
+            let msg: String
+            switch filterMode {
+            case .images: msg = "No images in history."
+            case .text:   msg = query.isEmpty ? "No text clips." : "No matches."
+            case .all:    msg = query.isEmpty ? "History empty." : "No matches."
+            }
+            let e = NSTextField(labelWithString: msg)
+            e.font = .systemFont(ofSize: 13); e.textColor = .tertiaryLabelColor
+            e.translatesAutoresizingMaskIntoConstraints = false
+            listStack.addArrangedSubview(e)
+        } else {
+            for (i, c) in shown.enumerated() {
+                let r = makeRow(i, c); rows.append(r); listStack.addArrangedSubview(r)
+                r.widthAnchor.constraint(equalToConstant: listColW).isActive = true
+            }
+        }
+
+        let header = makeHeader()
+        header.translatesAutoresizingMaskIntoConstraints = false
+
+        let topSep = makeSep(); let midSep = makeSep(); let botSep = makeSep()
+
+        let scroll = NSScrollView()
+        scroll.drawsBackground = false; scroll.hasVerticalScroller = true
+        scroll.scrollerStyle = .overlay; scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = listStack
+        listWidthConstraint?.isActive = false
+        listWidthConstraint = listStack.widthAnchor.constraint(equalToConstant: listColW)
+        listWidthConstraint?.isActive = true
+
+        previewPane = NSView(); previewPane.wantsLayer = true
+        previewPane.translatesAutoresizingMaskIntoConstraints = false
+
+        let hintView = makeHint()
+        hintView.translatesAutoresizingMaskIntoConstraints = false
+
+        fx.addSubview(header); fx.addSubview(topSep)
+        fx.addSubview(scroll); fx.addSubview(midSep); fx.addSubview(previewPane)
+        fx.addSubview(botSep); fx.addSubview(hintView)
+
+        let hH: CGFloat = 44, footH: CGFloat = 26
+        NSLayoutConstraint.activate([
+            header.leadingAnchor.constraint(equalTo: fx.leadingAnchor),
+            header.trailingAnchor.constraint(equalTo: fx.trailingAnchor),
+            header.topAnchor.constraint(equalTo: fx.topAnchor),
+            header.heightAnchor.constraint(equalToConstant: hH),
+
+            topSep.leadingAnchor.constraint(equalTo: fx.leadingAnchor),
+            topSep.trailingAnchor.constraint(equalTo: fx.trailingAnchor),
+            topSep.topAnchor.constraint(equalTo: header.bottomAnchor),
+            topSep.heightAnchor.constraint(equalToConstant: 0.5),
+
+            scroll.leadingAnchor.constraint(equalTo: fx.leadingAnchor),
+            scroll.widthAnchor.constraint(equalToConstant: listColW),
+            scroll.topAnchor.constraint(equalTo: topSep.bottomAnchor),
+            scroll.bottomAnchor.constraint(equalTo: botSep.topAnchor),
+
+            midSep.leadingAnchor.constraint(equalTo: scroll.trailingAnchor),
+            midSep.widthAnchor.constraint(equalToConstant: 0.5),
+            midSep.topAnchor.constraint(equalTo: topSep.bottomAnchor),
+            midSep.bottomAnchor.constraint(equalTo: botSep.topAnchor),
+
+            previewPane.leadingAnchor.constraint(equalTo: midSep.trailingAnchor),
+            previewPane.trailingAnchor.constraint(equalTo: fx.trailingAnchor),
+            previewPane.topAnchor.constraint(equalTo: topSep.bottomAnchor),
+            previewPane.bottomAnchor.constraint(equalTo: botSep.topAnchor),
+
+            botSep.leadingAnchor.constraint(equalTo: fx.leadingAnchor),
+            botSep.trailingAnchor.constraint(equalTo: fx.trailingAnchor),
+            botSep.bottomAnchor.constraint(equalTo: hintView.topAnchor),
+            botSep.heightAnchor.constraint(equalToConstant: 0.5),
+
+            hintView.leadingAnchor.constraint(equalTo: fx.leadingAnchor),
+            hintView.trailingAnchor.constraint(equalTo: fx.trailingAnchor),
+            hintView.bottomAnchor.constraint(equalTo: fx.bottomAnchor),
+            hintView.heightAnchor.constraint(equalToConstant: footH),
+        ])
+
+        win.setContentSize(NSSize(width: pickerW, height: pickerH)); win.center()
+        highlight(); updatePreview()
+    }
+
+    private func makeSep() -> NSView {
+        let v = NSView(); v.wantsLayer = true
+        v.layer?.backgroundColor = NSColor.separatorColor.cgColor
         v.translatesAutoresizingMaskIntoConstraints = false
-        box.widthAnchor.constraint(equalTo: v.widthAnchor).isActive = true
+        return v
+    }
+
+    func makeHeader() -> NSView {
+        let v = NSView()
+        let iconName: String
+        switch filterMode {
+        case .images: iconName = "photo"
+        case .text:   iconName = "doc.text"
+        case .all:    iconName = "magnifyingglass"
+        }
+        let searchIcon = NSImageView()
+        searchIcon.image = NSImage(systemSymbolName: iconName, accessibilityDescription: nil)
+        searchIcon.contentTintColor = .tertiaryLabelColor
+        searchIcon.translatesAutoresizingMaskIntoConstraints = false
+        searchIcon.widthAnchor.constraint(equalToConstant: 14).isActive = true
+        searchIcon.heightAnchor.constraint(equalToConstant: 14).isActive = true
+
+        let placeholder: String
+        switch filterMode {
+        case .images: placeholder = "Images only — ↑↓ browse"
+        case .text:   placeholder = query.isEmpty ? "Text only — type to search" : query
+        case .all:    placeholder = query.isEmpty ? "Search clipboard…" : query
+        }
+        let lbl = NSTextField(labelWithString: placeholder)
+        lbl.font = .systemFont(ofSize: 13)
+        lbl.textColor = (query.isEmpty && filterMode == .all) ? .tertiaryLabelColor : .labelColor
+        lbl.lineBreakMode = .byTruncatingTail
+        lbl.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        lbl.translatesAutoresizingMaskIntoConstraints = false
+
+        let badge = makeFilterBadge()
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        badge.setContentHuggingPriority(.required, for: .horizontal)
+
+        let row = NSStackView(views: [searchIcon, lbl, badge])
+        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 8
+        row.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 14),
+            row.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -14),
+            row.centerYAnchor.constraint(equalTo: v.centerYAnchor),
+        ])
+        return v
+    }
+
+    func makeFilterBadge() -> NSView {
+        let stack = NSStackView(); stack.orientation = .horizontal; stack.spacing = 4
+        stack.addArrangedSubview(makePill("All", active: filterMode == .all))
+        stack.addArrangedSubview(makeIconPill("photo",    active: filterMode == .images))
+        stack.addArrangedSubview(makeIconPill("doc.text", active: filterMode == .text))
+        return stack
+    }
+
+    private func makePill(_ text: String, active: Bool) -> NSView {
+        let v = NSView(); v.wantsLayer = true
+        v.layer?.cornerRadius = 4; v.layer?.cornerCurve = .continuous
+        v.layer?.backgroundColor = active
+            ? NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
+            : NSColor.labelColor.withAlphaComponent(0.06).cgColor
+        v.translatesAutoresizingMaskIntoConstraints = false
+        let l = NSTextField(labelWithString: text)
+        l.font = .systemFont(ofSize: 10, weight: active ? .semibold : .regular)
+        l.textColor = active ? .controlAccentColor : .secondaryLabelColor
+        l.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(l)
+        NSLayoutConstraint.activate([
+            l.centerXAnchor.constraint(equalTo: v.centerXAnchor),
+            l.centerYAnchor.constraint(equalTo: v.centerYAnchor),
+            v.widthAnchor.constraint(equalToConstant: 28), v.heightAnchor.constraint(equalToConstant: 20),
+        ])
+        return v
+    }
+
+    private func makeIconPill(_ sym: String, active: Bool) -> NSView {
+        let v = NSView(); v.wantsLayer = true
+        v.layer?.cornerRadius = 4; v.layer?.cornerCurve = .continuous
+        v.layer?.backgroundColor = active
+            ? NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
+            : NSColor.labelColor.withAlphaComponent(0.06).cgColor
+        v.translatesAutoresizingMaskIntoConstraints = false
+        let iv = NSImageView()
+        iv.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil)
+        iv.contentTintColor = active ? .controlAccentColor : .secondaryLabelColor
+        iv.translatesAutoresizingMaskIntoConstraints = false
+        iv.widthAnchor.constraint(equalToConstant: 12).isActive = true
+        iv.heightAnchor.constraint(equalToConstant: 12).isActive = true
+        v.addSubview(iv)
+        NSLayoutConstraint.activate([
+            iv.centerXAnchor.constraint(equalTo: v.centerXAnchor),
+            iv.centerYAnchor.constraint(equalTo: v.centerYAnchor),
+            v.widthAnchor.constraint(equalToConstant: 24), v.heightAnchor.constraint(equalToConstant: 20),
+        ])
+        return v
+    }
+
+    func makeHint() -> NSView {
+        let v = NSView()
+        let t = NSTextField(labelWithString: "↑↓ · ← img · → txt · ↩ paste · ⌘↩ Claude · ⌘⇧↩ Claude new · esc")
+        t.font = .systemFont(ofSize: 10); t.textColor = .quaternaryLabelColor
+        t.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(t)
+        NSLayoutConstraint.activate([
+            t.centerXAnchor.constraint(equalTo: v.centerXAnchor),
+            t.centerYAnchor.constraint(equalTo: v.centerYAnchor),
+        ])
         return v
     }
 
     func makeRow(_ i: Int, _ c: Clip) -> PickRow {
         let row = PickRow(); row.wantsLayer = true
         row.translatesAutoresizingMaskIntoConstraints = false
-        row.heightAnchor.constraint(equalToConstant: rowH).isActive = true
+        row.heightAnchor.constraint(equalToConstant: pickerRowH).isActive = true
+
         let h = NSStackView()
-        h.orientation = .horizontal; h.alignment = .centerY; h.spacing = 12
-        h.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 12)
+        h.orientation = .horizontal; h.alignment = .centerY; h.spacing = 8
+        h.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 8)
         h.translatesAutoresizingMaskIntoConstraints = false
-        let glyph = NSTextField(labelWithString: c.type == "image" ? "🖼" : "📄")
-        glyph.font = .systemFont(ofSize: 15)
-        glyph.translatesAutoresizingMaskIntoConstraints = false
-        glyph.widthAnchor.constraint(equalToConstant: 22).isActive = true
-        h.addArrangedSubview(glyph)
-        if c.type == "image",
-           let img = NSImage(contentsOfFile: (CLIPS as NSString).appendingPathComponent(c.file)) {
-            let iv = NSImageView(); iv.image = img; iv.imageScaling = .scaleProportionallyDown
-            iv.wantsLayer = true; iv.layer?.cornerRadius = 4; iv.layer?.masksToBounds = true
+
+        // Source app icon (18×18)
+        let appIV = NSImageView()
+        if let icon = appIcon(bundle: c.bundle) {
+            appIV.image = icon
+        } else {
+            appIV.image = NSImage(systemSymbolName: c.type == "image" ? "photo" : "doc.text", accessibilityDescription: nil)
+            appIV.contentTintColor = .tertiaryLabelColor
+        }
+        appIV.wantsLayer = true
+        appIV.layer?.cornerRadius = 4; appIV.layer?.cornerCurve = .continuous; appIV.layer?.masksToBounds = true
+        appIV.imageScaling = .scaleProportionallyDown
+        appIV.translatesAutoresizingMaskIntoConstraints = false
+        appIV.widthAnchor.constraint(equalToConstant: 18).isActive = true
+        appIV.heightAnchor.constraint(equalToConstant: 18).isActive = true
+        h.addArrangedSubview(appIV)
+
+        if c.type == "image" {
+            let iv = NSImageView()
+            let imgPath = (CLIPS as NSString).appendingPathComponent(c.file)
+            if let img = NSImage(contentsOfFile: imgPath) { iv.image = img }
+            iv.imageScaling = .scaleProportionallyDown
+            iv.wantsLayer = true
+            iv.layer?.cornerRadius = 3; iv.layer?.cornerCurve = .continuous; iv.layer?.masksToBounds = true
             iv.translatesAutoresizingMaskIntoConstraints = false
-            iv.widthAnchor.constraint(equalToConstant: 60).isActive = true
-            iv.heightAnchor.constraint(equalToConstant: 32).isActive = true
+            iv.widthAnchor.constraint(equalToConstant: 36).isActive = true
+            iv.heightAnchor.constraint(equalToConstant: 24).isActive = true
             h.addArrangedSubview(iv)
             let tag = NSTextField(labelWithString: "image")
-            tag.font = .systemFont(ofSize: 11, weight: .medium); tag.textColor = .tertiaryLabelColor
+            tag.font = .systemFont(ofSize: 12); tag.textColor = .secondaryLabelColor
             h.addArrangedSubview(tag)
         } else {
             let one = c.preview.replacingOccurrences(of: "\n", with: " ")
             let lbl = NSTextField(labelWithString: one.isEmpty ? "(empty)" : one)
-            lbl.lineBreakMode = .byTruncatingTail; lbl.font = .systemFont(ofSize: 13); lbl.textColor = .labelColor
+            lbl.lineBreakMode = .byTruncatingTail
+            lbl.font = .systemFont(ofSize: 12); lbl.textColor = .labelColor
             lbl.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            lbl.translatesAutoresizingMaskIntoConstraints = false
             h.addArrangedSubview(lbl)
         }
+
+        let ts = NSTextField(labelWithString: ageString(c.ts))
+        ts.font = .systemFont(ofSize: 10); ts.textColor = .tertiaryLabelColor
+        ts.setContentHuggingPriority(.required, for: .horizontal)
+        h.addArrangedSubview(ts)
+
         row.addSubview(h)
         NSLayoutConstraint.activate([
             h.leadingAnchor.constraint(equalTo: row.leadingAnchor),
@@ -249,60 +489,27 @@ final class Picker {
             h.bottomAnchor.constraint(equalTo: row.bottomAnchor),
         ])
         row.addGestureRecognizer(NSClickGestureRecognizer(target: row, action: #selector(PickRow.clicked)))
-        row.onPick = { [weak self] sticky in
+        row.onPick = { [weak self] target in
             guard let s = self, i < s.shown.count else { return }
-            s.choose(s.shown[i], sticky: sticky)
+            s.choose(s.shown[i], target: target)
         }
         return row
     }
 
-    func toggleImages() { imagesOnly.toggle(); query = ""; selected = 0; refresh() }
-
-    func refresh() {
-        shown = Array(filteredClips().prefix(12))
-        selected = min(selected, max(0, shown.count - 1))
-        fx.subviews.forEach { $0.removeFromSuperview() }
-        rows.removeAll()
-
-        let header = makeHeader()
-
-        listStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        if shown.isEmpty {
-            let msg = imagesOnly ? "No images in history." : (query.isEmpty ? "History empty." : "No matches.")
-            let e = NSTextField(labelWithString: msg)
-            e.font = .systemFont(ofSize: 13); e.textColor = .tertiaryLabelColor
-            listStack.addArrangedSubview(e)
-        } else {
-            for (i, c) in shown.enumerated() {
-                let r = makeRow(i, c); rows.append(r); listStack.addArrangedSubview(r)
-                r.widthAnchor.constraint(equalTo: listStack.widthAnchor).isActive = true
-            }
+    func filteredClips() -> [Clip] {
+        switch filterMode {
+        case .images: return all.filter { $0.type == "image" }
+        case .text:
+            let base = all.filter { $0.type != "image" }
+            if query.isEmpty { return base }
+            let q = query.lowercased()
+            return base.filter { $0.full.lowercased().contains(q) || $0.preview.lowercased().contains(q) }
+        case .all:
+            if query.isEmpty { return all }
+            let q = query.lowercased()
+            return all.filter { $0.type != "image" &&
+                ($0.full.lowercased().contains(q) || $0.preview.lowercased().contains(q)) }
         }
-
-        previewBox = NSView(); previewBox.wantsLayer = true
-        previewBox.layer?.cornerRadius = 8
-        previewBox.layer?.masksToBounds = true   // clip long text to the pane
-        previewBox.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.05).cgColor
-        previewBox.translatesAutoresizingMaskIntoConstraints = false
-        previewBox.heightAnchor.constraint(equalToConstant: previewH).isActive = true
-
-        let outer = NSStackView(views: [header, listStack, previewBox])
-        outer.orientation = .vertical; outer.alignment = .leading; outer.spacing = 10
-        outer.translatesAutoresizingMaskIntoConstraints = false
-        fx.addSubview(outer)
-        NSLayoutConstraint.activate([
-            outer.leadingAnchor.constraint(equalTo: fx.leadingAnchor, constant: pad),
-            outer.trailingAnchor.constraint(equalTo: fx.trailingAnchor, constant: -pad),
-            outer.topAnchor.constraint(equalTo: fx.topAnchor, constant: pad),
-            header.widthAnchor.constraint(equalTo: outer.widthAnchor),
-            listStack.widthAnchor.constraint(equalTo: outer.widthAnchor),
-            previewBox.widthAnchor.constraint(equalTo: outer.widthAnchor),
-        ])
-        let n = max(1, shown.count)
-        let listH = CGFloat(n) * rowH + CGFloat(max(0, n - 1)) * 4
-        let height = pad + headerH + 10 + listH + 10 + previewH + pad
-        win.setContentSize(NSSize(width: W, height: height)); win.center()
-        highlight()
     }
 
     func highlight() {
@@ -313,72 +520,105 @@ final class Picker {
         updatePreview()
     }
 
-    // Larger preview of the selected clip: big image, or fuller text.
     func updatePreview() {
-        guard previewBox != nil else { return }
-        previewBox.subviews.forEach { $0.removeFromSuperview() }
+        guard previewPane != nil else { return }
+        previewPane.subviews.forEach { $0.removeFromSuperview() }
         guard selected < shown.count else { return }
         let c = shown[selected]
         let path = (CLIPS as NSString).appendingPathComponent(c.file)
+
+        var meta: [String] = []
+        if !c.bundle.isEmpty,
+           let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: c.bundle) {
+            meta.append(url.deletingPathExtension().lastPathComponent)
+        }
+        if c.ts > 0 { meta.append(ageString(c.ts) + " ago") }
+        let metaLbl = NSTextField(labelWithString: meta.joined(separator: "  ·  "))
+        metaLbl.font = .systemFont(ofSize: 10); metaLbl.textColor = .tertiaryLabelColor
+        metaLbl.translatesAutoresizingMaskIntoConstraints = false
+        previewPane.addSubview(metaLbl)
+        NSLayoutConstraint.activate([
+            metaLbl.leadingAnchor.constraint(equalTo: previewPane.leadingAnchor, constant: 12),
+            metaLbl.trailingAnchor.constraint(equalTo: previewPane.trailingAnchor, constant: -12),
+            metaLbl.bottomAnchor.constraint(equalTo: previewPane.bottomAnchor, constant: -8),
+        ])
+
         if c.type == "image", let img = NSImage(contentsOfFile: path) {
             let iv = NSImageView(); iv.image = img
             iv.imageScaling = .scaleProportionallyUpOrDown
+            iv.wantsLayer = true
+            iv.layer?.cornerRadius = 6; iv.layer?.cornerCurve = .continuous; iv.layer?.masksToBounds = true
             iv.translatesAutoresizingMaskIntoConstraints = false
-            previewBox.addSubview(iv)
+            previewPane.addSubview(iv)
             NSLayoutConstraint.activate([
-                iv.leadingAnchor.constraint(equalTo: previewBox.leadingAnchor, constant: 8),
-                iv.trailingAnchor.constraint(equalTo: previewBox.trailingAnchor, constant: -8),
-                iv.topAnchor.constraint(equalTo: previewBox.topAnchor, constant: 8),
-                iv.bottomAnchor.constraint(equalTo: previewBox.bottomAnchor, constant: -8),
+                iv.leadingAnchor.constraint(equalTo: previewPane.leadingAnchor, constant: 10),
+                iv.trailingAnchor.constraint(equalTo: previewPane.trailingAnchor, constant: -10),
+                iv.topAnchor.constraint(equalTo: previewPane.topAnchor, constant: 10),
+                iv.bottomAnchor.constraint(equalTo: metaLbl.topAnchor, constant: -6),
             ])
         } else {
             let body = c.full.isEmpty ? c.preview : c.full
-            let tv = NSTextField(wrappingLabelWithString: body.isEmpty ? "(empty)" : String(body.prefix(600)))
-            tv.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+            let tv = NSTextField(wrappingLabelWithString: body.isEmpty ? "(empty)" : String(body.prefix(800)))
+            tv.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
             tv.textColor = .labelColor
-            tv.preferredMaxLayoutWidth = W - 2 * pad - 16
             tv.translatesAutoresizingMaskIntoConstraints = false
-            previewBox.addSubview(tv)
+            previewPane.addSubview(tv)
             NSLayoutConstraint.activate([
-                tv.leadingAnchor.constraint(equalTo: previewBox.leadingAnchor, constant: 8),
-                tv.trailingAnchor.constraint(equalTo: previewBox.trailingAnchor, constant: -8),
-                tv.topAnchor.constraint(equalTo: previewBox.topAnchor, constant: 8),
+                tv.leadingAnchor.constraint(equalTo: previewPane.leadingAnchor, constant: 12),
+                tv.trailingAnchor.constraint(equalTo: previewPane.trailingAnchor, constant: -12),
+                tv.topAnchor.constraint(equalTo: previewPane.topAnchor, constant: 12),
+                tv.bottomAnchor.constraint(lessThanOrEqualTo: metaLbl.topAnchor, constant: -6),
             ])
         }
     }
 
-    // Returns true if it consumed the event (so the local monitor swallows it).
     func handle(_ ev: NSEvent) -> Bool {
         if !isVisible { return false }
         let cmd = ev.modifierFlags.contains(.command)
         switch ev.keyCode {
-        case 53:   // esc: clear search → exit images → close
+        case 53:   // esc: clear search → reset filter → close
             if !query.isEmpty { query = ""; selected = 0; refresh() }
-            else if imagesOnly { imagesOnly = false; selected = 0; refresh() }
+            else if filterMode != .all { filterMode = .all; selected = 0; refresh() }
             else { hide() }
             return true
-        case 125: if !shown.isEmpty { selected = min(selected + 1, shown.count - 1); highlight() }; return true  // ↓
-        case 126: if !shown.isEmpty { selected = max(selected - 1, 0); highlight() }; return true                // ↑
-        case 36, 76: if selected < shown.count { choose(shown[selected], sticky: cmd) }; return true             // ⏎ / ⌘⏎
-        case 51: if !query.isEmpty { query.removeLast(); selected = 0; refresh() }; return true                  // delete
+        case 125:  // ↓
+            if !shown.isEmpty { selected = min(selected + 1, shown.count - 1); highlight() }
+            return true
+        case 126:  // ↑
+            if !shown.isEmpty { selected = max(selected - 1, 0); highlight() }
+            return true
+        case 123:  // ← → images only (toggle)
+            filterMode = (filterMode == .images) ? .all : .images
+            query = ""; selected = 0; refresh()
+            return true
+        case 124:  // → → text only (toggle)
+            filterMode = (filterMode == .text) ? .all : .text
+            query = ""; selected = 0; refresh()
+            return true
+        case 36, 76:   // ↩ / numpad ↩
+            if selected < shown.count {
+                let shift = ev.modifierFlags.contains(.shift)
+                let target: PasteTarget = cmd && shift ? .claudeNew : cmd ? .claude : .prev
+                choose(shown[selected], target: target)
+            }
+            return true
+        case 51:   // delete
+            if !query.isEmpty { query.removeLast(); selected = 0; refresh() }
+            return true
         default: break
         }
         guard let ch = ev.charactersIgnoringModifiers, !ch.isEmpty else { return true }
-        if cmd {
-            if ch.lowercased() == "i" { toggleImages() }
-            return true   // swallow other ⌘ combos while open
-        }
-        if ch == "i" && query.isEmpty { toggleImages(); return true }   // bare i on empty box → images mode
+        if cmd { return true }
         if let u = ch.unicodeScalars.first, u.value >= 32, u.value != 127 {
-            if imagesOnly { imagesOnly = false }   // typing exits images mode into a search
+            if filterMode == .images { filterMode = .all }
             query.append(ch); selected = 0; refresh()
         }
-        return true   // window is modal-ish; swallow stray keys while open
+        return true
     }
 
     func hide() { win?.orderOut(nil); NSApp.hide(nil) }
 
-    func choose(_ c: Clip, sticky: Bool) {
+    func choose(_ c: Clip, target: PasteTarget) {
         let path = (CLIPS as NSString).appendingPathComponent(c.file)
         let pb = NSPasteboard.general
         pb.clearContents()
@@ -387,19 +627,22 @@ final class Picker {
         } else if let text = try? String(contentsOfFile: path, encoding: .utf8) {
             pb.setString(text, forType: .string)
         }
-        if sticky {
-            // Paste into the prior app, then jump back to the picker for more.
-            activate(prevBundle); usleep(170_000); postKey(kV, cmd: true); usleep(120_000)
-            NSApp.activate(ignoringOtherApps: true); win.makeKeyAndOrderFront(nil)
-        } else {
-            win.orderOut(nil)
-            activate(prevBundle); usleep(170_000); postKey(kV, cmd: true)
-            NSApp.hide(nil)
+        win.orderOut(nil)
+        switch target {
+        case .prev:
+            activate(prevBundle); usleep(200_000); postKey(kV, cmd: true)
+        case .claude:
+            activate(CLAUDE_BUNDLE); usleep(200_000); postKey(kV, cmd: true)
+        case .claudeNew:
+            activate(CLAUDE_BUNDLE); usleep(200_000)
+            postKey(45, cmd: true)   // ⌘N = new conversation in Claude desktop
+            usleep(300_000); postKey(kV, cmd: true)
         }
+        NSApp.hide(nil)
     }
 }
 
-let picker = Picker()
+let picker = ClipPicker()
 
 // ---- Carbon global hotkeys -------------------------------------------------
 struct HK { let action: String; let keycode: UInt32; let mods: UInt32 }
@@ -563,11 +806,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 let appDelegate = AppDelegate()
 
 // ---- main ------------------------------------------------------------------
+
+// Single-instance guard: if our socket is already accepting connections, another
+// instance is running (e.g. launchd started one via RunAtLoad when we registered).
+// Exit cleanly so the prior instance stays authoritative.
+func anotherInstanceRunning() -> Bool {
+    guard FileManager.default.fileExists(atPath: SOCK) else { return false }
+    let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+    guard fd >= 0 else { return false }
+    defer { Darwin.close(fd) }
+    var addr = sockaddr_un()
+    addr.sun_family = sa_family_t(AF_UNIX)
+    _ = withUnsafeMutableBytes(of: &addr.sun_path) { ptr in
+        SOCK.withCString { src in strncpy(ptr.baseAddress!.assumingMemoryBound(to: CChar.self), src, ptr.count - 1) }
+    }
+    return withUnsafePointer(to: &addr) { p in
+        p.withMemoryRebound(to: sockaddr.self, capacity: 1) { sp in
+            Darwin.connect(fd, sp, socklen_t(MemoryLayout<sockaddr_un>.size)) == 0
+        }
+    }
+}
+if anotherInstanceRunning() { exit(0) }
+
+// Restart: remove socket so the fresh launchd instance passes anotherInstanceRunning,
+// kickstart the LaunchAgent (launchd-owned, so KeepAlive works), then exit.
+func restartApp() {
+    DispatchQueue.global().async {
+        try? FileManager.default.removeItem(atPath: SOCK)
+        let uid = getuid()
+        _ = runShell("/bin/launchctl", ["kickstart", "gui/\(uid)/com.claudecommand"])
+        Thread.sleep(forTimeInterval: 0.15)
+        exit(1)  // fallback: if kickstart failed, non-zero exit triggers KeepAlive
+    }
+}
+
+// Start the bundled clipboard watcher as a child process.
+// Checks if already running first (safe to call on KeepAlive restarts).
+func startClipwatch() {
+    guard let script = Bundle.main.path(forResource: "clipwatch", ofType: "py") else { return }
+    guard runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"]).code != 0 else { return }
+    let logDir = "\(HOME)/.claude/logs"
+    try? FileManager.default.createDirectory(atPath: logDir, withIntermediateDirectories: true)
+    let errPath = "\(logDir)/clipwatch.err"
+    if !FileManager.default.fileExists(atPath: errPath) {
+        FileManager.default.createFile(atPath: errPath, contents: nil)
+    }
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+    p.arguments = [script]
+    var env = ProcessInfo.processInfo.environment; env["HOME"] = HOME
+    p.environment = env
+    p.standardError = FileHandle(forWritingAtPath: errPath)
+    try? p.run()
+}
+
 let app = NSApplication.shared
 app.delegate = appDelegate
+UserDefaults.standard.register(defaults: ["showDockIcon": false])  // no dock icon by default
 applyDockPolicy()                 // menu-bar only unless the user enabled "Show in Dock"
 installHotkeys()
+startClipwatch()
 startServer()
+
 menuBar.install()                 // greyscale menu-bar icon + Set Up / Shortcuts / Help window
 onboardingWindow.showIfNeeded()   // step-by-step wizard if Accessibility or Screen Recording missing
 // Key handling while a window is up: the picker swallows keys while open; the

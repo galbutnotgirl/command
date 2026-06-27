@@ -91,7 +91,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private func build() {
         let host = NSHostingController(rootView: SettingsRootView(model: settingsModel))
         let w = NSWindow(contentViewController: host)
-        w.title = "Claude Command"
+        w.title = "ClaudeCommand"
         w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         w.isReleasedWhenClosed = false
         w.delegate = self
@@ -143,7 +143,7 @@ struct SettingsRootView: View {
         VStack(alignment: .leading, spacing: 4) {
             tabButton(.setup, "Set Up", "checklist")
             tabButton(.shortcuts, "Shortcuts", "keyboard")
-            tabButton(.history, "History", "clock.arrow.circlepath")
+            tabButton(.history, "Clipboard History", "clock.arrow.circlepath")
             tabButton(.troubleshooting, "Troubleshooting", "wrench.and.screwdriver")
             tabButton(.about, "About", "info.circle")
             Spacer()
@@ -219,7 +219,7 @@ struct SetupView: View {
 
                 HStack(spacing: 10) {
                     Button("Re-check") { model.refresh() }
-                    Button("Restart agent") { exit(0) }   // KeepAlive relaunches us with the new grants live
+                    Button("Restart agent") { restartApp() }
                     Spacer()
                 }
             }
@@ -292,7 +292,7 @@ struct Step: Identifiable {
 struct StepDiagram: View {
     private let steps: [Step] = [
         Step(id: 1, icon: "magnifyingglass", title: "Open the pane", sub: "Privacy & Security in System Settings"),
-        Step(id: 2, icon: "switch.2",        title: "Flip it on",    sub: "Enable Claude Command in the list"),
+        Step(id: 2, icon: "switch.2",        title: "Flip it on",    sub: "Enable ClaudeCommand in the list"),
         Step(id: 3, icon: "checkmark.seal",  title: "Re-check here", sub: "Rows turn green when granted"),
     ]
     var body: some View {
@@ -324,8 +324,19 @@ struct ShortcutsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Shortcuts").font(.title2).bold()
-                Text("Global hotkeys — they work from any app. Click Set, then press the key combo (e.g. ⌘F8). Esc cancels; Clear removes a binding. Changes apply instantly.")
+                Text("Global hotkeys — work from any app. Click Set, press a combo (e.g. ⌘F8). Esc cancels; Clear removes. Changes apply instantly.")
                     .foregroundColor(.secondary)
+
+                GroupBox(label: Text("Actions explained").bold()) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        actionExplainRow("Add", "Pastes into the already-open Claude chat. Best mid-conversation when you want to inject more context without starting over.")
+                        Divider()
+                        actionExplainRow("Go", "Opens a new Claude session, auto-submits your selection, and returns focus. Zero-click — like a fast lookup.")
+                        Divider()
+                        actionExplainRow("Comment", "Opens a new Claude session pre-filled with your selection. Claude waits — you write a note, then send.")
+                    }
+                    .padding(8)
+                }
 
                 VStack(spacing: 0) {
                     ForEach(model.bindings) { b in
@@ -358,6 +369,13 @@ struct ShortcutsView: View {
     }
 }
 
+private func actionExplainRow(_ name: String, _ detail: String) -> some View {
+    VStack(alignment: .leading, spacing: 3) {
+        Text(name).font(.callout).bold()
+        Text(detail).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 // ---- Troubleshooting --------------------------------------------------------
 
 struct DiagItem {
@@ -381,7 +399,7 @@ struct TroubleshootingView: View {
                     Button("Re-scan") { reload() }
                 }
 
-                Text("Live scan of everything Claude Command needs. Red rows have a fix — follow the step, then Re-scan.")
+                Text("Red means a requirement isn't met yet — not a crash. Grant permissions in the Set Up tab first, then Re-scan here.")
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -415,14 +433,14 @@ struct TroubleshootingView: View {
             DiagItem(
                 title: "Accessibility",
                 ok: axTrusted(),
-                fix: "Open System Settings > Privacy & Security > Accessibility. Find Claude Command and flip it ON. Then Re-scan.",
+                fix: "Open System Settings > Privacy & Security > Accessibility. Find ClaudeCommand and flip it ON. Then Re-scan.",
                 action: { requestAccessibility(); openPrivacyPane("Privacy_Accessibility") },
                 actionLabel: "Open Settings"
             ),
             DiagItem(
                 title: "Screen Recording",
                 ok: screenRecordingOK(),
-                fix: "Open System Settings > Privacy & Security > Screen Recording. Toggle Claude Command ON. Then Re-scan.",
+                fix: "Open System Settings > Privacy & Security > Screen Recording. Toggle ClaudeCommand ON. Then Re-scan.",
                 action: { openPrivacyPane("Privacy_ScreenCapture") },
                 actionLabel: "Open Settings"
             ),
@@ -505,6 +523,7 @@ struct HistoryView: View {
     @State private var retentionText = String(readRetentionDays())
     @State private var pendingClear: ClearOption? = nil
     @State private var status = ""
+    @State private var theme = pickerTheme()
 
     private let clears: [ClearOption] = [
         ClearOption(label: "Last 15 minutes", seconds: 15 * 60),
@@ -531,6 +550,22 @@ struct HistoryView: View {
                         Text("days")
                         Spacer()
                         Button("Apply") { commitRetention() }.controlSize(.small)
+                    }
+                    .padding(8)
+                }
+
+                GroupBox(label: Text("Appearance").bold()) {
+                    HStack(spacing: 10) {
+                        Text("Picker theme")
+                        Spacer()
+                        Picker("", selection: $theme) {
+                            Text("Auto").tag(PickerTheme.auto)
+                            Text("Light").tag(PickerTheme.light)
+                            Text("Dark").tag(PickerTheme.dark)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 180)
+                        .onChange(of: theme) { _, v in setPickerTheme(v) }
                     }
                     .padding(8)
                 }
@@ -646,7 +681,7 @@ struct AboutView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Claude Command").font(.title2).bold()
+                Text("ClaudeCommand").font(.title2).bold()
                 Text("Select text or an image in any Mac app → hotkey or right-click → it lands in the Claude Code desktop app, with source context attached. Plus a clipboard-history picker and screenshot→Claude.")
                     .foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
 

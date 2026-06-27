@@ -32,7 +32,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             applyDockPolicy()
         }))
         let w = NSWindow(contentViewController: host)
-        w.title = "Claude Command"
+        w.title = "ClaudeCommand"
         w.styleMask = [.titled, .closable]
         w.isReleasedWhenClosed = false
         w.delegate = self
@@ -42,9 +42,9 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        // Closing the onboarding wizard means the user opted out — quit entirely.
-        // (Permissions are required for the app to function; no point running without them.)
-        NSApp.terminate(nil)
+        // Don't terminate — app stays alive in the menu bar so the user can
+        // re-open onboarding via Settings without launchd's KeepAlive kicking in.
+        applyDockPolicy()
     }
 }
 
@@ -151,11 +151,16 @@ struct OnboardingView: View {
         switch step {
         case .accessibility:
             if axTrusted() { advanceFromAccessibility() }
+        case .screenRecording:
+            if screenRecordingOK() {
+                countdown = 3
+                withAnimation(.easeInOut(duration: 0.3)) { step = .done }
+            }
         case .done:
             countdown -= 1
             if countdown <= 0 {
                 onDismiss()
-                exit(0)     // LaunchAgent KeepAlive re-launches with fresh TCC grants live
+                restartApp()
             }
         default:
             break
@@ -309,7 +314,7 @@ struct AccessibilityStepView: View {
 
             Text("Allow Accessibility").font(.title2).bold()
 
-            Text("Claude Command types into the Claude app on your behalf — pasting your selected text, pressing Return to submit, and returning focus to your previous app. macOS requires Accessibility access for this.")
+            Text("ClaudeCommand types into the Claude app on your behalf — pasting your selected text, pressing Return to submit, and returning focus to your previous app. macOS requires Accessibility access for this.")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -317,8 +322,8 @@ struct AccessibilityStepView: View {
 
             // Mockup of what the user will see in System Settings
             SettingsMockup(
-                appName: "Claude Command",
-                description: "Find Claude Command in the list and flip the switch ON.",
+                appName: "ClaudeCommand",
+                description: "Find ClaudeCommand in the list and flip the switch ON.",
                 switchColor: .blue
             )
 
@@ -331,7 +336,7 @@ struct AccessibilityStepView: View {
             } else {
                 HStack(spacing: 6) {
                     ProgressView().scaleEffect(0.7)
-                    Text("In the alert, choose Open System Settings, then flip the Claude Command switch ON. This screen advances on its own once it's on.")
+                    Text("In the alert, choose Open System Settings, then flip the ClaudeCommand switch ON. This screen advances on its own once it's on.")
                         .font(.subheadline).foregroundColor(.secondary)
                         .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                 }
@@ -355,11 +360,11 @@ struct ScreenRecordingStepView: View {
     @State private var requested = false
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             ZStack {
-                Circle().fill(Color.purple.opacity(0.12)).frame(width: 72, height: 72)
+                Circle().fill(Color.blue.opacity(0.12)).frame(width: 72, height: 72)
                 Image(systemName: "camera.on.rectangle")
-                    .font(.system(size: 32)).foregroundColor(.purple)
+                    .font(.system(size: 32)).foregroundColor(.blue)
             }
 
             Text("Allow Screen Recording").font(.title2).bold()
@@ -370,29 +375,45 @@ struct ScreenRecordingStepView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 420)
 
-            SettingsMockup(
-                appName: "Claude Command",
-                description: "Find Claude Command in the list and flip the switch ON.",
-                switchColor: .purple
-            )
-
             if !requested {
+                SettingsMockup(
+                    appName: "ClaudeCommand",
+                    description: "Find ClaudeCommand in the list and flip the switch ON.",
+                    switchColor: .blue,
+                    paneName: "Screen Recording"
+                )
                 Button(action: { requested = true; onRequest() }) {
                     Label("Request Access", systemImage: "lock.open")
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             } else {
-                VStack(spacing: 10) {
-                    Text("In the alert, choose Open System Settings and enable Claude Command, then tap Continue.")
-                        .font(.subheadline).foregroundColor(.secondary)
-                        .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-                    HStack(spacing: 10) {
-                        Button("Ask again") { onRequest() }
-                            .buttonStyle(.bordered).controlSize(.small)
-                        Button("Continue ->") { onDone() }
-                            .buttonStyle(.borderedProminent).controlSize(.regular)
+                HStack(alignment: .top, spacing: 16) {
+                    // Step 1: flip the switch
+                    VStack(spacing: 6) {
+                        Text("1. Flip switch ON").font(.caption).fontWeight(.medium).foregroundColor(.secondary)
+                        SettingsMockup(
+                            appName: "ClaudeCommand",
+                            description: "",
+                            switchColor: .blue,
+                            paneName: "Screen Recording"
+                        )
+                        .frame(maxWidth: 220)
                     }
+                    // Step 2: click Quit & Reopen
+                    VStack(spacing: 6) {
+                        Text("2. Click Quit & Reopen").font(.caption).fontWeight(.medium).foregroundColor(.secondary)
+                        QuitReopenMockup()
+                            .frame(maxWidth: 200)
+                    }
+                }
+                .frame(maxWidth: 460)
+
+                HStack(spacing: 10) {
+                    Button("Ask again") { onRequest() }
+                        .buttonStyle(.bordered).controlSize(.small)
+                    Button("I've enabled it — restart") { onDone() }
+                        .buttonStyle(.borderedProminent).controlSize(.regular)
                 }
             }
         }
@@ -408,6 +429,7 @@ struct SettingsMockup: View {
     let appName: String
     let description: String
     let switchColor: Color
+    var paneName: String = "Accessibility"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -429,7 +451,7 @@ struct SettingsMockup: View {
             HStack(spacing: 4) {
                 Text("Privacy & Security").font(.system(size: 10)).foregroundColor(.secondary)
                 Text(">").font(.system(size: 10)).foregroundColor(.secondary)
-                Text("Accessibility").font(.system(size: 10, weight: .medium))
+                Text(paneName).font(.system(size: 10, weight: .medium))
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
 
@@ -479,6 +501,59 @@ struct SettingsMockup: View {
     }
 }
 
+// ---- quit & reopen mockup ---------------------------------------------------
+// Mirrors the macOS alert that appears after enabling Screen Recording for a
+// running app — shows the user exactly what they'll see and what to click.
+
+struct QuitReopenMockup: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            // Dialog body
+            VStack(spacing: 8) {
+                Text("macOS will ask:")
+                    .font(.system(size: 9)).foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 10).padding(.horizontal, 12)
+
+                Text("\"ClaudeCommand\" may not be able to record until it is quit.")
+                    .font(.system(size: 11, weight: .semibold))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+            }
+
+            Divider().padding(.top, 8)
+
+            // Buttons
+            VStack(spacing: 0) {
+                // Quit & Reopen = the right choice — highlighted
+                HStack {
+                    Image(systemName: "arrow.clockwise.circle.fill")
+                        .font(.system(size: 11)).foregroundColor(.blue)
+                    Text("Quit & Reopen")
+                        .font(.system(size: 12, weight: .semibold)).foregroundColor(.blue)
+                    Spacer()
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11)).foregroundColor(.blue)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Color.blue.opacity(0.08))
+
+                Divider()
+
+                Text("Later")
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+            }
+        }
+        .background(Color(NSColor.windowBackgroundColor))
+        .cornerRadius(10)
+        .shadow(color: .black.opacity(0.10), radius: 4, x: 0, y: 2)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+    }
+}
+
 // ---- done step view ---------------------------------------------------------
 
 struct DoneStepView: View {
@@ -491,7 +566,7 @@ struct DoneStepView: View {
                     .font(.system(size: 42)).foregroundColor(.green)
             }
             Text("You're all set!").font(.title2).bold()
-            Text("Permissions granted. Claude Command is restarting so they take effect.")
+            Text("Permissions granted. ClaudeCommand is restarting so they take effect.")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)
