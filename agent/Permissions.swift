@@ -6,8 +6,6 @@
 import Cocoa
 import ApplicationServices
 import CoreGraphics
-import AVFoundation
-import Speech
 
 enum CheckState: Equatable { case ok, missing, unknown }
 
@@ -31,19 +29,6 @@ func screenRecordingOK() -> Bool {
 }
 func requestScreenRecording() {
     if #available(macOS 10.15, *) { _ = CGRequestScreenCaptureAccess() }
-}
-
-func micPermissionGranted() -> Bool {
-    AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-}
-
-func speechPermissionGranted() -> Bool {
-    SFSpeechRecognizer.authorizationStatus() == .authorized
-}
-
-func requestMicAndSpeech() {
-    AVCaptureDevice.requestAccess(for: .audio) { _ in }
-    SFSpeechRecognizer.requestAuthorization { _ in }
 }
 
 func openPrivacyPane(_ anchor: String) {
@@ -174,9 +159,6 @@ func permissionChecks() -> [StatusCheck] {
         StatusCheck(title: "Screen Recording",
                     detail: "Required for the screenshot actions (macOS screencapture).",
                     state: screenRecordingOK() ? .ok : .missing),
-        StatusCheck(title: "Microphone & Speech (optional)",
-                    detail: "For dictation only. Enabling it asks for two grants — Microphone and Speech Recognition — so macOS shows two prompts. Speak → Claude Command transcribes live and inserts text.",
-                    state: (micPermissionGranted() && speechPermissionGranted()) ? .ok : .unknown),
     ]
 }
 

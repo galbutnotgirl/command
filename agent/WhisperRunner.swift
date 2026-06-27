@@ -1,5 +1,16 @@
 import Foundation
 
+// Config helpers used by SpeechEngine and DictationOverlay.
+// Kept here so the dictation stack compiles independently of SettingsWindow.
+func readDictationSilenceTimeout() -> Double {
+    if let v = readCommandConfig()["dictationSilenceTimeout"] as? Double, v >= 0.5 { return v }
+    return 1.5
+}
+
+func whisperPostProcessEnabled() -> Bool {
+    readCommandConfig()["whisperPostProcess"] as? Bool ?? false
+}
+
 func whisperAvailable() -> Bool {
     return whisperPath() != nil
 }

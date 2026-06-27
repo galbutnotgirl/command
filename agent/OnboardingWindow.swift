@@ -50,7 +50,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
 // ---- step enum --------------------------------------------------------------
 
-enum OnbStep { case welcome, accessibility, screenRecording, microphone, done }
+enum OnbStep { case welcome, accessibility, screenRecording, done }
 
 // ---- root view --------------------------------------------------------------
 
@@ -90,15 +90,6 @@ struct OnboardingView: View {
                 ScreenRecordingStepView(
                     onRequest: { requestScreenRecording() },
                     onDone: {
-                        withAnimation(.easeInOut(duration: 0.3)) { step = .microphone }
-                    }
-                )
-                .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-
-            case .microphone:
-                MicrophoneStepView(
-                    onEnable: { requestMicAndSpeech() },
-                    onContinue: {
                         countdown = 3
                         withAnimation(.easeInOut(duration: 0.3)) { step = .done }
                     }
@@ -116,16 +107,14 @@ struct OnboardingView: View {
         .onReceive(ticker) { _ in tick() }
     }
 
-    // ── numbered step header (1 · 2 · 3 · 4)
+    // ── numbered step header (1 · 2 · 3)
     private var stepHeader: some View {
         HStack(spacing: 0) {
-            stepChip(n: 1, label: "Accessibility",    active: step == .accessibility,   done: step == .screenRecording || step == .microphone || step == .done)
-            connector(done: step == .screenRecording || step == .microphone || step == .done)
-            stepChip(n: 2, label: "Screen Recording", active: step == .screenRecording, done: step == .microphone || step == .done)
-            connector(done: step == .microphone || step == .done)
-            stepChip(n: 3, label: "Microphone",       active: step == .microphone,      done: step == .done)
+            stepChip(n: 1, label: "Accessibility",    active: step == .accessibility,   done: step == .screenRecording || step == .done)
+            connector(done: step == .screenRecording || step == .done)
+            stepChip(n: 2, label: "Screen Recording", active: step == .screenRecording, done: step == .done)
             connector(done: step == .done)
-            stepChip(n: 4, label: "All set",          active: step == .done,            done: false)
+            stepChip(n: 3, label: "All set",          active: step == .done,            done: false)
         }
     }
 
@@ -161,9 +150,6 @@ struct OnboardingView: View {
     private func tick() {
         switch step {
         case .accessibility:
-            // Live-detect the grant. Note macOS often only reflects it after a
-            // relaunch — the manual Continue button covers that, and the final
-            // Done countdown restarts the agent so the grant goes live anyway.
             if axTrusted() { advanceFromAccessibility() }
         case .done:
             countdown -= 1
@@ -177,8 +163,9 @@ struct OnboardingView: View {
     }
 
     private func advanceFromAccessibility() {
+        if screenRecordingOK() { countdown = 3 }
         withAnimation(.easeInOut(duration: 0.3)) {
-            step = screenRecordingOK() ? .microphone : .screenRecording
+            step = screenRecordingOK() ? .done : .screenRecording
         }
     }
 }
@@ -199,8 +186,6 @@ struct WelcomeStepView: View {
          "Drag to capture or press Space for a window. Image drops straight into Claude."),
         ("clock.arrow.circlepath", .blue,   "Clipboard History",
          "Every copy is saved. Press F6 for a searchable picker — paste into Claude or anywhere."),
-        ("mic.fill",               .green,  "Live Dictation",
-         "Speak to insert text at your cursor or open a new Claude session with your words."),
     ]
 
     var body: some View {
@@ -230,7 +215,7 @@ struct WelcomeStepView: View {
             }
             .padding(.bottom, 8)
 
-            Text("Global hotkeys from any app — select, capture, dictate, or paste into Claude without switching windows.")
+            Text("Global hotkeys from any app — select, capture, or paste into Claude without switching windows.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -274,7 +259,7 @@ struct WelcomeStepView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
 
-                Text("Two quick permissions unlock everything.")
+                Text("Two quick permissions and you're set.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -494,54 +479,6 @@ struct SettingsMockup: View {
     }
 }
 
-// ---- microphone step --------------------------------------------------------
-
-struct MicrophoneStepView: View {
-    let onEnable: () -> Void
-    let onContinue: () -> Void
-    @State private var requested = false
-
-    var body: some View {
-        VStack(spacing: 20) {
-            ZStack {
-                Circle().fill(Color.green.opacity(0.12)).frame(width: 72, height: 72)
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 32)).foregroundColor(.green)
-            }
-
-            Text("Enable Microphone").font(.title2).bold()
-
-            Text("Dictation lets you speak to insert text at your cursor or open a new Claude session with your words. This is optional — skip if you don't need it.")
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 420)
-
-            if !requested {
-                HStack(spacing: 12) {
-                    Button(action: { requested = true; onEnable() }) {
-                        Label("Enable Microphone", systemImage: "mic")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-
-                    Button("Skip") { onContinue() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                }
-            } else {
-                VStack(spacing: 10) {
-                    Text("Microphone enabled. Tap Continue to finish setup.")
-                        .font(.subheadline).foregroundColor(.secondary)
-                    Button("Continue ->") { onContinue() }
-                        .buttonStyle(.borderedProminent).controlSize(.regular)
-                }
-            }
-        }
-        .padding(.horizontal, 40)
-    }
-}
-
 // ---- done step view ---------------------------------------------------------
 
 struct DoneStepView: View {
@@ -554,7 +491,7 @@ struct DoneStepView: View {
                     .font(.system(size: 42)).foregroundColor(.green)
             }
             Text("You're all set!").font(.title2).bold()
-            Text("Both permissions granted. Claude Command is restarting so they take effect.")
+            Text("Permissions granted. Claude Command is restarting so they take effect.")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)

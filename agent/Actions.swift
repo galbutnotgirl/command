@@ -19,8 +19,6 @@ let COMMAND_ACTIONS: [CommandAction] = [
     CommandAction(id: "shotgo",      name: "Screenshot Go",      detail: "Capture (drag area / press Space for a window) → new session, auto-submit."),
     CommandAction(id: "shotcomment", name: "Screenshot Comment", detail: "Capture → new session; you add a note."),
     CommandAction(id: "cliphistory", name: "Clipboard History",  detail: "Floating picker of recent clips."),
-    CommandAction(id: "dictate",    name: "Dictate",             detail: "Speak to insert text at cursor. Live transcription, auto-stops on silence."),
-    CommandAction(id: "dictateadd", name: "Dictate → Claude",    detail: "Speak to open a new Claude session with your words."),
 ]
 
 func actionName(_ id: String) -> String { COMMAND_ACTIONS.first { $0.id == id }?.name ?? id }

@@ -429,16 +429,6 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             DispatchQueue.main.async { picker.show(prev: front) }
         } else if action == "settings" {
             DispatchQueue.main.async { settingsWindow.show(tab: .setup) }
-        } else if action == "dictate" {
-            DispatchQueue.main.async {
-                if DictationOverlay.shared.isVisible { SpeechEngine.shared.stop() }
-                else { DictationOverlay.shared.show(mode: .insert) }
-            }
-        } else if action == "dictateadd" {
-            DispatchQueue.main.async {
-                if DictationOverlay.shared.isVisible { SpeechEngine.shared.stop() }
-                else { DictationOverlay.shared.show(mode: .addToClaudeChat) }
-            }
         } else {
             DispatchQueue.global().async { runWorker(action, source: front) }
         }

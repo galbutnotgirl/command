@@ -8,7 +8,7 @@ import Combine
 
 // Repo URL lives in Updater.swift (GITHUB_REPO_URL) as the single source of truth.
 
-enum SettingsTab: Equatable { case setup, shortcuts, history, dictation, troubleshooting, about }
+enum SettingsTab: Equatable { case setup, shortcuts, history, troubleshooting, about }
 
 // Single shared model (the local key monitor in main.swift also talks to it
 // while recording a rebind).
@@ -111,7 +111,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         case .setup:           ideal = 840
         case .shortcuts:       ideal = 150 + CGFloat(max(1, settingsModel.bindings.count)) * 62
         case .history:         ideal = 560
-        case .dictation:       ideal = 680
         case .troubleshooting: ideal = 600
         case .about:           ideal = 620
         }
@@ -145,7 +144,6 @@ struct SettingsRootView: View {
             tabButton(.setup, "Set Up", "checklist")
             tabButton(.shortcuts, "Shortcuts", "keyboard")
             tabButton(.history, "History", "clock.arrow.circlepath")
-            tabButton(.dictation, "Dictation", "mic")
             tabButton(.troubleshooting, "Troubleshooting", "wrench.and.screwdriver")
             tabButton(.about, "About", "info.circle")
             Spacer()
@@ -173,7 +171,6 @@ struct SettingsRootView: View {
         case .setup:            SetupView(model: model)
         case .shortcuts:        ShortcutsView(model: model)
         case .history:          HistoryView()
-        case .dictation:        DictationView()
         case .troubleshooting:  TroubleshootingView()
         case .about:            AboutView(model: model)
         }
@@ -357,209 +354,6 @@ struct ShortcutsView: View {
                 }
             }
             .padding(24)
-        }
-    }
-}
-
-// ---- Dictation --------------------------------------------------------------
-
-func readDictationSilenceTimeout() -> Double {
-    if let v = readCommandConfig()["dictationSilenceTimeout"] as? Double, v >= 0.5 { return v }
-    return 1.5
-}
-
-func writeDictationSilenceTimeout(_ seconds: Double) {
-    var cfg = readCommandConfig()
-    cfg["dictationSilenceTimeout"] = seconds
-    if let data = try? JSONSerialization.data(withJSONObject: cfg, options: [.prettyPrinted]) {
-        try? data.write(to: URL(fileURLWithPath: COMMAND_CONFIG))
-    }
-}
-
-func whisperPostProcessEnabled() -> Bool {
-    readCommandConfig()["whisperPostProcess"] as? Bool ?? false
-}
-
-func setWhisperPostProcess(_ on: Bool) {
-    var cfg = readCommandConfig(); cfg["whisperPostProcess"] = on
-    if let data = try? JSONSerialization.data(withJSONObject: cfg, options: [.prettyPrinted]) {
-        try? data.write(to: URL(fileURLWithPath: COMMAND_CONFIG))
-    }
-}
-
-let DICTATION_VOCAB_PATH = home(".claude/state/dictation-vocab.json")
-
-func readDictationVocab() -> String {
-    guard let data = FileManager.default.contents(atPath: DICTATION_VOCAB_PATH),
-          let arr = try? JSONSerialization.jsonObject(with: data) as? [String] else { return "" }
-    return arr.joined(separator: "\n")
-}
-
-func writeDictationVocab(_ text: String) {
-    let terms = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
-    if let data = try? JSONSerialization.data(withJSONObject: terms, options: [.prettyPrinted]) {
-        try? data.write(to: URL(fileURLWithPath: DICTATION_VOCAB_PATH))
-    }
-}
-
-struct DictationView: View {
-    @State private var silenceTimeout   = readDictationSilenceTimeout()
-    @State private var vocabText        = readDictationVocab()
-    @State private var vocabDirty       = false
-    @State private var micGranted       = micPermissionGranted()
-    @State private var speechGranted    = speechPermissionGranted()
-    @State private var whisperEnabled   = whisperPostProcessEnabled()
-    @State private var whisperFound     = whisperAvailable()
-    @State private var installingWhisper = false
-    @State private var whisperInstallMsg = ""
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Dictation").font(.title2).bold()
-
-                // Permissions
-                GroupBox(label: Text("Permissions").font(.subheadline).bold()) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
-                            Image(systemName: micGranted ? "checkmark.circle.fill" : "questionmark.circle")
-                                .foregroundColor(micGranted ? .green : .secondary).frame(width: 18)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Microphone")
-                                Text("Required for live transcription.")
-                                    .font(.caption).foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            if !micGranted {
-                                Button("Enable") {
-                                    requestMicAndSpeech()
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                                        micGranted    = micPermissionGranted()
-                                        speechGranted = speechPermissionGranted()
-                                    }
-                                }
-                                .buttonStyle(.bordered).controlSize(.small)
-                            }
-                        }
-                        HStack(spacing: 10) {
-                            Image(systemName: speechGranted ? "checkmark.circle.fill" : "questionmark.circle")
-                                .foregroundColor(speechGranted ? .green : .secondary).frame(width: 18)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Speech Recognition")
-                                Text("Required for on-device transcription.")
-                                    .font(.caption).foregroundColor(.secondary)
-                            }
-                            Spacer()
-                        }
-                    }
-                    .padding(.vertical, 6).padding(.horizontal, 2)
-                }
-
-                // Silence timeout
-                GroupBox(label: Text("Silence Timeout").font(.subheadline).bold()) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Slider(value: $silenceTimeout, in: 1.0...3.0, step: 0.1) {
-                            Text("Silence timeout")
-                        } minimumValueLabel: {
-                            Text("1s").font(.caption).foregroundColor(.secondary)
-                        } maximumValueLabel: {
-                            Text("3s").font(.caption).foregroundColor(.secondary)
-                        }
-                        .onChange(of: silenceTimeout) { _, v in writeDictationSilenceTimeout(v) }
-
-                        Text("Auto-stops after \(String(format: "%.1f", silenceTimeout))s of silence.")
-                            .font(.caption).foregroundColor(.secondary)
-                    }
-                    .padding(.vertical, 6).padding(.horizontal, 2)
-                }
-
-                // Whisper post-processing
-                GroupBox(label: Text("Whisper Post-Processing").font(.subheadline).bold()) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Refine with whisper-cli (better accuracy)", isOn: $whisperEnabled)
-                            .onChange(of: whisperEnabled) { _, v in setWhisperPostProcess(v) }
-
-                        if whisperFound {
-                            Text("whisper-cli found ✓")
-                                .font(.caption).foregroundColor(.green)
-                        } else if installingWhisper {
-                            HStack(spacing: 6) {
-                                ProgressView().scaleEffect(0.6)
-                                Text("Installing whisper-cli…").font(.caption).foregroundColor(.secondary)
-                            }
-                        } else {
-                            HStack(spacing: 8) {
-                                Text("whisper-cli not found").font(.caption).foregroundColor(.secondary)
-                                Button("Install") { installWhisper() }
-                                    .buttonStyle(.bordered).controlSize(.small)
-                            }
-                        }
-                        if !whisperInstallMsg.isEmpty {
-                            Text(whisperInstallMsg).font(.caption2).foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        Text("When enabled, SFSpeechRecognizer shows text live while whisper refines the final result for proper nouns and acronyms.")
-                            .font(.caption).foregroundColor(.secondary)
-                    }
-                    .padding(.vertical, 6).padding(.horizontal, 2)
-                }
-
-                // Vocabulary
-                GroupBox(label: Text("Custom Vocabulary").font(.subheadline).bold()) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("One term per line. Helps the recognizer handle proper nouns, product names, and jargon.")
-                            .font(.caption).foregroundColor(.secondary)
-
-                        TextEditor(text: $vocabText)
-                            .font(.system(.body, design: .monospaced))
-                            .frame(minHeight: 120)
-                            .border(Color.gray.opacity(0.3), width: 1)
-                            .onChange(of: vocabText) { _, _ in vocabDirty = true }
-
-                        Button("Save") {
-                            writeDictationVocab(vocabText)
-                            vocabDirty = false
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!vocabDirty)
-
-                        Text("Your own terms, stored locally at ~/.claude/state/dictation-vocab.json.")
-                            .font(.caption).foregroundColor(.secondary)
-                    }
-                    .padding(.vertical, 6).padding(.horizontal, 2)
-                }
-            }
-            .padding(24)
-        }
-        .onAppear {
-            micGranted     = micPermissionGranted()
-            speechGranted  = speechPermissionGranted()
-            whisperEnabled = whisperPostProcessEnabled()
-            whisperFound   = whisperAvailable()
-        }
-    }
-
-    // Install whisper-cli via Homebrew (provides better dictation accuracy).
-    private func installWhisper() {
-        installingWhisper = true; whisperInstallMsg = ""
-        DispatchQueue.global(qos: .userInitiated).async {
-            let brew = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"].first { fileExists($0) }
-            guard let brew else {
-                DispatchQueue.main.async {
-                    installingWhisper = false
-                    whisperInstallMsg = "Homebrew not found — install it from brew.sh, then try again."
-                }
-                return
-            }
-            let r = runShell(brew, ["install", "whisper-cpp"])
-            DispatchQueue.main.async {
-                installingWhisper = false
-                whisperFound = whisperAvailable()
-                whisperInstallMsg = whisperFound
-                    ? "whisper-cli installed ✓"
-                    : "Install failed (exit \(r.code)). In Terminal: brew install whisper-cpp"
-            }
         }
     }
 }
