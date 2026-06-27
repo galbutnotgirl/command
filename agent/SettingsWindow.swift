@@ -235,9 +235,9 @@ struct SetupView: View {
     private func action(for title: String) -> CheckAction? {
         switch title {
         case "Accessibility":
-            return CheckAction(label: "Open Settings") { requestAccessibility(); openPrivacyPane("Privacy_Accessibility") }
+            return CheckAction(label: "Request Access") { requestAccessibility() }   // alert only; user opens Settings from it
         case "Screen Recording":
-            return CheckAction(label: "Open Settings") { requestScreenRecording(); openPrivacyPane("Privacy_ScreenCapture") }
+            return CheckAction(label: "Request Access") { requestScreenRecording() }
         default:
             return nil
         }

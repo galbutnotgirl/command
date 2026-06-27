@@ -77,18 +77,16 @@ struct OnboardingView: View {
                     .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
 
             case .accessibility:
-                AccessibilityStepView(
-                    onRequest: { requestAccessibility() },              // show the system alert only
-                    onOpenSettings: { openPrivacyPane("Privacy_Accessibility") }   // separate, on demand
-                )
+                // Request only → macOS shows its alert; the user opens System
+                // Settings from that alert. The app never opens Settings itself.
+                AccessibilityStepView(onRequest: { requestAccessibility() })
                 .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
                 .onAppear { startPollingAccessibility() }
                 .onDisappear { polling?.invalidate() }
 
             case .screenRecording:
                 ScreenRecordingStepView(
-                    onRequest: { requestScreenRecording() },            // show the system alert (was missing)
-                    onOpenSettings: { openPrivacyPane("Privacy_ScreenCapture") },
+                    onRequest: { requestScreenRecording() },
                     onDone: {
                         withAnimation(.easeInOut(duration: 0.3)) { step = .microphone }
                     }
@@ -313,7 +311,6 @@ struct KeyCapView: View {
 
 struct AccessibilityStepView: View {
     let onRequest: () -> Void
-    let onOpenSettings: () -> Void
     @State private var requested = false
 
     var body: some View {
@@ -346,16 +343,14 @@ struct AccessibilityStepView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             } else {
-                VStack(spacing: 8) {
-                    HStack(spacing: 6) {
-                        ProgressView().scaleEffect(0.7)
-                        Text("In the alert, choose Open System Settings, then flip the Claude Command switch ON.")
-                            .font(.subheadline).foregroundColor(.secondary)
-                            .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-                    }
-                    Button("Open System Settings") { onOpenSettings() }
-                        .buttonStyle(.bordered).controlSize(.small)
+                HStack(spacing: 6) {
+                    ProgressView().scaleEffect(0.7)
+                    Text("In the alert, choose Open System Settings, then flip the Claude Command switch ON.")
+                        .font(.subheadline).foregroundColor(.secondary)
+                        .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                 }
+                Button("Ask again") { onRequest() }
+                    .buttonStyle(.bordered).controlSize(.small)
             }
         }
         .padding(.horizontal, 40)
@@ -366,7 +361,6 @@ struct AccessibilityStepView: View {
 
 struct ScreenRecordingStepView: View {
     let onRequest: () -> Void
-    let onOpenSettings: () -> Void
     let onDone: () -> Void
     @State private var requested = false
 
@@ -404,7 +398,7 @@ struct ScreenRecordingStepView: View {
                         .font(.subheadline).foregroundColor(.secondary)
                         .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 10) {
-                        Button("Open System Settings") { onOpenSettings() }
+                        Button("Ask again") { onRequest() }
                             .buttonStyle(.bordered).controlSize(.small)
                         Button("Continue ->") { onDone() }
                             .buttonStyle(.borderedProminent).controlSize(.regular)
