@@ -1,26 +1,52 @@
 import Speech
 import AVFoundation
 import CoreAudio
-import AudioToolbox
 
 enum DictationMode { case insert, addToClaudeChat }
 
-// Lightweight stderr logger for dictation diagnostics.
 private func dlog(_ s: String) { FileHandle.standardError.write(("[dictation] " + s + "\n").data(using: .utf8)!) }
 
-// HAL default input device id. Needed because a launchd-spawned LSUIElement agent
-// often gets an unbound AVAudioEngine inputNode (bogus multi-channel format, no
-// buffers). Setting this device explicitly on the input audio unit binds it.
-private func defaultInputDeviceID() -> AudioDeviceID {
-    var id = AudioDeviceID(0)
-    var sz = UInt32(MemoryLayout<AudioDeviceID>.size)
-    var addr = AudioObjectPropertyAddress(
-        mSelector: kAudioHardwarePropertyDefaultInputDevice,
-        mScope: kAudioObjectPropertyScopeGlobal,
-        mElement: kAudioObjectPropertyElementMain)
-    AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &sz, &id)
-    return id
+// Convert a CMSampleBuffer (from AVCaptureAudioDataOutput) into an AVAudioPCMBuffer
+// for SFSpeechAudioBufferRecognitionRequest.
+private func pcmBuffer(from sb: CMSampleBuffer) -> AVAudioPCMBuffer? {
+    guard let desc = CMSampleBufferGetFormatDescription(sb) else { return nil }
+    let fmt = AVAudioFormat(cmAudioFormatDescription: desc)
+    let n = AVAudioFrameCount(CMSampleBufferGetNumSamples(sb))
+    guard n > 0 else { return nil }
+    guard let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: n) else { return nil }
+    buf.frameLength = n
+    guard CMSampleBufferCopyPCMDataIntoAudioBufferList(sb, at: 0, frameCount: Int32(n), into: buf.mutableAudioBufferList) == noErr else { return nil }
+    return buf
 }
+
+// MARK: - Capture delegate (AVCaptureSession → SFSpeechRecognitionRequest bridge)
+
+private final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
+    var onBuffer: ((AVAudioPCMBuffer) -> Void)?
+    var onDebug: ((String) -> Void)?
+    private var bufCount = 0
+
+    func captureOutput(_ output: AVCaptureOutput, didOutput sb: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard let buf = pcmBuffer(from: sb) else {
+            onDebug?("pcmBuffer conversion failed")
+            return
+        }
+        bufCount += 1
+        if bufCount % 20 == 0 {
+            var rms: Float = 0
+            if let ch = buf.floatChannelData {
+                let n = Int(buf.frameLength)
+                var sum: Float = 0
+                for i in 0..<n { let v = ch[0][i]; sum += v * v }
+                rms = n > 0 ? (sum / Float(n)).squareRoot() : 0
+            }
+            onDebug?("buf #\(bufCount) rms=\(String(format: "%.4f", rms)) ch=\(buf.format.channelCount) fmt=\(buf.format.sampleRate)Hz")
+        }
+        onBuffer?(buf)
+    }
+}
+
+// MARK: - SpeechEngine
 
 final class SpeechEngine: NSObject, SFSpeechRecognizerDelegate {
     static let shared = SpeechEngine()
@@ -30,7 +56,8 @@ final class SpeechEngine: NSObject, SFSpeechRecognizerDelegate {
     var onError: ((String) -> Void)?
 
     private var recognizer: SFSpeechRecognizer?
-    private var audioEngine: AVAudioEngine?
+    private var captureSession: AVCaptureSession?
+    private var captureDelegate: AudioCaptureDelegate?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var silenceTimer: DispatchSourceTimer?
@@ -58,37 +85,31 @@ final class SpeechEngine: NSObject, SFSpeechRecognizerDelegate {
         SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
             dlog("speech requestAuthorization → \(authStatus.rawValue)")
             guard authStatus == .authorized else {
-                DispatchQueue.main.async {
-                    self?.onError?("Speech recognition not authorized.")
-                }
+                DispatchQueue.main.async { self?.onError?("Speech recognition not authorized.") }
                 return
             }
             if #available(macOS 14.0, *) {
                 AVAudioApplication.requestRecordPermission { granted in
                     dlog("mic requestRecordPermission → \(granted)")
                     if granted {
-                        DispatchQueue.main.async { self?.startEngine() }
+                        DispatchQueue.main.async { self?.startCapture() }
                     } else {
-                        DispatchQueue.main.async {
-                            self?.onError?("Microphone access denied.")
-                        }
+                        DispatchQueue.main.async { self?.onError?("Microphone access denied.") }
                     }
                 }
             } else {
                 AVCaptureDevice.requestAccess(for: .audio) { granted in
                     if granted {
-                        DispatchQueue.main.async { self?.startEngine() }
+                        DispatchQueue.main.async { self?.startCapture() }
                     } else {
-                        DispatchQueue.main.async {
-                            self?.onError?("Microphone access denied.")
-                        }
+                        DispatchQueue.main.async { self?.onError?("Microphone access denied.") }
                     }
                 }
             }
         }
     }
 
-    private func startEngine() {
+    private func startCapture() {
         guard let recognizer = recognizer else {
             dlog("recognizer is nil")
             onError?("Speech recognizer unavailable.")
@@ -100,71 +121,58 @@ final class SpeechEngine: NSObject, SFSpeechRecognizerDelegate {
             return
         }
 
-        let engine = AVAudioEngine()
+        // Pick the default audio capture device (microphone).
+        guard let mic = AVCaptureDevice.default(for: .audio) else {
+            dlog("no AVCaptureDevice for audio")
+            onError?("No microphone found.")
+            return
+        }
+        dlog("capture device: \(mic.localizedName)")
+
+        guard let micInput = try? AVCaptureDeviceInput(device: mic) else {
+            dlog("AVCaptureDeviceInput init failed")
+            onError?("Could not open microphone.")
+            return
+        }
+
+        let session = AVCaptureSession()
+        let output = AVCaptureAudioDataOutput()
+
+        guard session.canAddInput(micInput), session.canAddOutput(output) else {
+            dlog("session cannot add input or output")
+            onError?("Audio capture session setup failed.")
+            return
+        }
+
         let req = SFSpeechAudioBufferRecognitionRequest()
         req.shouldReportPartialResults = true
-
         let vocab = loadVocab()
-        if !vocab.isEmpty {
-            req.contextualStrings = Array(vocab.prefix(100))
-        }
+        if !vocab.isEmpty { req.contextualStrings = Array(vocab.prefix(100)) }
 
-        let inputNode = engine.inputNode
-
-        // Bind the input audio unit to the real HAL default input device. Without
-        // this, a launchd-spawned agent's inputNode can report a bogus format
-        // (e.g. 3ch from a 1ch mic) and deliver zero buffers → "No speech detected".
-        var devID = defaultInputDeviceID()
-        if devID != 0, let au = inputNode.audioUnit {
-            let st = AudioUnitSetProperty(au, kAudioOutputUnitProperty_CurrentDevice,
-                                          kAudioUnitScope_Global, 0,
-                                          &devID, UInt32(MemoryLayout<AudioDeviceID>.size))
-            dlog("set input device id=\(devID) status=\(st)")
-        } else {
-            dlog("could not set input device (devID=\(devID), audioUnit=\(inputNode.audioUnit != nil))")
-        }
-
-        // Use the node's INPUT format (the actual hardware stream) for the tap.
-        let fmt = inputNode.inputFormat(forBus: 0)
-        let outFmt = inputNode.outputFormat(forBus: 0)
-        dlog("input format: sampleRate=\(fmt.sampleRate) ch=\(fmt.channelCount) | output ch=\(outFmt.channelCount)")
-
-        // WAV created lazily from the first buffer's real format (whisper post-process).
         let wavPath = NSTemporaryDirectory() + "dictation_\(Date().timeIntervalSince1970).wav"
         let wavURL = URL(fileURLWithPath: wavPath)
         lastAudioFile = wavURL
 
-        // Tap with nil format → the node supplies its own (avoids format-mismatch
-        // crashes and the bogus pre-start format).
-        var bufCount = 0
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buf, _ in
+        let del = AudioCaptureDelegate()
+        del.onDebug = { s in dlog(s) }
+        del.onBuffer = { [weak self] buf in
             guard let self = self else { return }
             self.request?.append(buf)
             if self.audioFile == nil {
                 self.audioFile = try? AVAudioFile(forWriting: wavURL, settings: buf.format.settings)
             }
             try? self.audioFile?.write(from: buf)
-            // Log RMS level every ~20 buffers so we can see if real audio arrives.
-            bufCount += 1
-            if bufCount % 20 == 0, let ch = buf.floatChannelData {
-                let n = Int(buf.frameLength)
-                var sum: Float = 0
-                for i in 0..<n { let v = ch[0][i]; sum += v * v }
-                let rms = n > 0 ? (sum / Float(n)).squareRoot() : 0
-                dlog("buf #\(bufCount) frames=\(n) rms=\(rms) bufCh=\(buf.format.channelCount)")
-            }
         }
 
-        do {
-            try engine.start()
-            dlog("engine started")
-        } catch {
-            dlog("engine.start threw: \(error.localizedDescription)")
-            onError?("Mic tap failed: \(error.localizedDescription)")
-            return
-        }
+        output.setSampleBufferDelegate(del, queue: DispatchQueue.global(qos: .userInteractive))
+        session.addInput(micInput)
+        session.addOutput(output)
+        session.startRunning()
 
-        audioEngine = engine
+        dlog("AVCaptureSession running=\(session.isRunning) connections=\(output.connections.count)")
+
+        captureSession = session
+        captureDelegate = del
         request = req
         _isRecording = true
 
@@ -175,24 +183,17 @@ final class SpeechEngine: NSObject, SFSpeechRecognizerDelegate {
                 let text = result.bestTranscription.formattedString
                 dlog("partial: \"\(text)\" isFinal=\(result.isFinal)")
                 self.lastTranscript = text
-                DispatchQueue.main.async {
-                    self.onPartialResult?(text)
-                }
+                DispatchQueue.main.async { self.onPartialResult?(text) }
                 self.resetSilenceTimer()
-
-                if result.isFinal {
-                    self.finalize(text: text)
-                }
+                if result.isFinal { self.finalize(text: text) }
             }
 
             if let error = error {
-                // Code 216: recognition session ended normally (stop was called). Code 203: no speech detected.
-                let nsErr = error as NSError
-                dlog("recognitionTask error: domain=\(nsErr.domain) code=\(nsErr.code) \(nsErr.localizedDescription)")
-                if nsErr.code == 216 || nsErr.code == 203 { return }
-                DispatchQueue.main.async {
-                    self.onError?(error.localizedDescription)
-                }
+                let ns = error as NSError
+                dlog("recognitionTask error: domain=\(ns.domain) code=\(ns.code) \(ns.localizedDescription)")
+                // 216 = session ended normally; 203 = no speech detected — both are non-fatal.
+                if ns.code == 216 || ns.code == 203 { return }
+                DispatchQueue.main.async { self.onError?(error.localizedDescription) }
                 self.tearDown()
             }
         }
@@ -203,38 +204,33 @@ final class SpeechEngine: NSObject, SFSpeechRecognizerDelegate {
     func stop() {
         guard _isRecording else { return }
         cancelSilenceTimer()
-        // Signal end of audio — recognizer will deliver a final result asynchronously.
         request?.endAudio()
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
+        captureSession?.stopRunning()
+        captureSession = nil
+        captureDelegate = nil
         _isRecording = false
 
-        // Flush whatever we have if the recognizer doesn't deliver isFinal in time.
         let captured = lastTranscript
         let mode = currentMode
         DispatchQueue.main.asyncAfter(deadline: .now() + readDictationSilenceTimeout()) { [weak self] in
             guard let self = self, self.task != nil else { return }
             self.task?.cancel()
             self.task = nil
-            if !captured.isEmpty {
-                self.onFinalResult?(captured, mode)
-            }
+            if !captured.isEmpty { self.onFinalResult?(captured, mode) }
         }
     }
 
     func cancel() {
         cancelSilenceTimer()
         task?.cancel()
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
+        captureSession?.stopRunning()
+        captureSession = nil
+        captureDelegate = nil
         request = nil
         task = nil
-        audioEngine = nil
         audioFile = nil
         _isRecording = false
         lastTranscript = ""
-        // Don't leave a partial recording for whisper to pick up.
         if let url = lastAudioFile { try? FileManager.default.removeItem(at: url) }
         lastAudioFile = nil
     }
@@ -250,9 +246,7 @@ final class SpeechEngine: NSObject, SFSpeechRecognizerDelegate {
             let text = self.lastTranscript
             let mode = self.currentMode
             self.tearDown()
-            if !text.isEmpty {
-                self.onFinalResult?(text, mode)
-            }
+            if !text.isEmpty { self.onFinalResult?(text, mode) }
         }
         t.resume()
         silenceTimer = t
@@ -269,22 +263,19 @@ final class SpeechEngine: NSObject, SFSpeechRecognizerDelegate {
         let mode = currentMode
         tearDown()
         guard !text.isEmpty else { return }
-        DispatchQueue.main.async { [weak self] in
-            self?.onFinalResult?(text, mode)
-        }
+        DispatchQueue.main.async { [weak self] in self?.onFinalResult?(text, mode) }
     }
 
     private func tearDown() {
         cancelSilenceTimer()
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
+        captureSession?.stopRunning()
         task?.cancel()
-        audioEngine = nil
+        captureSession = nil
+        captureDelegate = nil
         request = nil
         task = nil
         _isRecording = false
-        // AVAudioFile closes and finalizes on dealloc — nil-ing flushes the WAV header.
-        audioFile = nil
+        audioFile = nil  // flushes WAV header on dealloc
     }
 
     private func loadVocab() -> [String] {
