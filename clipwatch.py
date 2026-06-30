@@ -193,10 +193,21 @@ def main():
     # Keep last 10s of frontmost apps to reliably attribute screenshot items.
     # Screencapture selection can take several seconds; 400 × 25ms = 10s window.
     recent_front: deque = deque(maxlen=400)
+    # Track explicit app-switch events for precise attribution:
+    # When user copies then immediately switches apps, the previous app is the copier.
+    prev_front_bundle = ""
+    prev_front_changed_at = 0.0
+    _current_front_cached = ""
     while True:
         try:
-            now = int(time.time())
+            now_float = time.time()
+            now = int(now_float)
             current_front = front_bundle()
+            # Detect app switch — record previous app and when it changed
+            if current_front != _current_front_cached:
+                prev_front_bundle = _current_front_cached
+                prev_front_changed_at = now_float
+                _current_front_cached = current_front
             recent_front.append(current_front)
             cc = pb.changeCount()
             if cc != last:
@@ -206,18 +217,18 @@ def main():
                     bundle = copy_src
                     source_method = "last_copy.json"
                 else:
-                    # No Cmd+C intercept — look back 200ms in frontmost history.
-                    # The copy action happened just before clipboard changed (0-25ms ago);
-                    # if the user switched apps immediately after copying, current_front
-                    # would be the NEW app (wrong). Walking back finds the actual copier.
-                    rf = list(recent_front)
-                    fallback = current_front
-                    for b in reversed(rf[-8:] if len(rf) >= 8 else rf):
-                        if b and b not in BLOCK_BUNDLES:
-                            fallback = b
-                            break
-                    bundle = fallback
-                    source_method = "recent_front_lookback"
+                    # No Cmd+C intercept. Use best available attribution:
+                    # 1. If frontmost app switched within last 500ms, the PREVIOUS app
+                    #    likely did the copy (user copied then switched).
+                    # 2. Otherwise use current_front (copy happened in active app).
+                    switched_recently = (now_float - prev_front_changed_at) < 0.5
+                    if (switched_recently and prev_front_bundle
+                            and prev_front_bundle not in BLOCK_BUNDLES):
+                        bundle = prev_front_bundle
+                        source_method = "prev_front_recent_switch"
+                    else:
+                        bundle = current_front if current_front not in BLOCK_BUNDLES else ""
+                        source_method = "current_front"
                 types = set(pb.types() or [])
                 is_img = bool(types & {"public.png", "public.tiff"})
                 if is_img and not copy_src:
