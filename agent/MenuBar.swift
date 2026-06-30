@@ -12,6 +12,57 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     func install() { if !UserDefaults.standard.bool(forKey: "hideMenuBarIcon") { showIcon() } }
 
+    func setRecording(_ on: Bool) {
+        statusItem?.button?.image = on ? waveformIcon(level: 0) : brandIcon()
+    }
+
+    // Called ~15fps by DictationOverlay while recording; drives the reactive waveform icon.
+    func updateAudioLevel(_ level: Float) {
+        statusItem?.button?.image = waveformIcon(level: level)
+    }
+
+    // Reactive waveform icon:
+    //   silent (< 0.03) → single thin purple line
+    //   speaking → 4 purple bars scaled by audio level
+    // Non-template so purple shows in the menu bar.
+    private func waveformIcon(level: Float) -> NSImage {
+        let h = NSStatusBar.system.thickness
+        let img = NSImage(size: NSSize(width: h, height: h), flipped: false) { rect in
+            let purple = NSColor(red: 0.44, green: 0.16, blue: 0.84, alpha: 1.0)
+            purple.setFill()
+
+            if level < 0.03 {
+                // Silence: thin horizontal line
+                let lh: CGFloat = 1.5
+                let lw = rect.width * 0.62
+                let x = (rect.width - lw) / 2
+                let y = rect.midY - lh / 2
+                NSBezierPath(roundedRect: NSRect(x: x, y: y, width: lw, height: lh),
+                             xRadius: lh / 2, yRadius: lh / 2).fill()
+            } else {
+                // Voice: 4 bars, heights proportional to level
+                let barW: CGFloat = 2.5
+                let gap:  CGFloat = 2.0
+                let count = 4
+                let totalW = CGFloat(count) * barW + CGFloat(count - 1) * gap
+                let startX = (rect.width - totalW) / 2
+                let maxH   = rect.height * 0.80
+                let midY   = rect.midY
+                let scales: [Float] = [0.60, 1.00, 0.82, 0.68]
+                for (i, sc) in scales.enumerated() {
+                    let x  = startX + CGFloat(i) * (barW + gap)
+                    let bh = max(2.0, maxH * CGFloat(level * sc))
+                    let by = midY - bh / 2
+                    NSBezierPath(roundedRect: NSRect(x: x, y: by, width: barW, height: bh),
+                                 xRadius: barW / 2, yRadius: barW / 2).fill()
+                }
+            }
+            return true
+        }
+        img.isTemplate = false
+        return img
+    }
+
     func showIcon() {
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -22,10 +73,30 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         statusItem = item
     }
 
+    // Expose the status item button's screen frame so DictationOverlay can anchor below it.
+    func statusItemButtonFrame() -> NSRect? {
+        guard let btn = statusItem?.button, let window = btn.window else { return nil }
+        let frameInWindow = btn.convert(btn.bounds, to: nil)
+        return window.convertToScreen(frameInWindow)
+    }
+
     // Rebuild action items each time menu opens so binding changes are live.
+    // Injects Stop/Cancel at top when dictation is active.
     func menuWillOpen(_ menu: NSMenu) {
         updateActionItems(in: menu)
+        if DictationOverlay.shared.isVisible {
+            let stopIt = NSMenuItem(title: "Stop Dictation", action: #selector(stopFromMenu), keyEquivalent: "")
+            stopIt.target = self
+            let cancelIt = NSMenuItem(title: "Cancel Dictation", action: #selector(cancelFromMenu), keyEquivalent: "")
+            cancelIt.target = self
+            menu.insertItem(stopIt, at: 0)
+            menu.insertItem(cancelIt, at: 1)
+            menu.insertItem(.separator(), at: 2)
+        }
     }
+
+    @objc private func stopFromMenu()   { Task { @MainActor in DictationOverlay.shared.stopRecording() } }
+    @objc private func cancelFromMenu() { Task { @MainActor in DictationOverlay.shared.stopRecording() } }
 
     private func updateActionItems(in menu: NSMenu) {
         // Structure: [0..N-1]=actions  [N]=separator  [N+1]=Settings  [N+2]=Quit

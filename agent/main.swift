@@ -90,7 +90,24 @@ func notify(_ title: String, _ body: String) {
 }
 
 // ---- spawn the worker on a hotkey ------------------------------------------
-func runWorker(_ action: String, source: String) {
+// Capture current text selection synchronously on the main thread.
+// Called the instant a non-screenshot hotkey fires — before any async dispatch —
+// so the source app still has focus and the selection is still live.
+// Polls clipboard change-count for up to 200ms; returns "" if nothing copied.
+// Must be called on the main thread (postKey + NSPasteboard require it).
+func captureSelectionSync() -> String {
+    let cc0 = NSPasteboard.general.changeCount
+    postKey(kC, cmd: true)
+    for _ in 0..<20 {                          // poll up to 200ms in 10ms steps
+        usleep(10_000)
+        if NSPasteboard.general.changeCount != cc0 {
+            return NSPasteboard.general.string(forType: .string) ?? ""
+        }
+    }
+    return ""
+}
+
+func runWorker(_ action: String, source: String, captured: String = "") {
     // Screenshot actions need Screen Recording. Without it, `screencapture` fails
     // ("could not create image from rect") and the user just re-prompts forever.
     // Gate it: fire the system prompt + open Set Up, and skip the doomed capture.
@@ -119,6 +136,7 @@ func runWorker(_ action: String, source: String) {
     env["ACTION"] = action
     env["SOURCE_BUNDLE"] = source
     env["AGENT_SOCK"] = SOCK
+    if !captured.isEmpty { env["CAPTURED_TEXT"] = captured }
     p.environment = env
     let errPipe = Pipe()
     p.standardError = errPipe
@@ -873,8 +891,27 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             DispatchQueue.main.async { if picker.isVisible { picker.hide() } else { picker.show(prev: front) } }
         } else if action == "settings" {
             DispatchQueue.main.async { settingsWindow.show(tab: .setup) }
+        } else if action == "dictate" {
+            Task { @MainActor in
+                if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
+                else {
+                    if let s = NSSound(named: NSSound.Name("Tink")) { s.volume = 0.4; s.play() }
+                    DictationOverlay.shared.show(mode: .insert)
+                }
+            }
+        } else if action == "dictateadd" {
+            Task { @MainActor in
+                if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
+                else {
+                    if let s = NSSound(named: NSSound.Name("Tink")) { s.volume = 0.4; s.play() }
+                    DictationOverlay.shared.show(mode: .claude)
+                }
+            }
         } else {
-            DispatchQueue.global().async { runWorker(action, source: front) }
+            // Capture selection NOW (main thread, source app still focused)
+            // before async dispatch; worker uses CAPTURED_TEXT, skips socket roundtrip.
+            let sel = action.hasPrefix("shot") ? "" : captureSelectionSync()
+            DispatchQueue.global().async { runWorker(action, source: front, captured: sel) }
         }
     }
     return noErr
@@ -928,6 +965,66 @@ let MEDIA_TO_CARBON: [Int: UInt32] = [
 ]
 
 private var _mediaEventTap: CFMachPort?
+// NX_SYSDEFINED events fire repeating isDown=true while held (no autorepeat flag).
+// Track held state per keyCode to swallow repeats without breaking double-tap detection.
+private var _nxHeld: [Int: Bool] = [:]
+
+// ---- Dictation trigger state machine (matches DictationLab v2) ----------------
+// Single tap → PTT (hold to talk; CGEventSource poll releases on key-up)
+// Tap while PTT → lock (hands-free; keep recording until next tap)
+// Tap while locked → stop + paste
+// Double-tap from idle (within 350ms) → jump straight to lock
+private enum DictTrigMode { case idle, pushToTalk, lock }
+private var _dictTrigMode: DictTrigMode = .idle
+private var _dictPTTimer: Timer? = nil
+private var _dictLastPress: Double = 0
+private let _dictDoubleTapWindow: Double = 0.35
+
+@MainActor
+func resetDictTrigMode() {
+    _dictPTTimer?.invalidate(); _dictPTTimer = nil
+    _dictTrigMode = .idle
+}
+
+@MainActor
+func triggerDictation(mode: DictMode, keycode: CGKeyCode) {
+    switch _dictTrigMode {
+    case .lock:
+        resetDictTrigMode()
+        if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
+
+    case .pushToTalk:
+        _dictPTTimer?.invalidate(); _dictPTTimer = nil
+        _dictTrigMode = .lock   // hands-free: keep recording until next tap
+
+    case .idle:
+        let now = Date().timeIntervalSinceReferenceDate
+        let isDouble = (now - _dictLastPress) < _dictDoubleTapWindow
+        _dictLastPress = now
+
+        if !DictationOverlay.shared.isVisible {
+            if let s = NSSound(named: NSSound.Name("Tink")) { s.volume = 0.4; s.play() }
+            DictationOverlay.shared.show(mode: mode)
+        }
+
+        if isDouble {
+            _dictTrigMode = .lock
+        } else {
+            _dictTrigMode = .pushToTalk
+            _dictPTTimer?.invalidate()
+            _dictPTTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) { t in
+                MainActor.assumeIsolated {
+                    guard _dictTrigMode == .pushToTalk else { t.invalidate(); return }
+                    if !CGEventSource.keyState(.hidSystemState, key: keycode) {
+                        t.invalidate(); _dictPTTimer = nil
+                        _dictTrigMode = .idle
+                        if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
+                    }
+                }
+            }
+        }
+    }
+}
 
 func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
     let hks = loadHotkeys()
@@ -947,8 +1044,13 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
         if picker.isVisible { picker.hide() } else { picker.show(prev: front) }
     } else if hk.action == "settings" {
         settingsWindow.show(tab: .setup)
+    } else if hk.action == "dictate" {
+        Task { @MainActor in triggerDictation(mode: .insert, keycode: CGKeyCode(carbon)) }
+    } else if hk.action == "dictateadd" {
+        Task { @MainActor in triggerDictation(mode: .claude, keycode: CGKeyCode(carbon)) }
     } else {
-        DispatchQueue.global().async { runWorker(hk.action, source: front) }
+        let sel = hk.action.hasPrefix("shot") ? "" : captureSelectionSync()
+        DispatchQueue.global().async { runWorker(hk.action, source: front, captured: sel) }
     }
 }
 
@@ -958,7 +1060,8 @@ let MEDIA_KEYCODES: Set<UInt32> = [96, 97, 98, 99, 100, 101]  // F5–F10
 
 func startMediaKeyHook() {
     guard AXIsProcessTrusted() else { return }
-    // Intercept both NX_SYSDEFINED (media-key mode) and keyDown (function-key mode).
+    // Intercept NX_SYSDEFINED (media-key mode) and keyDown only.
+    // PTT polling uses CGEventSource.keyState on a 40ms timer — no keyUp needed.
     let eventMask = CGEventMask((1 << 14) | (1 << CGEventType.keyDown.rawValue))
     guard let tap = CGEvent.tapCreate(tap: .cghidEventTap, place: .headInsertEventTap,
                                       options: .defaultTap, eventsOfInterest: eventMask,
@@ -971,7 +1074,15 @@ func startMediaKeyHook() {
                 let keyCode = Int((ns.data1 & 0xFFFF0000) >> 16)
                 let isDown  = ((Int(ns.data1) & 0xFF00) >> 8) == 0xA
                 appendLog("[eventTap] NX_SYSDEFINED keyCode=\(keyCode) isDown=\(isDown) carbon=\(MEDIA_TO_CARBON[keyCode] ?? 0)")
-                guard isDown, let carbon = MEDIA_TO_CARBON[keyCode] else { return passthrough }
+                if !isDown {
+                    _nxHeld[keyCode] = false   // key released — next isDown is a genuine press
+                    return passthrough
+                }
+                // Swallow NX key-repeat: isDown=true fires repeatedly while held.
+                // wasHeld=true means the key never released — this is a repeat, not a new tap.
+                if _nxHeld[keyCode] == true { return nil }
+                _nxHeld[keyCode] = true
+                guard let carbon = MEDIA_TO_CARBON[keyCode] else { return passthrough }
                 let bound = loadHotkeys().contains { $0.keycode == carbon && $0.mods == 0 }
                 appendLog("[eventTap] NX bound=\(bound) carbon=\(carbon)")
                 guard bound else { return passthrough }
@@ -1005,6 +1116,10 @@ func startMediaKeyHook() {
                 }
 
                 guard MEDIA_KEYCODES.contains(kc) else { return passthrough }
+                // Skip key-repeat events — only fire on the initial key-down.
+                // Without this, holding a bound key fires start→stop→start... rapidly.
+                let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+                guard !isRepeat else { return nil }  // swallow repeat but don't act
                 var cm: UInt32 = 0
                 if f.contains(.maskCommand)   { cm |= 256 }
                 if f.contains(.maskShift)     { cm |= 512 }
@@ -1241,6 +1356,7 @@ startClipwatch()
 startServer()
 
 menuBar.install()                 // greyscale menu-bar icon + Set Up / Shortcuts / Help window
+Task { @MainActor in await recorder.initModels() }  // warm Parakeet from cache if available
 // First run: show onboarding wizard. Subsequent runs with permission problems: go straight to Setup.
 if UserDefaults.standard.bool(forKey: "onboardingCompleted") {
     if !axTrusted() || !screenRecordingOK() { settingsWindow.show(tab: .setup) }

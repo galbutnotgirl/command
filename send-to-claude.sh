@@ -156,10 +156,14 @@ esac
 
 # --- 1. Resolve selection (text or image) -----------------------------------
 SEL=""; IMG="${IMG:-0}"
+CAPTURED_TEXT="${CAPTURED_TEXT:-}"
 if [ "$SHOT" = "1" ]; then
   :   # image already on clipboard from screencapture
 elif (( $# > 0 )); then
   SEL="$*"; log "input=args bytes=${#SEL}"
+elif [ -n "${CAPTURED_TEXT//[[:space:]]/}" ]; then
+  # Agent captured selection synchronously at hotkey time — no socket roundtrip needed.
+  SEL="$CAPTURED_TEXT"; log "input=captured bytes=${#SEL}"
 else
   # Read a piped selection if there's real data (macOS Service stdin). An agent
   # hotkey spawns us with stdin = /dev/null (empty) → fall through to ⌘C capture.
@@ -176,7 +180,8 @@ else
     else
       if clip_fresh_ok; then
         if clipboard_has_image; then IMG=1; log "no selection; using fresh clipboard image"
-        elif [ -n "${BEFORE//[[:space:]]/}" ]; then SEL="$BEFORE"; log "no selection; using fresh clipboard text"; fi
+        elif [ -n "${BEFORE//[[:space:]]/}" ]; then SEL="$BEFORE"; log "no selection; using fresh clipboard text"
+        else log "no selection; clipboard fresh but empty (rich-text only?) — ignoring"; fi
       else
         log "no selection; clipboard stale/blocked — ignoring"
       fi

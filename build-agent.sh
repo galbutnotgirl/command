@@ -21,14 +21,12 @@ print -- "[agent] version ${VERSION}"
 rm -rf "$APP"
 mkdir -p "$BIN_DIR"
 
-print -- "[agent] compiling…"
-# Whole agent/ folder — main.swift holds top-level boot; the rest are declarations
-# (menu bar, settings window, permissions, action catalog).
-if ! swiftc -O ${SRC_DIR}/*.swift -o "${BIN_DIR}/ClaudeCommand" \
-       -framework Cocoa -framework Carbon -framework SwiftUI \
-       -framework Speech -framework AVFoundation 2>&1; then
-  print -- "[agent] ERROR swiftc failed"; exit 1
+print -- "[agent] compiling (swift build)…"
+# SPM build — FluidAudio dependency requires Package.swift resolution.
+if ! ( cd "${SRC_DIR}" && swift build -c release 2>&1 ); then
+  print -- "[agent] ERROR swift build failed"; exit 1
 fi
+cp "${SRC_DIR}/.build/release/ClaudeCommand" "${BIN_DIR}/ClaudeCommand"
 
 cat > "${APP}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -44,8 +42,7 @@ cat > "${APP}/Contents/Info.plist" <<PLIST
 	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>LSUIElement</key><true/>
 	<key>LSMinimumSystemVersion</key><string>13.0</string>
-	<key>NSMicrophoneUsageDescription</key><string>Claude Command uses your microphone to transcribe speech for dictation.</string>
-	<key>NSSpeechRecognitionUsageDescription</key><string>Claude Command uses speech recognition to convert your voice into text for dictation.</string>
+	<key>NSMicrophoneUsageDescription</key><string>ClaudeCommand uses your microphone for on-device dictation via Parakeet TDT.</string>
 </dict>
 </plist>
 PLIST

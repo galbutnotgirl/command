@@ -6,6 +6,7 @@
 import Cocoa
 import SwiftUI
 import Combine
+import AVFoundation
 
 let onboardingWindow = OnboardingWindowController()
 
@@ -55,7 +56,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
 // ---- step enum --------------------------------------------------------------
 
-enum OnbStep { case welcome, accessibility, screenRecording, done }
+enum OnbStep { case welcome, accessibility, screenRecording, microphone, done }
 
 // ---- root view --------------------------------------------------------------
 
@@ -94,7 +95,14 @@ struct OnboardingView: View {
             case .screenRecording:
                 ScreenRecordingStepView(
                     onRequest: { requestScreenRecording() },
-                    onDone: {
+                    onDone: { withAnimation(.easeInOut(duration: 0.3)) { step = .microphone } }
+                )
+                .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
+
+            case .microphone:
+                MicrophoneStepView(
+                    onEnable: { requestMic() },
+                    onContinue: {
                         countdown = 3
                         withAnimation(.easeInOut(duration: 0.3)) { step = .done }
                     }
@@ -115,11 +123,15 @@ struct OnboardingView: View {
     // ── numbered step header (1 · 2 · 3)
     private var stepHeader: some View {
         HStack(spacing: 0) {
-            stepChip(n: 1, label: "Accessibility",    active: step == .accessibility,   done: step == .screenRecording || step == .done)
-            connector(done: step == .screenRecording || step == .done)
-            stepChip(n: 2, label: "Screen Recording", active: step == .screenRecording, done: step == .done)
+            stepChip(n: 1, label: "Accessibility",    active: step == .accessibility,
+                     done: step == .screenRecording || step == .microphone || step == .done)
+            connector(done: step == .screenRecording || step == .microphone || step == .done)
+            stepChip(n: 2, label: "Screen Recording", active: step == .screenRecording,
+                     done: step == .microphone || step == .done)
+            connector(done: step == .microphone || step == .done)
+            stepChip(n: 3, label: "Microphone",       active: step == .microphone,      done: step == .done)
             connector(done: step == .done)
-            stepChip(n: 3, label: "All set",          active: step == .done,            done: false)
+            stepChip(n: 4, label: "All set",          active: step == .done,            done: false)
         }
     }
 
@@ -158,8 +170,7 @@ struct OnboardingView: View {
             if axTrusted() { advanceFromAccessibility() }
         case .screenRecording:
             if screenRecordingOK() {
-                countdown = 3
-                withAnimation(.easeInOut(duration: 0.3)) { step = .done }
+                withAnimation(.easeInOut(duration: 0.3)) { step = .microphone }
             }
         case .done:
             countdown -= 1
@@ -174,9 +185,9 @@ struct OnboardingView: View {
     }
 
     private func advanceFromAccessibility() {
-        if screenRecordingOK() { countdown = 3 }
         withAnimation(.easeInOut(duration: 0.3)) {
-            step = screenRecordingOK() ? .done : .screenRecording
+            if !screenRecordingOK() { step = .screenRecording }
+            else { step = .microphone }
         }
     }
 }
@@ -557,6 +568,71 @@ struct QuitReopenMockup: View {
         .cornerRadius(10)
         .shadow(color: .black.opacity(0.10), radius: 4, x: 0, y: 2)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+    }
+}
+
+// ---- microphone step view ---------------------------------------------------
+
+struct MicrophoneStepView: View {
+    let onEnable: () -> Void
+    let onContinue: () -> Void
+    @State private var requested = false
+    private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    var micGranted: Bool { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill((micGranted ? Color.green : Color.purple).opacity(0.12))
+                    .frame(width: 72, height: 72)
+                Image(systemName: micGranted ? "checkmark.circle.fill" : "mic.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(micGranted ? .green : .purple)
+            }
+
+            Text("Microphone access")
+                .font(.title2).bold()
+
+            Text("Optional — for on-device dictation via Parakeet TDT.\nSkip if you don't plan to use the Dictate hotkey.")
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 380)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if micGranted {
+                Label("Microphone access granted", systemImage: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .font(.subheadline)
+            } else if requested {
+                Text("Allow access in the macOS alert, then continue.")
+                    .font(.subheadline).foregroundColor(.secondary)
+            }
+
+            HStack(spacing: 12) {
+                if !micGranted {
+                    Button("Enable Microphone") {
+                        requested = true
+                        onEnable()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
+
+                if micGranted {
+                    Button("Continue  →", action: onContinue)
+                        .buttonStyle(.borderedProminent).controlSize(.large)
+                } else {
+                    Button("Skip for now", action: onContinue)
+                        .buttonStyle(.bordered).controlSize(.large)
+                }
+            }
+        }
+        .padding(.horizontal, 44)
+        .onReceive(ticker) { _ in
+            if micGranted && requested { onContinue() }
+        }
     }
 }
 

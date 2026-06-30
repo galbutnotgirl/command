@@ -18,6 +18,8 @@ let COMMAND_ACTIONS: [CommandAction] = [
     CommandAction(id: "shotcomment", name: "Screenshot New",     detail: "Capture → new session; you add a note."),
     CommandAction(id: "shotgo",      name: "Screenshot Go",      detail: "Capture → new session, auto-submit."),
     CommandAction(id: "cliphistory", name: "Clipboard History",  detail: "Floating picker of recent clips."),
+    CommandAction(id: "dictate",     name: "Dictate → Insert",   detail: "Speak → on-device Parakeet transcription → paste at cursor."),
+    CommandAction(id: "dictateadd",  name: "Dictate → Claude",   detail: "Speak → on-device Parakeet transcription → send to Claude."),
 ]
 
 func actionName(_ id: String) -> String { COMMAND_ACTIONS.first { $0.id == id }?.name ?? id }
@@ -40,6 +42,7 @@ let KEYCODE_NAMES: [UInt32: String] = [
     22:"6",26:"7",28:"8",25:"9",29:"0",49:"Space",
     122:"F1",120:"F2",99:"F3",118:"F4",96:"F5",97:"F6",98:"F7",100:"F8",
     101:"F9",109:"F10",103:"F11",111:"F12",
+    115:"Home",119:"End",116:"PgUp",121:"PgDn",117:"⌦",
 ]
 
 func humanShortcut(keycode: UInt32, mods: UInt32) -> String {
@@ -87,6 +90,8 @@ let DEFAULT_BINDINGS: [(action: String, keycode: UInt32, mods: UInt32)] = [
     ("shotcomment", 98,   2048),   // ⌥F7 — screenshot → new session
     ("shotgo",      0,    0),      // unbound
     ("cliphistory", 97,   0),      // F6  — clipboard history picker
+    ("dictate",     96,   0),      // F5  — dictate → insert at cursor
+    ("dictateadd",  96,   2048),   // ⌥F5 — dictate → send to Claude
 ]
 
 // One binding per catalog action, in catalog order; unbound actions get keycode 0.

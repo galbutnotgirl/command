@@ -6,6 +6,7 @@
 import Cocoa
 import ApplicationServices
 import CoreGraphics
+import AVFoundation
 
 enum CheckState: Equatable { case ok, missing, unknown }
 
@@ -159,7 +160,18 @@ func permissionChecks() -> [StatusCheck] {
         StatusCheck(title: "Screen Recording",
                     detail: "Required for the screenshot actions (macOS screencapture).",
                     state: screenRecordingOK() ? .ok : .missing),
+        StatusCheck(title: "Microphone (optional)",
+                    detail: "For dictation only. Parakeet TDT transcribes entirely on-device — no cloud.",
+                    state: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized ? .ok : .unknown),
     ]
+}
+
+func micPermissionGranted() -> Bool {
+    AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+}
+
+func requestMic() {
+    AVCaptureDevice.requestAccess(for: .audio) { _ in }
 }
 
 func componentChecks() -> [StatusCheck] {

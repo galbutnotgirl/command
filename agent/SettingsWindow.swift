@@ -5,10 +5,15 @@
 import Cocoa
 import SwiftUI
 import Combine
+import AVFoundation
 
 // Repo URL lives in Updater.swift (GITHUB_REPO_URL) as the single source of truth.
 
-enum SettingsTab: Equatable { case setup, shortcuts, history, about }
+enum SettingsTab: Equatable {
+    case setup, shortcuts, history
+    case dictHistory, dictCorrections, dictVocabulary, dictSettings
+    case about
+}
 
 // Single shared model (the local key monitor in main.swift also talks to it
 // while recording a rebind).
@@ -144,6 +149,21 @@ struct SettingsRootView: View {
             tabButton(.setup, "Set Up", "checklist")
             tabButton(.shortcuts, "Shortcuts", "keyboard")
             tabButton(.history, "Clipboard History", "clock.arrow.circlepath")
+
+            Divider().padding(.vertical, 4)
+
+            Text("DICTATION")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 2)
+            tabButton(.dictHistory,     "History",     "clock")
+            tabButton(.dictCorrections, "Corrections", "text.badge.checkmark")
+            tabButton(.dictVocabulary,  "Vocabulary",  "character.book.closed")
+            tabButton(.dictSettings,    "Settings",    "gear")
+
+            Divider().padding(.vertical, 4)
+
             tabButton(.about, "About", "info.circle")
             Spacer()
         }
@@ -152,7 +172,13 @@ struct SettingsRootView: View {
     }
 
     private func tabButton(_ t: SettingsTab, _ label: String, _ icon: String) -> some View {
-        Button(action: { model.tab = t }) {
+        Button(action: {
+            // Always cancel shortcut-recording before switching tabs.
+            // Without this, the local key monitor keeps swallowing keystrokes
+            // (including in text fields on the Corrections/Vocabulary tabs).
+            if model.recordingAction != nil { model.cancelRecording() }
+            model.tab = t
+        }) {
             HStack(spacing: 8) {
                 Image(systemName: icon).frame(width: 18)
                 Text(label); Spacer()
@@ -167,10 +193,14 @@ struct SettingsRootView: View {
 
     @ViewBuilder private var content: some View {
         switch model.tab {
-        case .setup:      SetupView(model: model)
-        case .shortcuts:  ShortcutsView(model: model)
-        case .history:    HistoryView()
-        case .about:      AboutView(model: model)
+        case .setup:           SetupView(model: model)
+        case .shortcuts:       ShortcutsView(model: model)
+        case .history:         HistoryView()
+        case .dictHistory:     DictHistoryView()
+        case .dictCorrections: DictCorrectionsView()
+        case .dictVocabulary:  DictVocabularyView()
+        case .dictSettings:    DictSettingsView()
+        case .about:           AboutView(model: model)
         }
     }
 }
@@ -807,5 +837,387 @@ struct AboutView: View {
                 installing = false
                 updateStatus = msg
             })
+    }
+}
+
+// ---- Dictation: History -------------------------------------------------------
+
+struct DictHistoryView: View {
+    @ObservedObject private var hist:  HistoryStore    = .shared
+    @ObservedObject private var vocab: VocabularyStore = .shared
+
+    private var suggestions: [(wrong: String, correct: String, count: Int)] {
+        hist.suggestions(ignoring: Set(vocab.replacements.map { $0.wrong }))
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Dictation History").font(.title2).bold()
+
+                if !suggestions.isEmpty {
+                    GroupBox(label: Text("Suggested Corrections").font(.subheadline).bold()) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Patterns seen ≥2× where raw and processed transcripts differ.")
+                                .font(.caption).foregroundColor(.secondary)
+                            ForEach(suggestions.prefix(5), id: \.wrong) { s in
+                                HStack {
+                                    Text(s.wrong).foregroundColor(.secondary)
+                                    Image(systemName: "arrow.right").font(.caption)
+                                    Text(s.correct)
+                                    Text("×\(s.count)").font(.caption2).foregroundColor(.secondary)
+                                    Spacer()
+                                    Button("Add to Corrections") {
+                                        vocab.addReplacement(wrong: s.wrong, correct: s.correct)
+                                    }.buttonStyle(.bordered).controlSize(.small)
+                                }.font(.system(size: 13))
+                                Divider()
+                            }
+                        }.padding(.vertical, 6)
+                    }
+                }
+
+                GroupBox(label: HStack {
+                    Text("All Entries (\(hist.records.count))").font(.subheadline).bold()
+                    Spacer()
+                    if !hist.records.isEmpty {
+                        Button("Clear All") { hist.clearAll() }
+                            .foregroundColor(.red).buttonStyle(.plain).font(.caption)
+                    }
+                }) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        if hist.records.isEmpty {
+                            Text("No dictations yet. Use the Dictate hotkey to record your first one.")
+                                .font(.caption).foregroundColor(.secondary).padding(.vertical, 12)
+                        } else {
+                            ForEach(hist.records) { e in
+                                HistoryEntryRow(entry: e)
+                                Divider()
+                            }
+                        }
+                    }.padding(.vertical, 4)
+                }
+            }.padding(24)
+        }
+    }
+}
+
+struct HistoryEntryRow: View {
+    let entry: HistoryStore.Record
+    @ObservedObject private var hist:  HistoryStore    = .shared
+    @ObservedObject private var vocab: VocabularyStore = .shared
+    @State private var showAddCorrection = false
+    @State private var corrWrong  = ""
+    @State private var corrCorrect = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(entry.mode == "insert" ? "Insert" : "→ Claude")
+                    .font(.caption2)
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(Color.accentColor.opacity(0.15)).cornerRadius(4)
+                Text(RelativeDateTimeFormatter().localizedString(for: entry.timestamp, relativeTo: Date()))
+                    .font(.caption2).foregroundColor(.secondary)
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(entry.processed, forType: .string)
+                } label: { Image(systemName: "doc.on.doc").font(.caption) }
+                .buttonStyle(.plain).help("Copy")
+
+                Button { showAddCorrection.toggle() } label: {
+                    Image(systemName: "plus.bubble").font(.caption)
+                }.buttonStyle(.plain).help("Add correction")
+
+                Button { hist.remove(id: entry.id) } label: {
+                    Image(systemName: "trash").font(.caption).foregroundColor(.red)
+                }.buttonStyle(.plain).help("Delete")
+            }
+            Text(entry.processed).font(.system(size: 13)).lineLimit(3)
+            if entry.processed != entry.raw {
+                Text("Raw: \(entry.raw)").font(.caption2).foregroundColor(.secondary).lineLimit(2)
+            }
+            if showAddCorrection {
+                HStack(spacing: 6) {
+                    TextField("Misheard", text: $corrWrong)
+                        .textFieldStyle(.roundedBorder).frame(maxWidth: 120)
+                    Image(systemName: "arrow.right").foregroundColor(.secondary)
+                    TextField("Correct", text: $corrCorrect)
+                        .textFieldStyle(.roundedBorder).frame(maxWidth: 120)
+                    Button("Add") {
+                        vocab.addReplacement(wrong: corrWrong, correct: corrCorrect)
+                        corrWrong = ""; corrCorrect = ""; showAddCorrection = false
+                    }.disabled(corrWrong.isEmpty || corrCorrect.isEmpty)
+                    Button("Cancel") { showAddCorrection = false; corrWrong = ""; corrCorrect = "" }
+                        .buttonStyle(.plain).foregroundColor(.secondary)
+                }.padding(.top, 4)
+            }
+        }.padding(.vertical, 6)
+    }
+}
+
+// ---- Dictation: Corrections ---------------------------------------------------
+
+struct DictCorrectionsView: View {
+    @ObservedObject private var vocab: VocabularyStore = .shared
+    @ObservedObject private var hist:  HistoryStore    = .shared
+    @State private var newWrong   = ""
+    @State private var newCorrect = ""
+
+    private var suggestions: [(wrong: String, correct: String, count: Int)] {
+        hist.suggestions(ignoring: Set(vocab.replacements.map { $0.wrong }))
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Word Corrections").font(.title2).bold()
+                Text("Misheard → Correct. Applied before any other processing.")
+                    .foregroundColor(.secondary)
+
+                GroupBox(label: Text("Active Corrections").font(.subheadline).bold()) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if vocab.replacements.isEmpty {
+                            Text("No corrections yet.")
+                                .font(.caption).foregroundColor(.secondary)
+                        } else {
+                            ForEach(vocab.replacements) { r in
+                                HStack {
+                                    Text(r.wrong).foregroundColor(.secondary)
+                                    Image(systemName: "arrow.right").font(.caption)
+                                    Text(r.correct)
+                                    Spacer()
+                                    Button { vocab.removeReplacement(id: r.id) } label: {
+                                        Image(systemName: "trash").foregroundColor(.red)
+                                    }.buttonStyle(.plain)
+                                }.font(.system(size: 13))
+                                Divider()
+                            }
+                        }
+                        HStack(spacing: 6) {
+                            TextField("Misheard", text: $newWrong)
+                                .textFieldStyle(.roundedBorder).frame(maxWidth: 140)
+                            Image(systemName: "arrow.right").foregroundColor(.secondary)
+                            TextField("Correct", text: $newCorrect)
+                                .textFieldStyle(.roundedBorder).frame(maxWidth: 140)
+                            Button("Add") {
+                                vocab.addReplacement(wrong: newWrong, correct: newCorrect)
+                                newWrong = ""; newCorrect = ""
+                            }.disabled(newWrong.isEmpty || newCorrect.isEmpty)
+                        }.padding(.top, 4)
+                    }.padding(.vertical, 6)
+                }
+
+                if !suggestions.isEmpty {
+                    GroupBox(label: Text("Suggestions from History").font(.subheadline).bold()) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Patterns seen ≥2× where raw and processed transcripts differ.")
+                                .font(.caption).foregroundColor(.secondary)
+                            ForEach(suggestions, id: \.wrong) { s in
+                                HStack {
+                                    Text(s.wrong).foregroundColor(.secondary)
+                                    Image(systemName: "arrow.right").font(.caption)
+                                    Text(s.correct)
+                                    Text("×\(s.count)").font(.caption2).foregroundColor(.secondary)
+                                    Spacer()
+                                    Button("Add") {
+                                        vocab.addReplacement(wrong: s.wrong, correct: s.correct)
+                                    }.buttonStyle(.borderedProminent).controlSize(.small)
+                                }.font(.system(size: 13))
+                                Divider()
+                            }
+                        }.padding(.vertical, 6)
+                    }
+                }
+            }.padding(24)
+        }
+    }
+}
+
+// ---- Dictation: Vocabulary ----------------------------------------------------
+
+struct DictVocabularyView: View {
+    @ObservedObject private var vocab: VocabularyStore = .shared
+    @State private var newVocab  = ""
+    @State private var newFiller = ""
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Vocabulary").font(.title2).bold()
+
+                GroupBox(label: Text("Vocabulary Hints").font(.subheadline).bold()) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Proper nouns, product names — hints the model toward correct spelling.")
+                            .font(.caption).foregroundColor(.secondary)
+                        if vocab.vocab.isEmpty {
+                            Text("No terms yet.").font(.caption).foregroundColor(.secondary)
+                        } else {
+                            ForEach(Array(vocab.vocab.enumerated()), id: \.offset) { i, term in
+                                HStack {
+                                    Text(term)
+                                    Spacer()
+                                    Button { vocab.removeVocab(at: IndexSet([i])) } label: {
+                                        Image(systemName: "trash").foregroundColor(.red)
+                                    }.buttonStyle(.plain)
+                                }.font(.system(size: 13))
+                                Divider()
+                            }
+                        }
+                        HStack(spacing: 6) {
+                            TextField("Term", text: $newVocab).textFieldStyle(.roundedBorder)
+                            Button("Add") { vocab.addVocab(newVocab); newVocab = "" }
+                                .disabled(newVocab.isEmpty)
+                        }.padding(.top, 4)
+                    }.padding(.vertical, 6)
+                }
+
+                GroupBox(label: Text("Filler Words").font(.subheadline).bold()) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Words stripped from transcripts when filler removal is on. Toggle per entry.")
+                            .font(.caption).foregroundColor(.secondary)
+                        ForEach(vocab.fillers) { f in
+                            HStack {
+                                Toggle("", isOn: Binding(
+                                    get: { f.enabled },
+                                    set: { _ in vocab.toggleFiller(id: f.id) }
+                                )).labelsHidden().toggleStyle(.checkbox)
+                                Text(f.phrase).foregroundColor(f.enabled ? .primary : .secondary)
+                                if f.customPattern != nil {
+                                    Text("regex").font(.caption2)
+                                        .padding(.horizontal, 4).padding(.vertical, 1)
+                                        .background(Color.secondary.opacity(0.2)).cornerRadius(3)
+                                }
+                                Spacer()
+                                Button { vocab.removeFiller(id: f.id) } label: {
+                                    Image(systemName: "trash").foregroundColor(.red)
+                                }.buttonStyle(.plain)
+                            }.font(.system(size: 13))
+                            Divider()
+                        }
+                        HStack(spacing: 6) {
+                            TextField("Phrase", text: $newFiller).textFieldStyle(.roundedBorder)
+                            Button("Add") { vocab.addFiller(phrase: newFiller); newFiller = "" }
+                                .disabled(newFiller.isEmpty)
+                        }.padding(.top, 4)
+                    }.padding(.vertical, 6)
+                }
+            }.padding(24)
+        }
+    }
+}
+
+// ---- Dictation: Settings ------------------------------------------------------
+
+struct DictSettingsView: View {
+    @ObservedObject private var rec:  Recorder           = recorder
+    @ObservedObject private var proc: ProcessingSettings = .shared
+    @State private var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Dictation Settings").font(.title2).bold()
+                Text("On-device transcription via Parakeet TDT — no cloud, no streaming, runs on Apple Neural Engine.")
+                    .foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+
+                GroupBox(label: Text("Model").font(.subheadline).bold()) {
+                    HStack(spacing: 12) {
+                        modelStatusIcon
+                        modelStatusText
+                        Spacer()
+                        modelActionButton
+                    }.padding(.vertical, 8)
+                }
+
+                GroupBox(label: Text("Microphone").font(.subheadline).bold()) {
+                    HStack(spacing: 10) {
+                        Image(systemName: micGranted ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundColor(micGranted ? .green : .red).frame(width: 18)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Microphone access")
+                            Text("Required for dictation.")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        if !micGranted {
+                            Button("Enable") {
+                                AVCaptureDevice.requestAccess(for: .audio) { _ in
+                                    DispatchQueue.main.async {
+                                        micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+                                    }
+                                }
+                            }.buttonStyle(.bordered).controlSize(.small)
+                        }
+                    }.padding(.vertical, 6)
+                }
+
+                GroupBox(label: Text("Processing").font(.subheadline).bold()) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle("Filler removal (um, uh, you know…)", isOn: $proc.fillerRemoval)
+                        Toggle("Smart formatting (punctuation commands, backtrack, lists)", isOn: $proc.smartFormatting)
+                        Toggle("AI cleanup — Apple Intelligence, on-device (macOS 26+)", isOn: $proc.aiCleanup)
+                        Text("Punctuation: \"period\", \"comma\", \"new paragraph\".\nBacktrack: \"scratch that\", \"no wait\", \"i mean\" removes the preceding phrase.")
+                            .font(.caption).foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }.padding(.vertical, 6)
+                }
+            }.padding(24)
+        }
+        .onAppear {
+            micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        }
+    }
+
+    @ViewBuilder private var modelStatusIcon: some View {
+        switch rec.modelStatus {
+        case .ready:
+            Image(systemName: "checkmark.circle.fill").foregroundColor(.green).font(.title2)
+        case .notDownloaded:
+            Image(systemName: "arrow.down.circle").foregroundColor(.secondary).font(.title2)
+        case .downloading:
+            ProgressView().scaleEffect(0.8)
+        case .error:
+            Image(systemName: "exclamationmark.circle.fill").foregroundColor(.red).font(.title2)
+        }
+    }
+
+    @ViewBuilder private var modelStatusText: some View {
+        switch rec.modelStatus {
+        case .ready:
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Parakeet TDT ready").bold()
+                Text("On-device, ~650 MB").font(.caption).foregroundColor(.secondary)
+            }
+        case .notDownloaded:
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Model not downloaded")
+                Text("~650 MB, one-time, local only").font(.caption).foregroundColor(.secondary)
+            }
+        case .downloading(let p):
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Downloading… \(Int(p * 100))%")
+                ProgressView(value: p).frame(width: 200)
+            }
+        case .error(let msg):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Error").bold().foregroundColor(.red)
+                Text(msg).font(.caption).foregroundColor(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder private var modelActionButton: some View {
+        switch rec.modelStatus {
+        case .notDownloaded, .error:
+            Button("Download") { Task { await recorder.downloadModels() } }
+                .buttonStyle(.borderedProminent)
+        case .ready:
+            Button("Remove") { recorder.removeModels() }
+                .buttonStyle(.bordered).foregroundColor(.red)
+        default:
+            EmptyView()
+        }
     }
 }
