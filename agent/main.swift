@@ -184,6 +184,12 @@ func setPickerTheme(_ t: PickerTheme) { UserDefaults.standard.set(t.rawValue, fo
 func appIcon(bundle: String) -> NSImage? {
     guard !bundle.isEmpty else { return nil }
     if let cached = iconCache[bundle] { return cached }
+    // Any com.claudecommand.* bundle (e.g. dictation) → use our own app icon
+    if bundle.hasPrefix("com.claudecommand") {
+        let icon = NSRunningApplication.current.icon ?? NSImage(named: NSImage.applicationIconName)
+        iconCache[bundle] = icon
+        return icon
+    }
     // screencaptureui is a system framework process — redirect to Screenshot.app for icon
     let lookupBundle = bundle == "com.apple.screencaptureui" ? "com.apple.Screenshot" : bundle
     // Running app first — direct icon, works for apps in non-standard locations

@@ -303,6 +303,22 @@ struct SetupView: View {
                 if micPermissionDenied() { openPrivacyPane("Privacy_Microphone") }
                 else { requestMic() }
             }
+        case "Clipboard daemon":
+            let enabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
+            let label = enabled ? "Restart" : "Enable"
+            return CheckAction(label: label) {
+                if !enabled { UserDefaults.standard.set(true, forKey: "cliphistoryEnabled") }
+                stopClipwatch(); startClipwatch()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { model.refresh() }
+            }
+        case "Hotkeys configured":
+            return CheckAction(label: "Open Shortcuts") { model.tab = .shortcuts }
+        case "Right-click actions":
+            return CheckAction(label: "Instructions") {
+                if let url = URL(string: "https://github.com/galbutnotgirl/claude-command#install") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
         default:
             return nil
         }

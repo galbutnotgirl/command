@@ -84,6 +84,7 @@ final class DictationOverlay: NSObject {
     private func dispatch(text: String, mode: DictMode) {
         switch mode {
         case .insert:
+            stampDictationSource()
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
             if !prevBundle.isEmpty { activate(prevBundle); usleep(200_000) }
@@ -92,11 +93,22 @@ final class DictationOverlay: NSObject {
         case .claude:
             // Paste into the existing open Claude window (same as the "add" action),
             // not a new prompt. Activate Claude, then ⌘V.
+            stampDictationSource()
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
             activate(CLAUDE_BUNDLE)
             usleep(300_000)
             postKey(kV, cmd: true)
+        }
+    }
+
+    // Write last_copy.json with our dictation sub-bundle so clipwatch records
+    // the transcription in clipboard history with the ClaudeCommand icon.
+    // Uses a sub-bundle ID (not "com.claudecommand") so it is NOT in BLOCK_BUNDLES.
+    private func stampDictationSource() {
+        let entry: [String: Any] = ["bundle": "com.claudecommand.dictation", "ts": Date().timeIntervalSince1970]
+        if let d = try? JSONSerialization.data(withJSONObject: entry) {
+            try? d.write(to: URL(fileURLWithPath: COPY_SOURCE_PATH))
         }
     }
 
