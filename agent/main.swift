@@ -64,13 +64,11 @@ func postKey(_ k: CGKeyCode, cmd: Bool) {
 }
 
 func activate(_ bundle: String) {
-    guard !bundle.isEmpty,
-          let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first else { return }
-    if #available(macOS 14.0, *) {
-        app.activate()
-    } else {
-        app.activate(options: [.activateIgnoringOtherApps])
-    }
+    guard !bundle.isEmpty else { return }
+    // open -b is reliable on all macOS (Tahoe: NSRunningApplication.activate()
+    // doesn't steal focus from another app when called from an LSUIElement process).
+    let t = Process(); t.launchPath = "/usr/bin/open"; t.arguments = ["-b", bundle]
+    try? t.run()
 }
 
 // Poll until `bundle` is the frontmost app, then return. Caps at ~300ms.
