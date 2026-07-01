@@ -18,16 +18,24 @@ OLD_CLIPWATCH="${HOME}/Library/LaunchAgents/com.claudecommand.clipwatch.plist"
 
 [ -x "${SRC_APP}/Contents/MacOS/ClaudeCommand" ] || { print -- "[agent] missing ClaudeCommand.app — run ./build-agent.sh first"; exit 1; }
 
-# Detect fresh install (no prior plist) vs update. On fresh install we clear
-# onboardingCompleted so the setup flow runs, and warn that permissions need granting.
+# Fresh install = no prior LaunchAgent plist AND no prior app bundle.
+# Update = app already exists (in-place sync, TCC grants survive).
+# Never clear onboardingCompleted or re-prompt grants on update.
 FRESH_INSTALL=false
-[[ ! -f "$PLIST" ]] && FRESH_INSTALL=true
+[[ ! -f "$PLIST" && ! -d "$APP" ]] && FRESH_INSTALL=true
 
-# Copy built app to ~/Applications (creates it if missing).
+# In-place update: sync files without destroying the bundle.
+# Removing + recreating the .app causes macOS TCC to treat it as a new app and
+# revoke Accessibility / Screen Recording grants. rsync replaces only changed files
+# while the bundle stays at the same path with the same identity → grants persist.
 mkdir -p "$INSTALL_DIR"
-rm -rf "$APP"
-cp -R "$SRC_APP" "$APP"
-print -- "[agent] installed to ${APP}"
+if [ -d "$APP" ]; then
+    rsync -a --delete "${SRC_APP}/" "${APP}/"
+    print -- "[agent] updated in-place at ${APP} (TCC grants preserved)"
+else
+    cp -R "$SRC_APP" "$APP"
+    print -- "[agent] installed to ${APP} (first install)"
+fi
 
 # Register with Launch Services so the app icon shows in System Settings privacy panes.
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"

@@ -134,8 +134,11 @@ let CUSTOM_ACTIONS_PATH = (NSHomeDirectory() as NSString)
 struct CustomAction: Identifiable {
     var id: String          // UUID string — stable key for hotkey registration
     var name: String
-    var prompt: String      // template; use {selection} as placeholder for text mode
-    var isShot: Bool        // true = screenshot mode (no {selection} needed)
+    var prompt: String      // template; {selection} = selected text; auto-appended if omitted
+    var isShot: Bool        // true = screenshot mode
+    var isAutoSubmit: Bool  // true = auto-press Return after pasting prompt
+    var sessionMode: String // "new" = open new Claude session, "add" = paste into existing chat
+    var includeSource: Bool // prepend "from: AppName — URL" context prefix
     var keycode: UInt32
     var mods: UInt32
     var enabled: Bool
@@ -145,7 +148,8 @@ struct CustomAction: Identifiable {
 
     static func makeNew(name: String, prompt: String, isShot: Bool) -> CustomAction {
         CustomAction(id: UUID().uuidString, name: name, prompt: prompt,
-                     isShot: isShot, keycode: 0, mods: 0, enabled: true)
+                     isShot: isShot, isAutoSubmit: false, sessionMode: "new",
+                     includeSource: true, keycode: 0, mods: 0, enabled: true)
     }
 }
 
@@ -159,6 +163,9 @@ func loadCustomActions() -> [CustomAction] {
         return CustomAction(
             id: id, name: name, prompt: prompt,
             isShot: d["isShot"] as? Bool ?? false,
+            isAutoSubmit: d["isAutoSubmit"] as? Bool ?? false,
+            sessionMode: d["sessionMode"] as? String ?? "new",
+            includeSource: d["includeSource"] as? Bool ?? true,
             keycode: UInt32(d["keycode"] as? Int ?? 0),
             mods: UInt32(d["mods"] as? Int ?? 0),
             enabled: d["enabled"] as? Bool ?? true
@@ -169,7 +176,9 @@ func loadCustomActions() -> [CustomAction] {
 func saveCustomActions(_ actions: [CustomAction]) {
     let arr = actions.map { ca -> [String: Any] in
         ["id": ca.id, "name": ca.name, "prompt": ca.prompt, "isShot": ca.isShot,
-         "keycode": Int(ca.keycode), "mods": Int(ca.mods), "enabled": ca.enabled]
+         "isAutoSubmit": ca.isAutoSubmit, "sessionMode": ca.sessionMode,
+         "includeSource": ca.includeSource, "keycode": Int(ca.keycode),
+         "mods": Int(ca.mods), "enabled": ca.enabled]
     }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
         try? data.write(to: URL(fileURLWithPath: CUSTOM_ACTIONS_PATH))

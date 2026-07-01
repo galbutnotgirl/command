@@ -1,5 +1,4 @@
-// DictationOverlay.swift — invisible recording session controller.
-// No UI panel; menu bar icon changes during capture (see MenuBar.setRecording/updateAudioLevel).
+// DictationOverlay.swift — recording session controller.
 
 import Cocoa
 
@@ -40,7 +39,6 @@ final class DictationOverlay: NSObject {
         recorder.stop()
     }
 
-
     // MARK: - Live audio level → menu bar icon
 
     private func startLevelUpdates() {
@@ -56,7 +54,7 @@ final class DictationOverlay: NSObject {
     // MARK: - Recorder wiring
 
     private func wireRecorder() {
-        recorder.onPartial = { _ in }   // no UI to update
+        recorder.onPartial = { _ in }
 
         recorder.onFinal = { [weak self] rawText, mode in
             guard let self = self else { return }
@@ -69,14 +67,14 @@ final class DictationOverlay: NSObject {
                 )
                 HistoryStore.shared.add(raw: rawText, processed: processed, mode: mode)
                 self.playStopSound()
-                self.hide()         // idempotent; also covers 10-min timeout path
+                self.hide()
                 self.dispatch(text: processed, mode: mode)
             }
         }
     }
 
     private func playStopSound() {
-        if let s = NSSound(named: NSSound.Name("Pop")) { s.volume = 0.3; s.play() }
+        playUISound(settingsModel.stopSound)
     }
 
     // MARK: - Dispatch final text
@@ -91,8 +89,6 @@ final class DictationOverlay: NSObject {
             postKey(kV, cmd: true)
 
         case .claude:
-            // Paste into the existing open Claude window (same as the "add" action),
-            // not a new prompt. Activate Claude, then ⌘V.
             stampDictationSource()
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
@@ -102,14 +98,10 @@ final class DictationOverlay: NSObject {
         }
     }
 
-    // Write last_copy.json with our dictation sub-bundle so clipwatch records
-    // the transcription in clipboard history with the ClaudeCommand icon.
-    // Uses a sub-bundle ID (not "com.claudecommand") so it is NOT in BLOCK_BUNDLES.
     private func stampDictationSource() {
         let entry: [String: Any] = ["bundle": "com.claudecommand.dictation", "ts": Date().timeIntervalSince1970]
         if let d = try? JSONSerialization.data(withJSONObject: entry) {
             try? d.write(to: URL(fileURLWithPath: COPY_SOURCE_PATH))
         }
     }
-
 }

@@ -211,13 +211,23 @@ final class Recorder: ObservableObject {
         let mgr = currentMgr; currentMgr = nil
         log("■ stop wasListening=\(wasListening)")
         cancelSilenceTimer()
+        // Stop new audio input — but NOT the streamTask yet.
+        // Tap callbacks may have already enqueued streamAudio Tasks for the last
+        // 1-2 buffers (~85ms each); those Tasks are independent and keep running.
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop(); audioEngine = nil
-        streamTask?.cancel(); streamTask = nil
         state = .idle
-        guard wasListening else { return }
+        guard wasListening else { streamTask?.cancel(); streamTask = nil; return }
+
+        let capturedStreamTask = streamTask
+        streamTask = nil
 
         Task {
+            // Wait for in-flight streamAudio Tasks (spawned by the tap callback just
+            // before stop) to deliver their buffers to the ASR manager.
+            // 300ms covers 3-4 tap buffers at 4096 frames / 48 kHz (~85ms each).
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            capturedStreamTask?.cancel()   // now safe to end the update loop
             do {
                 self.log("calling finish()…")
                 let text = try await mgr?.finish() ?? ""
@@ -229,7 +239,7 @@ final class Recorder: ObservableObject {
                     self.onFinal?(self.lastTranscript, mode)
                 } else {
                     self.log("⚠ finish empty — nothing to dispatch")
-                    DispatchQueue.main.async { NSSound.beep() }
+                    DispatchQueue.main.async { playUISound(settingsModel.stopSound) }
                 }
             } catch {
                 self.log("finish() threw: \(error)")

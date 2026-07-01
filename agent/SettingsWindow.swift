@@ -28,6 +28,12 @@ final class SettingsModel: ObservableObject {
     @Published var bindings: [HotkeyBinding] = []
     @Published var customActions: [CustomAction] = []
     @Published var recordingAction: String? = nil
+    @Published var bindingConflict: String? = nil
+    @Published var claudeDestination: String = UserDefaults.standard.string(forKey: "claudeDestination") ?? "code"
+    @Published var soundsEnabled: Bool = (UserDefaults.standard.object(forKey: "soundsEnabled") as? Bool) ?? true
+    @Published var soundVolume: Double = (UserDefaults.standard.object(forKey: "soundVolume") as? Double) ?? 0.35
+    @Published var startSound: String = UserDefaults.standard.string(forKey: "startSound") ?? "Tink"
+    @Published var stopSound: String = UserDefaults.standard.string(forKey: "stopSound") ?? "Tink"
 
     func refresh() {
         perms = permissionChecks()
@@ -79,12 +85,16 @@ final class SettingsModel: ObservableObject {
         }
         let key = UInt32(ev.keyCode)
         guard KEYCODE_NAMES[key] != nil else { return true }                // ignore keys we can't name
+        let carbonM = carbonMods(from: ev.modifierFlags)
         recordingAction = nil
         if isCustom {
-            setCustomBinding(id: action, keycode: key, mods: carbonMods(from: ev.modifierFlags))
+            setCustomBinding(id: action, keycode: key, mods: carbonM)
+            checkConflict(forAction: action, keycode: key, mods: carbonM)
         } else {
-            setBinding(action: action, keycode: key, mods: carbonMods(from: ev.modifierFlags))
+            setBinding(action: action, keycode: key, mods: carbonM)
+            checkConflict(forAction: action, keycode: key, mods: carbonM)
         }
+        reregisterHotkeys()
         return true
     }
 
@@ -108,6 +118,31 @@ final class SettingsModel: ObservableObject {
         saveCustomActions(customActions)
     }
     func clearCustomBinding(id: String) { setCustomBinding(id: id, keycode: 0, mods: 0) }
+
+    // Check whether keycode+mods collides with any other binding (different action/id).
+    // Sets bindingConflict to a human-readable message, or nil if clear.
+    func checkConflict(forAction action: String, keycode: UInt32, mods: UInt32) {
+        guard keycode != 0 else { bindingConflict = nil; return }
+        if let other = bindings.first(where: { $0.keycode == keycode && $0.mods == mods && $0.action != action }) {
+            bindingConflict = "Conflicts with \"\(other.action)\" shortcut"
+            return
+        }
+        if let other = customActions.first(where: { $0.keycode == keycode && $0.mods == mods && $0.id != action }) {
+            bindingConflict = "Conflicts with custom action \"\(other.name)\""
+            return
+        }
+        bindingConflict = nil
+    }
+}
+
+// Global helper — respects soundsEnabled + soundVolume from settingsModel.
+func playUISound(_ name: String) {
+    guard settingsModel.soundsEnabled else { return }
+    let url = URL(fileURLWithPath: "/System/Library/Sounds/\(name).aiff")
+    if let s = NSSound(contentsOf: url, byReference: true) {
+        s.volume = Float(settingsModel.soundVolume)
+        s.play()
+    }
 }
 
 // ---- window controller ------------------------------------------------------
@@ -238,39 +273,67 @@ struct CheckAction { let label: String; let run: () -> Void }
 
 struct SetupView: View {
     @ObservedObject var model: SettingsModel
-    // Live-poll so a grant flipped in System Settings turns the row green here
-    // without the user having to hit Re-check.
     private let refreshTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+
+    private var destBinding: Binding<String> {
+        Binding(
+            get: { model.claudeDestination },
+            set: { model.claudeDestination = $0; UserDefaults.standard.set($0, forKey: "claudeDestination") }
+        )
+    }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 22) {
                 Text("Set Up").font(.title2).bold()
-                Text("Two required grants + optional microphone for dictation. Click a row's button to open System Settings, then Re-check.")
-                    .foregroundColor(.secondary)
 
-                StepDiagram()
-
-                GroupBox(label: Text("Permissions").bold()) {
-                    VStack(spacing: 0) {
-                        ForEach(model.perms, id: \.title) { c in
-                            CheckRow(check: c, action: action(for: c.title)); Divider()
-                        }
-                    }.padding(.vertical, 2)
+                // Destination
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Claude destination").font(.headline)
+                    Text("Where actions open Claude — applies to all hotkeys and custom actions.")
+                        .font(.caption).foregroundColor(.secondary)
+                    Picker("", selection: destBinding) {
+                        Text("Chat").tag("chat")
+                        Text("Cowork").tag("cowork")
+                        Text("Code").tag("code")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 240)
                 }
 
-                GroupBox(label: Text("Components").bold()) {
-                    VStack(spacing: 0) {
-                        ForEach(model.comps, id: \.title) { c in
-                            CheckRow(check: c, action: nil); Divider()
-                        }
-                    }.padding(.vertical, 2)
+                Divider()
+
+                // Permissions — numbered steps
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Permissions").font(.headline)
+                    Text("Grant these before using ClaudeCommand.")
+                        .font(.caption).foregroundColor(.secondary)
                 }
 
-                Text("Just enabled a grant but the row's still red? macOS only applies it when the agent relaunches — click Restart agent, then Re-check.")
-                    .font(.caption).foregroundColor(.secondary)
-                Text("Grants reset when the app is rebuilt (new binary = new identity to macOS). Re-enable ClaudeCommand in each pane after every build.")
-                    .font(.caption).foregroundColor(.secondary)
+                VStack(spacing: 0) {
+                    ForEach(Array(model.perms.enumerated()), id: \.offset) { i, check in
+                        PermStep(number: i + 1, check: check, action: permAction(for: check.title))
+                        if i < model.perms.count - 1 { Divider().padding(.leading, 44) }
+                    }
+                }
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                .cornerRadius(10)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.gray.opacity(0.15), lineWidth: 1))
+
+                Divider()
+
+                // Component status — compact
+                Text("Status").font(.headline)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(model.comps.enumerated()), id: \.offset) { i, check in
+                        CompRow(check: check, action: compAction(for: check.title, model: model))
+                        if i < model.comps.count - 1 { Divider().padding(.leading, 28) }
+                    }
+                }
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                .cornerRadius(10)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.gray.opacity(0.15), lineWidth: 1))
 
                 HStack(spacing: 10) {
                     Button("Re-check") { model.refresh() }
@@ -278,13 +341,15 @@ struct SetupView: View {
                     Spacer()
                 }
 
-                Divider()
-                Text("Common issues").font(.headline)
-
-                setupTipRow("Hotkeys need fn key",
-                    "If F6–F8 don't fire, go to System Settings > Keyboard and enable \"Use F1, F2… as standard function keys\".")
-                setupTipRow("Logs",
-                    "~/.claude/logs/command-agent.err (agent) · ~/.claude/logs/clipwatch.err (clipboard daemon)")
+                VStack(alignment: .leading, spacing: 6) {
+                    Divider()
+                    Text("Grant still red after enabling? Restart agent — macOS applies grants on relaunch.")
+                        .font(.caption).foregroundColor(.secondary)
+                    Text("After a rebuild, re-grant permissions — new binary = new identity to macOS.")
+                        .font(.caption).foregroundColor(.secondary)
+                    Text("F5–F8 don't fire? System Settings → Keyboard → enable \"Use F1, F2… as standard function keys\".")
+                        .font(.caption).foregroundColor(.secondary)
+                }
             }
             .padding(24)
         }
@@ -292,27 +357,39 @@ struct SetupView: View {
         .onReceive(refreshTimer) { _ in model.refresh() }
     }
 
-    private func action(for title: String) -> CheckAction? {
+    private func permAction(for title: String) -> CheckAction? {
         switch title {
         case "Accessibility":
-            return CheckAction(label: "Open Settings") { openPrivacyPane("Privacy_Accessibility") }
+            return CheckAction(label: "Enable") {
+                requestAccessibility()
+                openPrivacyPane("Privacy_Accessibility")
+            }
         case "Screen Recording":
-            return CheckAction(label: "Open Settings") { openPrivacyPane("Privacy_ScreenCapture") }
+            return CheckAction(label: "Enable") {
+                requestScreenRecording()
+                openPrivacyPane("Privacy_ScreenCapture")
+            }
         case let t where t.hasPrefix("Microphone"):
             return CheckAction(label: "Enable") {
                 if micPermissionDenied() { openPrivacyPane("Privacy_Microphone") }
                 else { requestMic() }
             }
+        default:
+            return nil
+        }
+    }
+
+    private func compAction(for title: String, model: SettingsModel) -> CheckAction? {
+        switch title {
         case "Clipboard daemon":
             let enabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
-            let label = enabled ? "Restart" : "Enable"
-            return CheckAction(label: label) {
+            return CheckAction(label: enabled ? "Restart" : "Enable") {
                 if !enabled { UserDefaults.standard.set(true, forKey: "cliphistoryEnabled") }
                 stopClipwatch(); startClipwatch()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { model.refresh() }
             }
         case "Hotkeys configured":
-            return CheckAction(label: "Open Shortcuts") { model.tab = .shortcuts }
+            return CheckAction(label: "Shortcuts →") { model.tab = .shortcuts }
         case "Right-click actions":
             return CheckAction(label: "Instructions") {
                 if let url = URL(string: "https://github.com/galbutnotgirl/claude-command#install") {
@@ -325,78 +402,108 @@ struct SetupView: View {
     }
 }
 
-struct CheckRow: View {
+// Permission step — numbered, instructional, action button when not granted
+struct PermStep: View {
+    let number: Int
     let check: StatusCheck
     let action: CheckAction?
+
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: leadingIcon)
-                .font(.system(size: 15))
-                .foregroundColor(.accentColor)
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(check.title)
-                Text(check.detail).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(check.state == .ok ? Color.green.opacity(0.12) : Color.secondary.opacity(0.08))
+                    .frame(width: 28, height: 28)
+                if check.state == .ok {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.green)
+                } else {
+                    Text("\(number)")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
             }
-            Spacer()
-            Image(systemName: statusIcon).foregroundColor(statusColor)
-            if check.state != .ok, let a = action { Button(a.label) { a.run() } }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(check.title).font(.callout).fontWeight(.medium)
+                    Spacer()
+                    if check.state == .ok {
+                        Text("Granted").font(.caption).foregroundColor(.green)
+                    } else if let a = action {
+                        Button(a.label) { a.run() }
+                            .buttonStyle(.bordered).controlSize(.small)
+                    }
+                }
+                Text(check.detail)
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if check.state == .ok && isRestartSensitive {
+                    Text("Revocation only applies after agent restart.")
+                        .font(.caption2).foregroundColor(.secondary)
+                }
+                if check.state == .missing, let hint = instructionHint {
+                    Text(hint)
+                        .font(.caption).foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
-        .padding(.vertical, 8).padding(.horizontal, 4)
+        .padding(.vertical, 12).padding(.horizontal, 14)
     }
-    // Per-item icon so each permission/component is recognizable at a glance.
-    private var leadingIcon: String {
+
+    private var isRestartSensitive: Bool {
         let t = check.title.lowercased()
-        if t.contains("accessibility")                       { return "accessibility" }
-        if t.contains("screen")                              { return "camera.on.rectangle" }
-        if t.contains("microphone") || t.contains("speech")  { return "mic.fill" }
-        if t.contains("agent")                               { return "bolt.horizontal.circle" }
-        if t.contains("hotkey")                              { return "keyboard" }
-        if t.contains("right-click") || t.contains("quick")  { return "filemenu.and.cursorarrow" }
-        if t.contains("clipboard")                           { return "doc.on.clipboard" }
-        return "circle"
+        return t.contains("accessibility") || t.contains("screen")
     }
+
+    private var instructionHint: String? {
+        let t = check.title.lowercased()
+        if t.contains("accessibility") {
+            return "→ System Settings → Privacy & Security → Accessibility → enable ClaudeCommand"
+        }
+        if t.contains("screen") {
+            return "→ System Settings → Privacy & Security → Screen Recording → enable ClaudeCommand"
+        }
+        return nil
+    }
+}
+
+// Compact status row for components
+struct CompRow: View {
+    let check: StatusCheck
+    let action: CheckAction?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: statusIcon)
+                .font(.system(size: 13))
+                .foregroundColor(statusColor)
+                .frame(width: 20)
+            Text(check.title).font(.callout)
+            Spacer()
+            if check.state != .ok, let a = action {
+                Button(a.label) { a.run() }
+                    .buttonStyle(.bordered).controlSize(.small)
+            } else if check.state == .ok {
+                Text("OK").font(.caption).foregroundColor(.secondary)
+            } else {
+                Text("—").font(.caption).foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 8).padding(.horizontal, 14)
+    }
+
     private var statusIcon: String {
-        switch check.state { case .ok: return "checkmark.circle.fill"
-                             case .missing: return "xmark.circle.fill"
-                             case .unknown: return "questionmark.circle" }
+        switch check.state {
+        case .ok: return "checkmark.circle.fill"
+        case .missing: return "xmark.circle.fill"
+        case .unknown: return "questionmark.circle"
+        }
     }
     private var statusColor: Color {
         switch check.state { case .ok: return .green; case .missing: return .red; case .unknown: return .secondary }
-    }
-}
-
-struct Step: Identifiable {
-    let id: Int
-    let icon: String
-    let title: String
-    let sub: String
-}
-
-struct StepDiagram: View {
-    private let steps: [Step] = [
-        Step(id: 1, icon: "magnifyingglass", title: "Open the pane", sub: "Privacy & Security in System Settings"),
-        Step(id: 2, icon: "switch.2",        title: "Flip it on",    sub: "Enable ClaudeCommand in the list"),
-        Step(id: 3, icon: "checkmark.seal",  title: "Re-check here", sub: "Rows turn green when granted"),
-    ]
-    var body: some View {
-        HStack(spacing: 12) {
-            ForEach(steps) { s in
-                VStack(spacing: 8) {
-                    ZStack {
-                        Circle().fill(Color.accentColor.opacity(0.15)).frame(width: 46, height: 46)
-                        Image(systemName: s.icon).font(.system(size: 18)).foregroundColor(.accentColor)
-                    }
-                    Text("Step \(s.id)").font(.caption2).foregroundColor(.secondary)
-                    Text(s.title).font(.callout).bold().multilineTextAlignment(.center)
-                    Text(s.sub).font(.caption2).foregroundColor(.secondary).multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(12)
-                .background(Color.gray.opacity(0.08))
-                .cornerRadius(10)
-            }
-        }
     }
 }
 
@@ -408,9 +515,27 @@ struct ShortcutsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Shortcuts").font(.title2).bold()
+                HStack {
+                    Text("Shortcuts").font(.title2).bold()
+                    Spacer()
+                    Button("Export…") { exportSettings() }
+                    Button("Import…") { importSettings(model: model) }
+                }
                 Text("Click a key field and press a combo to set it. Press Delete to clear. Esc cancels. Changes apply instantly.")
                     .foregroundColor(.secondary)
+
+                if let conflict = model.bindingConflict {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                        Text(conflict).font(.callout).foregroundColor(.orange)
+                        Spacer()
+                        Button("Dismiss") { model.bindingConflict = nil }.buttonStyle(.plain)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(10)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(8)
+                }
 
                 VStack(spacing: 0) {
                     ForEach(model.bindings) { b in
@@ -471,7 +596,17 @@ struct CustomActionRow: View {
             Image(systemName: ca.isShot ? "camera.viewfinder" : "text.cursor")
                 .foregroundColor(.accentColor).frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
-                Text(ca.name).font(.callout)
+                HStack(spacing: 6) {
+                    Text(ca.name).font(.callout)
+                    Text(ca.sessionMode == "add" ? "add" : "new")
+                        .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Color.accentColor.opacity(0.15))
+                        .cornerRadius(4)
+                    if !ca.includeSource {
+                        Text("no src").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+                    }
+                }
                 let preview = String(ca.prompt.prefix(70))
                 Text(preview + (ca.prompt.count > 70 ? "…" : ""))
                     .font(.caption).foregroundColor(.secondary)
@@ -527,6 +662,9 @@ struct CustomActionSheet: View {
     @State private var name: String = ""
     @State private var prompt: String = ""
     @State private var isShot: Bool = false
+    @State private var isAutoSubmit: Bool = false
+    @State private var sessionMode: String = "new"
+    @State private var includeSource: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -537,6 +675,19 @@ struct CustomActionSheet: View {
 
             Toggle("Screenshot mode", isOn: $isShot)
                 .help("Takes a screenshot and attaches it to the prompt")
+
+            Picker("Session", selection: $sessionMode) {
+                Text("New session").tag("new")
+                Text("Add to existing chat").tag("add")
+            }
+            .pickerStyle(.segmented)
+            .help("New session opens a fresh Claude Code window. Add pastes into the currently open chat.")
+
+            Toggle("Include source app", isOn: $includeSource)
+                .help("Prepend \"from: AppName — URL\" so Claude knows where the content came from")
+
+            Toggle("Auto-submit", isOn: $isAutoSubmit)
+                .help("Press Return automatically after pasting the prompt into Claude")
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Prompt template").font(.caption).bold()
@@ -558,10 +709,15 @@ struct CustomActionSheet: View {
                     guard !trimName.isEmpty else { return }
                     if let existing = editing {
                         var updated = existing
-                        updated.name = trimName; updated.prompt = prompt; updated.isShot = isShot
+                        updated.name = trimName; updated.prompt = prompt
+                        updated.isShot = isShot; updated.isAutoSubmit = isAutoSubmit
+                        updated.sessionMode = sessionMode; updated.includeSource = includeSource
                         model.updateCustomAction(updated)
                     } else {
-                        model.addCustomAction(CustomAction.makeNew(name: trimName, prompt: prompt, isShot: isShot))
+                        var ca = CustomAction.makeNew(name: trimName, prompt: prompt, isShot: isShot)
+                        ca.isAutoSubmit = isAutoSubmit
+                        ca.sessionMode = sessionMode; ca.includeSource = includeSource
+                        model.addCustomAction(ca)
                     }
                     isPresented = false
                 }
@@ -572,9 +728,47 @@ struct CustomActionSheet: View {
         .padding(24)
         .frame(minWidth: 420, minHeight: 320)
         .onAppear {
-            if let e = editing { name = e.name; prompt = e.prompt; isShot = e.isShot }
+            if let e = editing {
+                name = e.name; prompt = e.prompt
+                isShot = e.isShot; isAutoSubmit = e.isAutoSubmit
+                sessionMode = e.sessionMode; includeSource = e.includeSource
+            }
         }
     }
+}
+
+// MARK: - Export / Import settings
+
+private func exportSettings() {
+    let hotkeys = (try? Data(contentsOf: URL(fileURLWithPath: CFG))) ?? Data()
+    let customs = (try? Data(contentsOf: URL(fileURLWithPath: CUSTOM_ACTIONS_PATH))) ?? Data()
+    let hkObj  = (try? JSONSerialization.jsonObject(with: hotkeys))  ?? []
+    let caObj  = (try? JSONSerialization.jsonObject(with: customs))  ?? []
+    let bundle: [String: Any] = ["hotkeys": hkObj, "customActions": caObj, "version": 1]
+    guard let data = try? JSONSerialization.data(withJSONObject: bundle, options: [.prettyPrinted]) else { return }
+    let panel = NSSavePanel()
+    panel.allowedContentTypes = [.json]
+    panel.nameFieldStringValue = "claude-command-settings.json"
+    if panel.runModal() == .OK, let url = panel.url {
+        try? data.write(to: url)
+    }
+}
+
+private func importSettings(model: SettingsModel) {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.json]
+    panel.message = "Select a claude-command-settings.json export file"
+    guard panel.runModal() == .OK, let url = panel.url,
+          let data = try? Data(contentsOf: url),
+          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+    if let hk = obj["hotkeys"], let hkData = try? JSONSerialization.data(withJSONObject: hk) {
+        try? hkData.write(to: URL(fileURLWithPath: CFG))
+    }
+    if let ca = obj["customActions"], let caData = try? JSONSerialization.data(withJSONObject: ca) {
+        try? caData.write(to: URL(fileURLWithPath: CUSTOM_ACTIONS_PATH))
+    }
+    reregisterHotkeys()
+    model.refresh()
 }
 
 struct KeyBindingField: View {
@@ -1096,13 +1290,63 @@ struct DictHistoryView: View {
     }
 }
 
+// Auto-sizing NSTextView that reports its height via intrinsicContentSize.
+final class FittingTextView: NSTextView {
+    override var intrinsicContentSize: NSSize {
+        guard let lm = layoutManager, let tc = textContainer else { return super.intrinsicContentSize }
+        tc.containerSize = NSSize(width: bounds.width > 0 ? bounds.width : 400, height: .greatestFiniteMagnitude)
+        lm.ensureLayout(for: tc)
+        return NSSize(width: NSView.noIntrinsicMetric, height: ceil(lm.usedRect(for: tc).height) + 4)
+    }
+    override func layout() { super.layout(); invalidateIntrinsicContentSize() }
+}
+
+// NSTextView wrapper: auto-sizes to content, reports selected text (sticky — keeps last non-empty selection).
+struct SelectableText: NSViewRepresentable {
+    let text: String
+    @Binding var selection: String
+
+    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
+
+    func makeNSView(context: Context) -> FittingTextView {
+        let tv = FittingTextView()
+        tv.isEditable = false
+        tv.isSelectable = true
+        tv.drawsBackground = false
+        tv.font = .systemFont(ofSize: 13)
+        tv.textContainerInset = .zero
+        tv.textContainer?.lineFragmentPadding = 0
+        tv.textContainer?.widthTracksTextView = true
+        tv.textContainer?.heightTracksTextView = false
+        tv.isVerticallyResizable = true
+        tv.isHorizontallyResizable = false
+        tv.autoresizingMask = [.width]
+        tv.delegate = context.coordinator
+        tv.string = text
+        return tv
+    }
+
+    func updateNSView(_ tv: FittingTextView, context: Context) {
+        if tv.string != text { tv.string = text; tv.invalidateIntrinsicContentSize() }
+    }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        @Binding var selection: String
+        init(selection: Binding<String>) { _selection = selection }
+        func textViewDidChangeSelection(_ n: Notification) {
+            guard let tv = n.object as? NSTextView else { return }
+            let r = tv.selectedRange()
+            // Keep last non-empty selection — clicking the wand deselects before the action fires
+            if r.length > 0 { selection = (tv.string as NSString).substring(with: r) }
+        }
+    }
+}
+
 struct HistoryEntryRow: View {
     let entry: HistoryStore.Record
-    @ObservedObject private var hist:  HistoryStore    = .shared
-    @ObservedObject private var vocab: VocabularyStore = .shared
-    @State private var showAddCorrection = false
-    @State private var corrWrong  = ""
-    @State private var corrCorrect = ""
+    @ObservedObject private var hist: HistoryStore = .shared
+    @State private var showCorrection = false
+    @State private var selectedText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1120,34 +1364,86 @@ struct HistoryEntryRow: View {
                 } label: { Image(systemName: "doc.on.doc").font(.caption) }
                 .buttonStyle(.plain).help("Copy")
 
-                Button { showAddCorrection.toggle() } label: {
-                    Image(systemName: "plus.bubble").font(.caption)
-                }.buttonStyle(.plain).help("Add correction")
+                Button { showCorrection = true } label: {
+                    Image(systemName: "wand.and.sparkles").font(.caption)
+                }.buttonStyle(.plain).help("Add correction — select a word first, then click")
 
                 Button { hist.remove(id: entry.id) } label: {
                     Image(systemName: "trash").font(.caption).foregroundColor(.red)
                 }.buttonStyle(.plain).help("Delete")
             }
-            Text(entry.processed).font(.system(size: 13)).lineLimit(3)
+            SelectableText(text: entry.processed, selection: $selectedText)
             if entry.processed != entry.raw {
                 Text("Raw: \(entry.raw)").font(.caption2).foregroundColor(.secondary).lineLimit(2)
             }
-            if showAddCorrection {
-                HStack(spacing: 6) {
-                    TextField("Misheard", text: $corrWrong)
-                        .textFieldStyle(.roundedBorder).frame(maxWidth: 120)
-                    Image(systemName: "arrow.right").foregroundColor(.secondary)
-                    TextField("Correct", text: $corrCorrect)
-                        .textFieldStyle(.roundedBorder).frame(maxWidth: 120)
-                    Button("Add") {
-                        vocab.addReplacement(wrong: corrWrong, correct: corrCorrect)
-                        corrWrong = ""; corrCorrect = ""; showAddCorrection = false
-                    }.disabled(corrWrong.isEmpty || corrCorrect.isEmpty)
-                    Button("Cancel") { showAddCorrection = false; corrWrong = ""; corrCorrect = "" }
-                        .buttonStyle(.plain).foregroundColor(.secondary)
-                }.padding(.top, 4)
+        }
+        .padding(.vertical, 6)
+        .sheet(isPresented: $showCorrection) {
+            DictCorrectionSheet(fullText: entry.processed,
+                                preselected: selectedText,
+                                isPresented: $showCorrection)
+        }
+    }
+}
+
+struct DictCorrectionSheet: View {
+    let fullText: String
+    let preselected: String
+    @Binding var isPresented: Bool
+
+    @State private var wrong: String = ""
+    @State private var correct: String = ""
+    @ObservedObject private var vocab: VocabularyStore = .shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Add Correction").font(.headline)
+
+            Text("From dictation:").font(.caption).foregroundColor(.secondary)
+            Text(fullText)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .lineLimit(4)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.07))
+                .cornerRadius(6)
+
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Misheard").font(.caption).foregroundColor(.secondary)
+                    TextField("wrong word or phrase", text: $wrong)
+                        .textFieldStyle(.roundedBorder)
+                }
+                Image(systemName: "arrow.right")
+                    .foregroundColor(.secondary)
+                    .padding(.top, 22)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Correct").font(.caption).foregroundColor(.secondary)
+                    TextField("correct word or phrase", text: $correct)
+                        .textFieldStyle(.roundedBorder)
+                }
             }
-        }.padding(.vertical, 6)
+
+            HStack {
+                Button("Cancel") { isPresented = false }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save to Corrections") {
+                    let w = wrong.trimmingCharacters(in: .whitespaces)
+                    let c = correct.trimmingCharacters(in: .whitespaces)
+                    guard !w.isEmpty, !c.isEmpty else { return }
+                    vocab.addReplacement(wrong: w, correct: c)
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(wrong.trimmingCharacters(in: .whitespaces).isEmpty ||
+                          correct.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 440)
+        .onAppear { wrong = preselected }
     }
 }
 
@@ -1302,11 +1598,90 @@ struct DictVocabularyView: View {
     }
 }
 
+// ---- Sound browser -----------------------------------------------------------
+
+private let kAllSounds = ["Basso","Blow","Bottle","Frog","Funk","Glass","Hero",
+                          "Morse","Ping","Pop","Purr","Sosumi","Submarine","Tink"]
+
+struct SoundBrowserView: View {
+    @ObservedObject var model: SettingsModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(kAllSounds.enumerated()), id: \.offset) { i, name in
+                SoundRow(name: name, model: model)
+                if i < kAllSounds.count - 1 { Divider().padding(.leading, 40) }
+            }
+        }
+    }
+}
+
+struct SoundRow: View {
+    let name: String
+    @ObservedObject var model: SettingsModel
+    @State private var playing = false
+
+    private var isStart: Bool { model.startSound == name }
+    private var isStop:  Bool { model.stopSound  == name }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                playing = true
+                let url = URL(fileURLWithPath: "/System/Library/Sounds/\(name).aiff")
+                if let s = NSSound(contentsOf: url, byReference: true) {
+                    s.volume = Float(model.soundVolume)
+                    s.play()
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { playing = false }
+            } label: {
+                Image(systemName: playing ? "speaker.wave.2.fill" : "play.circle")
+                    .font(.system(size: 15))
+                    .foregroundColor(playing ? .accentColor : .secondary)
+                    .frame(width: 24)
+            }
+            .buttonStyle(.plain)
+
+            Text(name).font(.system(size: 13)).frame(maxWidth: .infinity, alignment: .leading)
+
+            if isStart {
+                badge("Start", color: .green)
+            }
+            if isStop {
+                badge("Stop", color: .blue)
+            }
+
+            Button("→ Start") {
+                model.startSound = name
+                UserDefaults.standard.set(name, forKey: "startSound")
+            }
+            .buttonStyle(.bordered).controlSize(.mini)
+            .disabled(isStart)
+
+            Button("→ Stop") {
+                model.stopSound = name
+                UserDefaults.standard.set(name, forKey: "stopSound")
+            }
+            .buttonStyle(.bordered).controlSize(.mini)
+            .disabled(isStop)
+        }
+        .padding(.vertical, 5).padding(.horizontal, 10)
+    }
+
+    private func badge(_ label: String, color: Color) -> some View {
+        Text(label).font(.caption2).bold()
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(color.opacity(0.15)).cornerRadius(4)
+            .foregroundColor(color)
+    }
+}
+
 // ---- Dictation: Settings ------------------------------------------------------
 
 struct DictSettingsView: View {
-    @ObservedObject private var rec:  Recorder           = recorder
-    @ObservedObject private var proc: ProcessingSettings = .shared
+    @ObservedObject private var rec:   Recorder           = recorder
+    @ObservedObject private var proc:  ProcessingSettings = .shared
+    @ObservedObject private var model: SettingsModel      = settingsModel
     @State private var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
 
     var body: some View {
@@ -1356,6 +1731,36 @@ struct DictSettingsView: View {
                             .font(.caption).foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }.padding(.vertical, 6)
+                }
+
+                GroupBox(label: Text("Sounds").font(.subheadline).bold()) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Toggle("Sound effects", isOn: Binding(
+                                get: { model.soundsEnabled },
+                                set: { model.soundsEnabled = $0; UserDefaults.standard.set($0, forKey: "soundsEnabled") }
+                            ))
+                            Spacer()
+                        }
+                        if model.soundsEnabled {
+                            HStack(spacing: 10) {
+                                Text("Volume").font(.callout).frame(width: 56, alignment: .leading)
+                                Slider(value: Binding(
+                                    get: { model.soundVolume },
+                                    set: { model.soundVolume = $0; UserDefaults.standard.set($0, forKey: "soundVolume") }
+                                ), in: 0...1)
+                                Text("\(Int(model.soundVolume * 100))%")
+                                    .font(.caption).foregroundColor(.secondary).frame(width: 34, alignment: .trailing)
+                            }
+                            Divider()
+                            Text("Click ▶ to preview · → Start / → Stop to assign")
+                                .font(.caption).foregroundColor(.secondary)
+                            SoundBrowserView(model: model)
+                                .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                                .cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.15)))
+                        }
+                    }.padding(.vertical, 8)
                 }
             }.padding(24)
         }

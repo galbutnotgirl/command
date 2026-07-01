@@ -98,7 +98,7 @@ func notify(_ title: String, _ body: String) {
 func captureSelectionSync() -> String {
     let cc0 = NSPasteboard.general.changeCount
     postKey(kC, cmd: true)
-    for _ in 0..<20 {                          // poll up to 200ms in 10ms steps
+    for _ in 0..<40 {                          // poll up to 400ms in 10ms steps
         usleep(10_000)
         if NSPasteboard.general.changeCount != cc0 {
             return NSPasteboard.general.string(forType: .string) ?? ""
@@ -107,13 +107,20 @@ func captureSelectionSync() -> String {
     return ""
 }
 
-func runWorker(_ action: String, source: String, captured: String = "", customPrompt: String = "") {
+func captureOrClipboard() -> String {
+    let sel = captureSelectionSync()
+    if !sel.isEmpty { return sel }
+    return NSPasteboard.general.string(forType: .string) ?? ""
+}
+
+func runWorker(_ action: String, source: String, captured: String = "", customPrompt: String = "",
+               customSubmit: Bool = false, customSession: String = "new", customIncludeSource: Bool = true) {
     // Screenshot actions need Screen Recording. Without it, `screencapture` fails
     // ("could not create image from rect") and the user just re-prompts forever.
     // Gate it: fire the system prompt + open Set Up, and skip the doomed capture.
     // The grant only takes effect once this process relaunches (TCC reads it at
     // launch), so point the user at "Restart Agent".
-    if action.hasPrefix("shot") && !screenRecordingOK() {
+    if (action.hasPrefix("shot") || action == "customshot") && !screenRecordingOK() {
         DispatchQueue.main.async {
             requestScreenRecording()
             openPrivacyPane("Privacy_ScreenCapture")
@@ -138,6 +145,10 @@ func runWorker(_ action: String, source: String, captured: String = "", customPr
     env["AGENT_SOCK"] = SOCK
     if !captured.isEmpty { env["CAPTURED_TEXT"] = captured }
     if !customPrompt.isEmpty { env["CUSTOM_PROMPT"] = customPrompt }
+    if customSubmit { env["CUSTOM_SUBMIT"] = "go" }
+    if customSession == "add" { env["CUSTOM_SESSION"] = "add" }
+    if !customIncludeSource { env["CUSTOM_INCLUDE_SOURCE"] = "0" }
+    env["CLAUDE_DESTINATION"] = settingsModel.claudeDestination
     p.environment = env
     let errPipe = Pipe()
     p.standardError = errPipe
@@ -927,11 +938,17 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             Task { @MainActor in triggerDictation(mode: m, keycode: kc) }
         } else if action.hasPrefix("custom:") || action.hasPrefix("customshot:") {
             let cas = loadCustomActions()
-            let prompt = cas.first(where: { $0.actionID == action })?.prompt ?? ""
+            let ca = cas.first(where: { $0.actionID == action })
+            let prompt = ca?.prompt ?? ""
+            let autoSubmit = ca?.isAutoSubmit ?? false
+            let session = ca?.sessionMode ?? "new"
+            let inclSrc = ca?.includeSource ?? true
             let isShot = action.hasPrefix("customshot:")
-            let sel = isShot ? "" : captureSelectionSync()
+            let sel = isShot ? "" : captureOrClipboard()
             DispatchQueue.global().async {
-                runWorker(isShot ? "customshot" : "custom", source: front, captured: sel, customPrompt: prompt)
+                runWorker(isShot ? "customshot" : "custom", source: front, captured: sel,
+                          customPrompt: prompt, customSubmit: autoSubmit,
+                          customSession: session, customIncludeSource: inclSrc)
             }
         } else {
             // Capture selection NOW (main thread, source app still focused)
@@ -1048,7 +1065,7 @@ func triggerDictation(mode: DictMode, keycode: CGKeyCode) {
         _dictLastPress = now
 
         if !DictationOverlay.shared.isVisible {
-            if let s = NSSound(named: NSSound.Name("Tink")) { s.volume = 0.4; s.play() }
+            playUISound(settingsModel.startSound)
             DictationOverlay.shared.show(mode: mode)
         }
 
@@ -1097,9 +1114,13 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
             if pg.code == 0 { _ = runShell("/usr/bin/pkill", ["-x", "screencapture"]); return }
         }
         let prompt = ca.prompt
-        let sel = ca.isShot ? "" : captureSelectionSync()
+        let sel = ca.isShot ? "" : captureOrClipboard()
+        let session = ca.sessionMode
+        let inclSrc = ca.includeSource
         DispatchQueue.global().async {
-            runWorker(ca.isShot ? "customshot" : "custom", source: front, captured: sel, customPrompt: prompt)
+            runWorker(ca.isShot ? "customshot" : "custom", source: front, captured: sel,
+                      customPrompt: prompt, customSubmit: ca.isAutoSubmit,
+                      customSession: session, customIncludeSource: inclSrc)
         }
     }
 }

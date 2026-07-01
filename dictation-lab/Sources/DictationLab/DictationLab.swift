@@ -1722,12 +1722,13 @@ final class AppController: NSObject {
 
     // ── Sound feedback ─────────────────────────────────────────────────────────
     private func playSound(_ name: String, volume: Float = 0.35) {
-        if let s = NSSound(named: NSSound.Name(name)) {
+        let url = URL(fileURLWithPath: "/System/Library/Sounds/\(name).aiff")
+        if let s = NSSound(contentsOf: url, byReference: true) {
             s.volume = volume; s.play()
         }
     }
-    private func playStartSound()  { playSound("Tink", volume: 0.4) }
-    private func playStopSound()   { playSound("Pop",  volume: 0.3) }
+    private func playStartSound()  { playSound("Glass", volume: 0.35) }
+    private func playStopSound()   { playSound("Pop",   volume: 0.3) }
 
     // ── Menu bar waveform ──────────────────────────────────────────────────────
     private func waveformImage(level: Float) -> NSImage {
