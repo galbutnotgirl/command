@@ -174,6 +174,11 @@ func requestMic() {
     AVCaptureDevice.requestAccess(for: .audio) { _ in }
 }
 
+func micPermissionDenied() -> Bool {
+    let s = AVCaptureDevice.authorizationStatus(for: .audio)
+    return s == .denied || s == .restricted
+}
+
 func componentChecks() -> [StatusCheck] {
     [
         StatusCheck(title: "Agent running",

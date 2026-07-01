@@ -26,12 +26,14 @@ final class SettingsModel: ObservableObject {
     @Published var perms: [StatusCheck] = []
     @Published var comps: [StatusCheck] = []
     @Published var bindings: [HotkeyBinding] = []
+    @Published var customActions: [CustomAction] = []
     @Published var recordingAction: String? = nil
 
     func refresh() {
         perms = permissionChecks()
         comps = componentChecks()
         bindings = loadBindings()
+        customActions = loadCustomActions()
     }
 
     func setBinding(action: String, keycode: UInt32, mods: UInt32) {
@@ -68,18 +70,44 @@ final class SettingsModel: ObservableObject {
     func handleRecording(_ ev: NSEvent) -> Bool {
         guard let action = recordingAction else { return false }
         if ev.keyCode == 53 { cancelRecording(); return true }              // esc cancels
+        let isCustom = customActions.contains { $0.id == action }
         if ev.keyCode == 51 || ev.keyCode == 117 {                         // delete / fwd-delete = clear
             recordingAction = nil
-            clearBinding(action)
+            if isCustom { clearCustomBinding(id: action) } else { clearBinding(action) }
             reregisterHotkeys()
             return true
         }
         let key = UInt32(ev.keyCode)
         guard KEYCODE_NAMES[key] != nil else { return true }                // ignore keys we can't name
         recordingAction = nil
-        setBinding(action: action, keycode: key, mods: carbonMods(from: ev.modifierFlags))
+        if isCustom {
+            setCustomBinding(id: action, keycode: key, mods: carbonMods(from: ev.modifierFlags))
+        } else {
+            setBinding(action: action, keycode: key, mods: carbonMods(from: ev.modifierFlags))
+        }
         return true
     }
+
+    // ---- custom action CRUD ----
+    func addCustomAction(_ ca: CustomAction) {
+        customActions.append(ca)
+        saveCustomActions(customActions)
+    }
+    func deleteCustomAction(id: String) {
+        customActions.removeAll { $0.id == id }
+        saveCustomActions(customActions)
+    }
+    func updateCustomAction(_ ca: CustomAction) {
+        if let i = customActions.firstIndex(where: { $0.id == ca.id }) { customActions[i] = ca }
+        saveCustomActions(customActions)
+    }
+    func setCustomBinding(id: String, keycode: UInt32, mods: UInt32) {
+        if let i = customActions.firstIndex(where: { $0.id == id }) {
+            customActions[i].keycode = keycode; customActions[i].mods = mods
+        }
+        saveCustomActions(customActions)
+    }
+    func clearCustomBinding(id: String) { setCustomBinding(id: id, keycode: 0, mods: 0) }
 }
 
 // ---- window controller ------------------------------------------------------
@@ -218,7 +246,7 @@ struct SetupView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Set Up").font(.title2).bold()
-                Text("Two quick grants and you're done. Click a row's button, flip the switch in System Settings, then Re-check.")
+                Text("Two required grants + optional microphone for dictation. Click a row's button to open System Settings, then Re-check.")
                     .foregroundColor(.secondary)
 
                 StepDiagram()
@@ -270,6 +298,11 @@ struct SetupView: View {
             return CheckAction(label: "Open Settings") { openPrivacyPane("Privacy_Accessibility") }
         case "Screen Recording":
             return CheckAction(label: "Open Settings") { openPrivacyPane("Privacy_ScreenCapture") }
+        case let t where t.hasPrefix("Microphone"):
+            return CheckAction(label: "Enable") {
+                if micPermissionDenied() { openPrivacyPane("Privacy_Microphone") }
+                else { requestMic() }
+            }
         default:
             return nil
         }
@@ -354,6 +387,7 @@ struct StepDiagram: View {
 // ---- Shortcuts --------------------------------------------------------------
 struct ShortcutsView: View {
     @ObservedObject var model: SettingsModel
+    @State private var showingAddCustom = false
 
     var body: some View {
         ScrollView {
@@ -377,8 +411,152 @@ struct ShortcutsView: View {
                         Divider()
                     }
                 }
+
+                // ---- Custom Actions ----
+                HStack {
+                    Text("Custom Actions").font(.headline)
+                    Spacer()
+                    Button(action: { showingAddCustom = true }) {
+                        Label("Add", systemImage: "plus.circle")
+                    }
+                }
+                .padding(.top, 8)
+
+                Text("Prompt templates that wrap selected text or a screenshot. Use {selection} as a placeholder for text mode.")
+                    .font(.caption).foregroundColor(.secondary)
+
+                if model.customActions.isEmpty {
+                    Text("No custom actions yet — click Add to create one.")
+                        .font(.caption).foregroundColor(.secondary).padding(.vertical, 4)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(model.customActions) { ca in
+                            CustomActionRow(ca: ca, model: model)
+                            Divider()
+                        }
+                    }
+                }
             }
             .padding(24)
+        }
+        .sheet(isPresented: $showingAddCustom) {
+            CustomActionSheet(isPresented: $showingAddCustom, model: model)
+        }
+    }
+}
+
+struct CustomActionRow: View {
+    let ca: CustomAction
+    @ObservedObject var model: SettingsModel
+    @State private var showingEdit = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: ca.isShot ? "camera.viewfinder" : "text.cursor")
+                .foregroundColor(.accentColor).frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ca.name).font(.callout)
+                let preview = String(ca.prompt.prefix(70))
+                Text(preview + (ca.prompt.count > 70 ? "…" : ""))
+                    .font(.caption).foregroundColor(.secondary)
+            }
+            Spacer()
+            CustomKeyBindingField(ca: ca, model: model)
+            Button(action: { showingEdit = true }) {
+                Image(systemName: "pencil").foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            Button(action: { model.deleteCustomAction(id: ca.id) }) {
+                Image(systemName: "trash").foregroundColor(.red)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 8)
+        .sheet(isPresented: $showingEdit) {
+            CustomActionSheet(isPresented: $showingEdit, model: model, editing: ca)
+        }
+    }
+}
+
+struct CustomKeyBindingField: View {
+    let ca: CustomAction
+    @ObservedObject var model: SettingsModel
+    private var isRecording: Bool { model.recordingAction == ca.id }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(isRecording ? Color.accentColor.opacity(0.12) : Color(nsColor: .controlBackgroundColor))
+                .overlay(RoundedRectangle(cornerRadius: 7)
+                    .stroke(isRecording ? Color.accentColor : Color.gray.opacity(0.35), lineWidth: 1))
+            Text(isRecording ? "Press keys…" : (ca.keycode == 0 ? "—" : ca.human))
+                .font(.system(.body, design: .rounded).bold())
+                .foregroundColor(isRecording ? .accentColor : (ca.keycode == 0 ? .secondary : .primary))
+                .lineLimit(1).padding(.horizontal, 10)
+        }
+        .frame(width: 120, height: 30)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isRecording { model.cancelRecording() } else { model.startRecording(ca.id) }
+        }
+        .help(isRecording ? "Press a key combo · Delete to clear · Esc to cancel" : "Click to set shortcut")
+    }
+}
+
+struct CustomActionSheet: View {
+    @Binding var isPresented: Bool
+    @ObservedObject var model: SettingsModel
+    var editing: CustomAction? = nil
+
+    @State private var name: String = ""
+    @State private var prompt: String = ""
+    @State private var isShot: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(editing == nil ? "New Custom Action" : "Edit Custom Action").font(.headline)
+
+            TextField("Name (e.g. Summarize)", text: $name)
+                .textFieldStyle(.roundedBorder)
+
+            Toggle("Screenshot mode", isOn: $isShot)
+                .help("Takes a screenshot and attaches it to the prompt")
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Prompt template").font(.caption).bold()
+                Text(isShot ? "Sent to Claude with the screenshot attached."
+                            : "Use {selection} where selected text should appear.")
+                    .font(.caption).foregroundColor(.secondary)
+                TextEditor(text: $prompt)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 90)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
+            }
+
+            HStack {
+                Button("Cancel") { isPresented = false }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(editing == nil ? "Add" : "Save") {
+                    let trimName = name.trimmingCharacters(in: .whitespaces)
+                    guard !trimName.isEmpty else { return }
+                    if let existing = editing {
+                        var updated = existing
+                        updated.name = trimName; updated.prompt = prompt; updated.isShot = isShot
+                        model.updateCustomAction(updated)
+                    } else {
+                        model.addCustomAction(CustomAction.makeNew(name: trimName, prompt: prompt, isShot: isShot))
+                    }
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 420, minHeight: 320)
+        .onAppear {
+            if let e = editing { name = e.name; prompt = e.prompt; isShot = e.isShot }
         }
     }
 }

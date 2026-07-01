@@ -123,3 +123,56 @@ func saveBindings(_ bindings: [HotkeyBinding]) {
     }
     DispatchQueue.main.async { reregisterHotkeys() }   // live — no agent restart
 }
+
+// ---- custom actions ---------------------------------------------------------
+// User-defined prompt templates. Text mode wraps selected text; shot mode captures
+// a screenshot. Stored in ~/.claude/state/custom-actions.json.
+
+let CUSTOM_ACTIONS_PATH = (NSHomeDirectory() as NSString)
+    .appendingPathComponent(".claude/state/custom-actions.json")
+
+struct CustomAction: Identifiable {
+    var id: String          // UUID string — stable key for hotkey registration
+    var name: String
+    var prompt: String      // template; use {selection} as placeholder for text mode
+    var isShot: Bool        // true = screenshot mode (no {selection} needed)
+    var keycode: UInt32
+    var mods: UInt32
+    var enabled: Bool
+
+    var actionID: String { isShot ? "customshot:\(id)" : "custom:\(id)" }
+    var human: String { keycode == 0 ? "—" : humanShortcut(keycode: keycode, mods: mods) }
+
+    static func makeNew(name: String, prompt: String, isShot: Bool) -> CustomAction {
+        CustomAction(id: UUID().uuidString, name: name, prompt: prompt,
+                     isShot: isShot, keycode: 0, mods: 0, enabled: true)
+    }
+}
+
+func loadCustomActions() -> [CustomAction] {
+    guard let data = FileManager.default.contents(atPath: CUSTOM_ACTIONS_PATH),
+          let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+    return arr.compactMap { d in
+        guard let id = d["id"] as? String,
+              let name = d["name"] as? String,
+              let prompt = d["prompt"] as? String else { return nil }
+        return CustomAction(
+            id: id, name: name, prompt: prompt,
+            isShot: d["isShot"] as? Bool ?? false,
+            keycode: UInt32(d["keycode"] as? Int ?? 0),
+            mods: UInt32(d["mods"] as? Int ?? 0),
+            enabled: d["enabled"] as? Bool ?? true
+        )
+    }
+}
+
+func saveCustomActions(_ actions: [CustomAction]) {
+    let arr = actions.map { ca -> [String: Any] in
+        ["id": ca.id, "name": ca.name, "prompt": ca.prompt, "isShot": ca.isShot,
+         "keycode": Int(ca.keycode), "mods": Int(ca.mods), "enabled": ca.enabled]
+    }
+    if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
+        try? data.write(to: URL(fileURLWithPath: CUSTOM_ACTIONS_PATH))
+    }
+    DispatchQueue.main.async { reregisterHotkeys() }
+}

@@ -107,7 +107,7 @@ func captureSelectionSync() -> String {
     return ""
 }
 
-func runWorker(_ action: String, source: String, captured: String = "") {
+func runWorker(_ action: String, source: String, captured: String = "", customPrompt: String = "") {
     // Screenshot actions need Screen Recording. Without it, `screencapture` fails
     // ("could not create image from rect") and the user just re-prompts forever.
     // Gate it: fire the system prompt + open Set Up, and skip the doomed capture.
@@ -137,6 +137,7 @@ func runWorker(_ action: String, source: String, captured: String = "") {
     env["SOURCE_BUNDLE"] = source
     env["AGENT_SOCK"] = SOCK
     if !captured.isEmpty { env["CAPTURED_TEXT"] = captured }
+    if !customPrompt.isEmpty { env["CUSTOM_PROMPT"] = customPrompt }
     p.environment = env
     let errPipe = Pipe()
     p.standardError = errPipe
@@ -886,18 +887,46 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
     var hkID = EventHotKeyID()
     GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
                       nil, MemoryLayout<EventHotKeyID>.size, nil, &hkID)
+
+    let kind = GetEventKind(event)
+
+    // kEventHotKeyReleased: clean PTT release via Carbon event (no polling needed).
+    if kind == UInt32(kEventHotKeyReleased) {
+        _carbonDictHeld.remove(hkID.id)
+        if let action = hotkeyActions[hkID.id], action == "dictate" || action == "dictateadd" {
+            Task { @MainActor in
+                if _dictTrigMode == .pushToTalk {
+                    _dictPTTimer?.invalidate(); _dictPTTimer = nil
+                    _dictTrigMode = .idle
+                    if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
+                }
+            }
+        }
+        return noErr
+    }
+
     if let action = hotkeyActions[hkID.id] {
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         if action == "cliphistory" {
             DispatchQueue.main.async { if picker.isVisible { picker.hide() } else { picker.show(prev: front) } }
         } else if action == "settings" {
             DispatchQueue.main.async { settingsWindow.show(tab: .setup) }
-        } else if action == "dictate" {
+        } else if action == "dictate" || action == "dictateadd" {
+            // Suppress Carbon key-repeat: kEventHotKeyPressed fires on every repeat.
+            // Only act on the first press; kEventHotKeyReleased clears the held state.
+            if _carbonDictHeld.contains(hkID.id) { return noErr }
+            _carbonDictHeld.insert(hkID.id)
             let kc = CGKeyCode(hotkeyKeycodes[hkID.id] ?? 0)
-            Task { @MainActor in triggerDictation(mode: .insert, keycode: kc) }
-        } else if action == "dictateadd" {
-            let kc = CGKeyCode(hotkeyKeycodes[hkID.id] ?? 0)
-            Task { @MainActor in triggerDictation(mode: .claude, keycode: kc) }
+            let m: DictMode = action == "dictate" ? .insert : .claude
+            Task { @MainActor in triggerDictation(mode: m, keycode: kc) }
+        } else if action.hasPrefix("custom:") || action.hasPrefix("customshot:") {
+            let cas = loadCustomActions()
+            let prompt = cas.first(where: { $0.actionID == action })?.prompt ?? ""
+            let isShot = action.hasPrefix("customshot:")
+            let sel = isShot ? "" : captureSelectionSync()
+            DispatchQueue.global().async {
+                runWorker(isShot ? "customshot" : "custom", source: front, captured: sel, customPrompt: prompt)
+            }
         } else {
             // Capture selection NOW (main thread, source app still focused)
             // before async dispatch; worker uses CAPTURED_TEXT, skips socket roundtrip.
@@ -909,8 +938,11 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
 }
 
 func installHotkeys() {
-    var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-    InstallEventHandler(GetApplicationEventTarget(), hotKeyHandler, 1, &spec, nil, nil)
+    var specs = [
+        EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+        EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased)),
+    ]
+    InstallEventHandler(GetApplicationEventTarget(), hotKeyHandler, specs.count, &specs, nil, nil)
     registerFromConfig()
 }
 
@@ -924,11 +956,24 @@ func registerFromConfig() {
     let sig = OSType(0x434D4447) // 'CMDG'
     for (i, hk) in loadHotkeys().enumerated() {
         guard hk.keycode != 0 else { continue }  // keycode 0 = 'A' key; 0 means unbound
-        let id = EventHotKeyID(signature: sig, id: UInt32(i + 1))
-        hotkeyActions[UInt32(i + 1)] = hk.action
-        hotkeyKeycodes[UInt32(i + 1)] = hk.keycode
+        let hkID = UInt32(i + 1)
+        let id = EventHotKeyID(signature: sig, id: hkID)
+        hotkeyActions[hkID] = hk.action
+        hotkeyKeycodes[hkID] = hk.keycode
         var ref: EventHotKeyRef?
         RegisterEventHotKey(hk.keycode, hk.mods, id, GetApplicationEventTarget(), 0, &ref)
+        hotkeyRefs.append(ref)
+    }
+    // Custom action hotkeys (stored in custom-actions.json). IDs start at 100 to avoid
+    // collisions with the up-to-9 built-in slots above.
+    for (j, ca) in loadCustomActions().enumerated() {
+        guard ca.enabled, ca.keycode != 0 else { continue }
+        let hkID = UInt32(100 + j)
+        let id = EventHotKeyID(signature: sig, id: hkID)
+        hotkeyActions[hkID] = ca.actionID
+        hotkeyKeycodes[hkID] = ca.keycode
+        var ref: EventHotKeyRef?
+        RegisterEventHotKey(ca.keycode, ca.mods, id, GetApplicationEventTarget(), 0, &ref)
         hotkeyRefs.append(ref)
     }
 }
@@ -972,6 +1017,7 @@ private var _dictTrigMode: DictTrigMode = .idle
 private var _dictPTTimer: Timer? = nil
 private var _dictLastPress: Double = 0
 private let _dictDoubleTapWindow: Double = 0.35
+private var _carbonDictHeld: Set<UInt32> = []   // tracks held Carbon hotkey IDs; suppresses key-repeat
 
 @MainActor
 func resetDictTrigMode() {
@@ -1020,30 +1066,35 @@ func triggerDictation(mode: DictMode, keycode: CGKeyCode) {
 }
 
 func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
-    let hks = loadHotkeys()
-    guard let hk = hks.first(where: { $0.keycode == carbon && $0.mods == mods }) else { return }
     let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
 
-    // Shot actions: if screencapture is already running (user pressed again to cancel), kill it.
-    if hk.action.hasPrefix("shot") {
-        let pg = runShell("/usr/bin/pgrep", ["-x", "screencapture"])
-        if pg.code == 0 {
-            _ = runShell("/usr/bin/pkill", ["-x", "screencapture"])
-            return
+    if let hk = loadHotkeys().first(where: { $0.keycode == carbon && $0.mods == mods }) {
+        if hk.action.hasPrefix("shot") {
+            let pg = runShell("/usr/bin/pgrep", ["-x", "screencapture"])
+            if pg.code == 0 { _ = runShell("/usr/bin/pkill", ["-x", "screencapture"]); return }
         }
-    }
-
-    if hk.action == "cliphistory" {
-        if picker.isVisible { picker.hide() } else { picker.show(prev: front) }
-    } else if hk.action == "settings" {
-        settingsWindow.show(tab: .setup)
-    } else if hk.action == "dictate" {
-        Task { @MainActor in triggerDictation(mode: .insert, keycode: CGKeyCode(carbon)) }
-    } else if hk.action == "dictateadd" {
-        Task { @MainActor in triggerDictation(mode: .claude, keycode: CGKeyCode(carbon)) }
-    } else {
-        let sel = hk.action.hasPrefix("shot") ? "" : captureSelectionSync()
-        DispatchQueue.global().async { runWorker(hk.action, source: front, captured: sel) }
+        if hk.action == "cliphistory" {
+            if picker.isVisible { picker.hide() } else { picker.show(prev: front) }
+        } else if hk.action == "settings" {
+            settingsWindow.show(tab: .setup)
+        } else if hk.action == "dictate" {
+            Task { @MainActor in triggerDictation(mode: .insert, keycode: CGKeyCode(carbon)) }
+        } else if hk.action == "dictateadd" {
+            Task { @MainActor in triggerDictation(mode: .claude, keycode: CGKeyCode(carbon)) }
+        } else {
+            let sel = hk.action.hasPrefix("shot") ? "" : captureSelectionSync()
+            DispatchQueue.global().async { runWorker(hk.action, source: front, captured: sel) }
+        }
+    } else if let ca = loadCustomActions().first(where: { $0.enabled && $0.keycode == carbon && $0.mods == mods }) {
+        if ca.isShot {
+            let pg = runShell("/usr/bin/pgrep", ["-x", "screencapture"])
+            if pg.code == 0 { _ = runShell("/usr/bin/pkill", ["-x", "screencapture"]); return }
+        }
+        let prompt = ca.prompt
+        let sel = ca.isShot ? "" : captureSelectionSync()
+        DispatchQueue.global().async {
+            runWorker(ca.isShot ? "customshot" : "custom", source: front, captured: sel, customPrompt: prompt)
+        }
     }
 }
 
@@ -1077,6 +1128,7 @@ func startMediaKeyHook() {
                 _nxHeld[keyCode] = true
                 guard let carbon = MEDIA_TO_CARBON[keyCode] else { return passthrough }
                 let bound = loadHotkeys().contains { $0.keycode == carbon && $0.mods == 0 }
+                    || loadCustomActions().contains { $0.enabled && $0.keycode == carbon && $0.mods == 0 }
                 appendLog("[eventTap] NX bound=\(bound) carbon=\(carbon)")
                 guard bound else { return passthrough }
                 DispatchQueue.main.async { fireMediaAction(carbon) }
@@ -1119,6 +1171,7 @@ func startMediaKeyHook() {
                 if f.contains(.maskAlternate) { cm |= 2048 }
                 if f.contains(.maskControl)   { cm |= 4096 }
                 let bound = loadHotkeys().contains { $0.keycode == kc && $0.mods == cm }
+                    || loadCustomActions().contains { $0.enabled && $0.keycode == kc && $0.mods == cm }
                 appendLog("[eventTap] keyDown kc=\(kc) mods=\(cm) bound=\(bound)")
                 guard bound else { return passthrough }
                 DispatchQueue.main.async { fireMediaAction(kc, mods: cm) }

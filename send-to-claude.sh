@@ -127,7 +127,7 @@ fi
 # the go/comment dispatch reopens Claude (or we restore it on cancel).
 SHOT=0
 case "$ACTION" in
-  shotgo|shotcomment|shotadd|shotfullgo)
+  shotgo|shotcomment|shotadd|shotfullgo|customshot)
     SHOT=1
     if [ "$DRY_RUN" != "1" ]; then
       agent_cmd "hide $CLAUDE_BUNDLE" >/dev/null 2>&1 && sleep 0.15   # let the window clear
@@ -147,8 +147,9 @@ case "$ACTION" in
     fi
     IMG=1
     case "$ACTION" in
-      shotfullgo) ACTION="go" ;;              # full-screen always auto-submits
-      *)          ACTION="${ACTION#shot}" ;;  # shotgo→go, shotcomment→comment
+      shotfullgo)  ACTION="go" ;;             # full-screen always auto-submits
+      customshot)  ACTION="custom" ;;         # screenshot + custom prompt
+      *)           ACTION="${ACTION#shot}" ;;  # shotgo→go, shotcomment→comment
     esac
     log "screenshot captured -> ACTION=$ACTION"
     ;;
@@ -279,6 +280,21 @@ case "$ACTION" in
       helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
     fi
     log "pasted into open Claude chat"
+    ;;
+
+  custom)
+    TMPL="${CUSTOM_PROMPT:-{selection}}"
+    # Replace {selection} and {text} placeholders with actual selection
+    PAYLOAD="${TMPL//\{selection\}/$SEL}"
+    PAYLOAD="${PAYLOAD//\{text\}/$SEL}"
+    if [ "$IMG" = "1" ]; then
+      # Screenshot custom: open new session with prompt, then paste the screenshot
+      open_new "${CONTEXT}${PAYLOAD}" || { notify "Could not open Claude."; exit 1; }
+      [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste screenshot into custom prompt"; exit 0; }
+      wait_for_claude || log "WARN not frontmost"; sleep 0.3; helper_paste
+    else
+      open_new "${CONTEXT}${PAYLOAD}"
+    fi
     ;;
 
   *) log "unknown ACTION=$ACTION"; notify "Unknown action: $ACTION"; exit 1 ;;

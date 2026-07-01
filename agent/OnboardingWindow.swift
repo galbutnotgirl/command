@@ -281,7 +281,7 @@ struct WelcomeStepView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
 
-                Text("Two quick permissions and you're set.")
+                Text("Two required permissions + optional microphone for dictation.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
