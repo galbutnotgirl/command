@@ -90,6 +90,9 @@ final class DictationOverlay: NSObject {
         panel?.orderFront(nil)
         isVisible = true
 
+        let _gu = URL(fileURLWithPath: "/System/Library/Sounds/Glass.aiff")
+        if let s = NSSound(contentsOf: _gu, byReference: true) { s.volume = 0.35; s.play() }
+
         installKeyMonitor()
         wireEngine()
         SpeechEngine.shared.start(mode: mode)
@@ -171,6 +174,7 @@ final class DictationOverlay: NSObject {
 
         engine.onError = { [weak self] message in
             guard let self = self else { return }
+            NSSound.beep()
             self.model.isRecording = false
             self.model.errorText = message
             self.errorHideTimer?.invalidate()
@@ -204,6 +208,8 @@ final class DictationOverlay: NSObject {
     // MARK: - Dispatch final text
 
     private func dispatch(text: String, mode: DictationMode) {
+        let _pu = URL(fileURLWithPath: "/System/Library/Sounds/Pop.aiff")
+        if let s = NSSound(contentsOf: _pu, byReference: true) { s.volume = 0.3; s.play() }
         switch mode {
         case .insert:
             let pb = NSPasteboard.general
