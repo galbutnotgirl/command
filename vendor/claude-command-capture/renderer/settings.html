@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'"
+    />
+    <title>ClaudeCommand Settings</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #1e1e22;
+        --fg: #eaeaea;
+        --muted: #9a9aa2;
+        --accent: #d97757;
+        --border: rgba(128, 128, 128, 0.35);
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f6f6f4;
+          --fg: #1c1c1e;
+          --muted: #6e6e74;
+        }
+      }
+      * { box-sizing: border-box; margin: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        padding: 20px 24px 96px;
+        font-size: 13px;
+      }
+      h1 { font-size: 17px; margin-bottom: 4px; }
+      p.lead { color: var(--muted); margin-bottom: 20px; }
+      fieldset {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px 16px 16px;
+        margin-bottom: 18px;
+      }
+      legend { padding: 0 6px; font-weight: 600; }
+      label { display: block; margin: 10px 0 4px; font-weight: 500; }
+      .hint { color: var(--muted); font-weight: 400; font-size: 12px; margin-top: 2px; }
+      input[type='text'], textarea {
+        width: 100%;
+        font: inherit;
+        padding: 7px 9px;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: transparent;
+        color: inherit;
+        outline: none;
+      }
+      textarea { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; resize: vertical; }
+      input:focus, textarea:focus { border-color: var(--accent); }
+      .row { display: flex; gap: 12px; }
+      .row > div { flex: 1; }
+      .checkbox { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-weight: 500; }
+      .checkbox input { width: auto; }
+      footer {
+        position: fixed;
+        left: 0; right: 0; bottom: 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 24px;
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+      }
+      button {
+        font: inherit;
+        padding: 7px 16px;
+        border-radius: 7px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      #status { color: var(--muted); font-size: 12px; }
+      #cli-test-result { margin-top: 6px; font-size: 12px; white-space: pre-wrap; color: var(--muted); }
+      #cli-test-result.ok { color: #4caf50; }
+      #cli-test-result.err { color: #e57373; }
+    </style>
+  </head>
+  <body>
+    <h1>ClaudeCommand Settings</h1>
+    <p class="lead">
+      Captures are rendered through the prompt template below and handed to the Claude Code CLI in
+      the background. The named skill does the actual processing.
+    </p>
+
+    <fieldset>
+      <legend>Skill &amp; prompt</legend>
+      <label for="skill">Skill name</label>
+      <input type="text" id="skill" placeholder="e.g. triage-capture" spellcheck="false" />
+      <div class="hint">
+        Invoked as <code>/&lt;skill&gt;</code> inside the prompt. The skill's implementation lives in
+        the Claude Code project the CLI runs in — not in this app.
+      </div>
+
+      <label for="promptTemplate">Prompt template (text captures)</label>
+      <textarea id="promptTemplate" rows="7" spellcheck="false"></textarea>
+
+      <label for="imagePromptTemplate">Prompt template (image captures)</label>
+      <textarea id="imagePromptTemplate" rows="7" spellcheck="false"></textarea>
+      <div class="hint">
+        Placeholders: {skillInvocation} {skill} {source} {timestamp} {content} {file}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Claude Code CLI</legend>
+      <div class="row">
+        <div>
+          <label for="cliCommand">Command</label>
+          <input type="text" id="cliCommand" placeholder="claude" spellcheck="false" />
+        </div>
+        <div>
+          <label for="cliCwd">Working directory</label>
+          <input type="text" id="cliCwd" placeholder="~ (defaults to home)" spellcheck="false" />
+        </div>
+      </div>
+      <label for="cliExtraArgs">Extra arguments (one per line)</label>
+      <textarea id="cliExtraArgs" rows="3" spellcheck="false" placeholder="--permission-mode&#10;acceptEdits"></textarea>
+      <button id="cli-test" type="button">Test CLI</button>
+      <div id="cli-test-result"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Hotkeys</legend>
+      <div class="row">
+        <div>
+          <label for="hotkeyText">Text entry</label>
+          <input type="text" id="hotkeyText" spellcheck="false" />
+        </div>
+        <div>
+          <label for="hotkeyClipboard">Clipboard</label>
+          <input type="text" id="hotkeyClipboard" spellcheck="false" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="hotkeySelection">Highlighted selection</label>
+          <input type="text" id="hotkeySelection" spellcheck="false" />
+        </div>
+        <div>
+          <label for="hotkeyScreenshot">Screenshot</label>
+          <input type="text" id="hotkeyScreenshot" spellcheck="false" />
+        </div>
+      </div>
+      <div class="hint">
+        Electron accelerator syntax, e.g. <code>CommandOrControl+Alt+T</code>. Leave blank to
+        disable a hotkey.
+      </div>
+      <div class="checkbox">
+        <input type="checkbox" id="notifications" />
+        <label for="notifications" style="margin: 0">Show notifications on submit / completion</label>
+      </div>
+    </fieldset>
+
+    <footer>
+      <span id="status"></span>
+      <div>
+        <button id="reset" type="button">Reset to defaults</button>
+        <button id="save" type="button" class="primary">Save</button>
+      </div>
+    </footer>
+    <script src="settings.js"></script>
+  </body>
+</html>
