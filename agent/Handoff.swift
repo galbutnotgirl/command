@@ -82,7 +82,14 @@ struct HandoffSubmission: Identifiable {
     let status: String   // running | succeeded | failed
     let logFile: String?
 
-    var statusGlyph: String { status == "succeeded" ? "✓" : status == "failed" ? "✗" : "…" }
+    // A record can stay "running" forever if the CLI (or the machine) died
+    // before the updater rewrote it — flag those instead of an eternal spinner.
+    var isStalled: Bool { status == "running" && createdAt.timeIntervalSinceNow < -1800 }
+    var statusGlyph: String {
+        if status == "succeeded" { return "✓" }
+        if status == "failed" { return "✗" }
+        return isStalled ? "⚠" : "…"
+    }
     var age: String {
         let s = Int(-createdAt.timeIntervalSinceNow)
         if s < 60 { return "\(s)s ago" }
@@ -92,7 +99,7 @@ struct HandoffSubmission: Identifiable {
     }
     var menuTitle: String {
         let target = (skill?.isEmpty == false) ? "/\(skill!)" : "claude -p"
-        return "\(statusGlyph) \(source) → \(target) — \(age)"
+        return "\(statusGlyph) \(source) → \(target) — \(age)\(isStalled ? " (stalled?)" : "")"
     }
 }
 
