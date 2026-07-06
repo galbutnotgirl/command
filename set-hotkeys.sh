@@ -22,6 +22,11 @@ HOTKEYS=(
   "shotgo|Claude - Screenshot Go|cmd F7"
   "shotcomment|Claude - Screenshot Comment|opt F7"
   "cliphistory|Claude - Clipboard History|F6"
+  # Background skill handoff (claude -p pipeline) — unbound by default; uncomment
+  # to bind here, or use Settings → Shortcuts. handofftext opens the entry panel.
+  # "handoff|Claude - Skill Handoff|cmd F9"
+  # "shothandoff|Claude - Screenshot Handoff|opt F9"
+  # "handofftext|Claude - Text Handoff|F9"
 )
 
 CFG="${HOME}/.claude/state/command-hotkeys.json"

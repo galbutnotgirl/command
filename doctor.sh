@@ -72,6 +72,57 @@ else
   fail "Claude desktop app not found"; note "install it — every action opens claude://code/…"
 fi
 
+print -- "Skill handoff (background trigger)"
+HANDOFF_BASE="${CLAUDE_CAPTURE_HOME:-${HOME}/Library/Application Support/claude-command}"
+if command -v node >/dev/null 2>&1; then
+  NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null)"
+  if [ "${NODE_MAJOR:-0}" -ge 20 ]; then
+    pass "node $(node --version 2>/dev/null) found"
+  else
+    fail "node too old ($(node --version 2>/dev/null)) — handoff core needs 20+"; note "brew install node"
+  fi
+else
+  fail "node not found"; note "brew install node — required for the handoff pipeline"
+fi
+[ -x "${DIR}/capture-handoff.sh" ] \
+  && pass "capture-handoff.sh present" \
+  || { fail "capture-handoff.sh missing"; note "re-clone or git checkout capture-handoff.sh"; }
+[ -f "${DIR}/vendor/claude-command-capture/bin/submit-cli.js" ] \
+  && pass "vendor handoff core present" \
+  || { fail "vendor/claude-command-capture missing"; note "git checkout vendor/"; }
+BUNDLED_HANDOFF="${DIR}/ClaudeCommand.app/Contents/Resources/capture-handoff.sh"
+if [ -f "$BUNDLED_HANDOFF" ]; then
+  pass "handoff bundled into ClaudeCommand.app"
+else
+  fail "handoff not bundled into ClaudeCommand.app"; note "rebuild: ./build-agent.sh (older build predates the handoff feature)"
+fi
+if [ -f "${HANDOFF_BASE}/settings.json" ]; then
+  HANDOFF_INFO="$(/usr/bin/python3 - "${HANDOFF_BASE}/settings.json" <<'PY' 2>/dev/null
+import json, sys
+d = json.load(open(sys.argv[1]))
+print((d.get("skill") or "").strip().lstrip("/") or "-")
+print((d.get("cli", {}).get("command") or "claude").strip())
+PY
+)"
+  HANDOFF_SKILL="${HANDOFF_INFO%%$'\n'*}"; HANDOFF_CLI="${HANDOFF_INFO##*$'\n'}"
+  if [ -z "$HANDOFF_INFO" ]; then
+    fail "handoff settings.json unreadable"; note "fix or delete ${HANDOFF_BASE}/settings.json"
+  elif [ "$HANDOFF_SKILL" = "-" ]; then
+    fail "no skill configured"; note "menu bar ▸ Handoffs ▸ Handoff Settings… — set the skill name"
+  else
+    pass "skill configured: /${HANDOFF_SKILL}"
+  fi
+  if command -v "${HANDOFF_CLI:-claude}" >/dev/null 2>&1 || [ -x "${HANDOFF_CLI:-claude}" ]; then
+    pass "handoff CLI reachable (${HANDOFF_CLI:-claude})"
+  else
+    fail "handoff CLI not found (${HANDOFF_CLI:-claude})"; note "set an absolute path in Handoff Settings"
+  fi
+else
+  note "no handoff settings yet — menu bar ▸ Handoffs ▸ Handoff Settings… (optional feature)"
+fi
+subs=("${HANDOFF_BASE}/submissions/"*.json(N))
+(( ${#subs} > 0 )) && pass "submission records: ${#subs}"
+
 print -- "Dictation"
 
 # Mic/speech TCC can't be queried from shell — prompt user to verify manually.
