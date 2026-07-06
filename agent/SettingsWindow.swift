@@ -275,33 +275,10 @@ struct SetupView: View {
     @ObservedObject var model: SettingsModel
     private let refreshTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
-    private var destBinding: Binding<String> {
-        Binding(
-            get: { model.claudeDestination },
-            set: { model.claudeDestination = $0; UserDefaults.standard.set($0, forKey: "claudeDestination") }
-        )
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 Text("Set Up").font(.title2).bold()
-
-                // Destination
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Claude destination").font(.headline)
-                    Text("Where actions open Claude — applies to all hotkeys and custom actions.")
-                        .font(.caption).foregroundColor(.secondary)
-                    Picker("", selection: destBinding) {
-                        Text("Chat").tag("chat")
-                        Text("Cowork").tag("cowork")
-                        Text("Code").tag("code")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 240)
-                }
-
-                Divider()
 
                 // Permissions — numbered steps
                 VStack(alignment: .leading, spacing: 6) {
@@ -512,6 +489,13 @@ struct ShortcutsView: View {
     @ObservedObject var model: SettingsModel
     @State private var showingAddCustom = false
 
+    private var destBinding: Binding<String> {
+        Binding(
+            get: { model.claudeDestination },
+            set: { model.claudeDestination = $0; UserDefaults.standard.set($0, forKey: "claudeDestination") }
+        )
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -523,6 +507,21 @@ struct ShortcutsView: View {
                 }
                 Text("Click a key field and press a combo to set it. Press Delete to clear. Esc cancels. Changes apply instantly.")
                     .foregroundColor(.secondary)
+
+                // Destination — where every hotkey and custom action opens Claude.
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Claude destination").font(.headline)
+                    Text("All three open the Claude desktop app — Chat, Cowork, and Code are just different modes inside it.")
+                        .font(.caption).foregroundColor(.secondary)
+                    Picker("", selection: destBinding) {
+                        Text("Chat").tag("chat")
+                        Text("Cowork").tag("cowork")
+                        Text("Code").tag("code")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 240)
+                }
+                .padding(.bottom, 8)
 
                 if let conflict = model.bindingConflict {
                     HStack(spacing: 8) {
@@ -563,7 +562,7 @@ struct ShortcutsView: View {
                 }
                 .padding(.top, 8)
 
-                Text("Prompt templates that wrap selected text or a screenshot. Use {selection} as a placeholder for text mode.")
+                Text("Prompt templates that wrap selected text or a screenshot. Use {selection} to place selected text inline — otherwise it's appended below the prompt. Source app + research hint go before all of it, unless \"Include source app\" is off.")
                     .font(.caption).foregroundColor(.secondary)
 
                 if model.customActions.isEmpty {
@@ -684,15 +683,16 @@ struct CustomActionSheet: View {
             .help("New session opens a fresh Claude Code window. Add pastes into the currently open chat.")
 
             Toggle("Include source app", isOn: $includeSource)
-                .help("Prepend \"from: AppName — URL\" so Claude knows where the content came from")
+                .help("Prepend \"from: AppName — URL\" (plus an app-specific research hint, e.g. \"use the Slack MCP…\") before the prompt")
 
             Toggle("Auto-submit", isOn: $isAutoSubmit)
                 .help("Press Return automatically after pasting the prompt into Claude")
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Prompt template").font(.caption).bold()
-                Text(isShot ? "Sent to Claude with the screenshot attached."
-                            : "Use {selection} where selected text should appear.")
+                Text(isShot
+                     ? "Sent to Claude with the screenshot attached, source context first (if enabled above)."
+                     : "Final message Claude sees, top to bottom: 1) source context + research hint (if enabled above) 2) this template, with {selection} replaced by the selected text 3) if you didn't use {selection}, the selected text is appended after, on its own line.")
                     .font(.caption).foregroundColor(.secondary)
                 TextEditor(text: $prompt)
                     .font(.system(.body, design: .monospaced))

@@ -176,7 +176,7 @@ func appendLog(_ msg: String) {
 
 // ---- clipboard history picker (built in) -----------------------------------
 
-enum FilterMode { case all, images, text }
+enum FilterMode { case all, images, text, dictated, sent }
 enum PickerTheme: String { case auto, light, dark }
 enum PasteTarget { case prev, claude, claudeNew }
 
@@ -190,12 +190,51 @@ func pickerTheme() -> PickerTheme {
 }
 func setPickerTheme(_ t: PickerTheme) { UserDefaults.standard.set(t.rawValue, forKey: "pickerTheme") }
 
+// The atom-orbital brand mark — two ellipses + nucleus dot, rendered as a template
+// image (tintable, like an SF Symbol) at any size. This is the SAME drawing code
+// the menu-bar status item uses (see MenuBar.swift's brandIcon()), so the mark the
+// clip picker shows for anything ClaudeCommand itself produced is pixel-consistent
+// with the one you see in the menu bar — not a lookalike SF Symbol, not the full-color
+// .app icon (which can't be tinted grey/purple like every other filter pill here).
+func brandGlyph(size: CGFloat) -> NSImage {
+    let img = NSImage(size: NSSize(width: size, height: size), flipped: false) { full in
+        let rect = full.insetBy(dx: full.width * 0.09, dy: full.height * 0.09)
+        let mid = NSPoint(x: rect.midX, y: rect.midY)
+        let s = rect.width
+        NSColor.black.setFill(); NSColor.black.setStroke()
+        let rw = s * 0.92, rh = s * 0.56
+        let lw = max(1.0, s * 0.05)
+        for deg in [28.0, -28.0] {
+            let oval = NSBezierPath(ovalIn: NSRect(x: -rw / 2, y: -rh / 2, width: rw, height: rh))
+            var t = AffineTransform(translationByX: mid.x, byY: mid.y)
+            t.rotate(byDegrees: CGFloat(deg))
+            oval.transform(using: t)
+            oval.lineWidth = lw; oval.stroke()
+        }
+        let dot = s * 0.17
+        NSBezierPath(ovalIn: NSRect(x: mid.x - dot/2, y: mid.y - dot/2, width: dot, height: dot)).fill()
+        return true
+    }
+    img.isTemplate = true
+    return img
+}
+
 func appIcon(bundle: String) -> NSImage? {
     guard !bundle.isEmpty else { return nil }
     if let cached = iconCache[bundle] { return cached }
-    // Any com.claudecommand.* bundle (e.g. dictation) → use our own app icon
+    // Dictation rows get the same waveform mark as the "Dictated" filter pill — it's
+    // a voice transcript, not a copy Claude Command routed through. Everything else
+    // ClaudeCommand itself wrote (the "sent"/wrapped-prompt case, and the plain
+    // internal sentinel) gets the brand mark, matching the "Sent" pill and the menu bar.
+    if bundle == "com.claudecommand.dictation" {
+        let cfg = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
+        let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)?
+            .withSymbolConfiguration(cfg) ?? brandGlyph(size: 32)
+        iconCache[bundle] = icon
+        return icon
+    }
     if bundle.hasPrefix("com.claudecommand") {
-        let icon = NSRunningApplication.current.icon ?? NSImage(named: NSImage.applicationIconName)
+        let icon = brandGlyph(size: 32)
         iconCache[bundle] = icon
         return icon
     }
@@ -224,7 +263,7 @@ func ageString(_ ts: Double) -> String {
 
 struct Clip {
     let type: String; let file: String; let preview: String
-    let full: String; let ts: Double; let bundle: String
+    let full: String; let ts: Double; let bundle: String; let origin: String
 }
 
 func loadClips() -> [Clip] {
@@ -240,7 +279,8 @@ func loadClips() -> [Clip] {
                     preview: (d["preview"] as? String) ?? "",
                     full: (d["full"] as? String) ?? "",
                     ts: ts,
-                    bundle: (d["bundle"] as? String) ?? "")
+                    bundle: (d["bundle"] as? String) ?? "",
+                    origin: (d["origin"] as? String) ?? "")
     }
 }
 
@@ -355,9 +395,11 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         if shown.isEmpty {
             let msg: String
             switch filterMode {
-            case .images: msg = "No images in history."
-            case .text:   msg = query.isEmpty ? "No text clips." : "No matches."
-            case .all:    msg = query.isEmpty ? "History empty." : "No matches."
+            case .images:   msg = "No images in history."
+            case .text:     msg = query.isEmpty ? "No text clips." : "No matches."
+            case .dictated: msg = query.isEmpty ? "Nothing dictated yet." : "No matches."
+            case .sent:     msg = query.isEmpty ? "Nothing sent via Claude Command yet." : "No matches."
+            case .all:      msg = query.isEmpty ? "History empty." : "No matches."
             }
             let e = NSTextField(labelWithString: msg)
             e.font = .systemFont(ofSize: 13); e.textColor = .tertiaryLabelColor
@@ -514,11 +556,17 @@ final class ClipPicker: NSObject, NSWindowDelegate {
 
     func makeFilterBadge() -> NSView {
         filterActionBlocks.removeAll()
-        // Order: [🖼 Images] [● All] [Aa Text] — All in center per user request.
+        // Order: [🖼 Images] [● All] [Aa Text] [〜 Dictated] [⚛ Sent] — All in center
+        // per user request; Dictated/Sent trail Text since they're the newer, narrower
+        // filters (things ClaudeCommand itself produced, rather than what's on the OS clipboard).
+        // Sent's sym is nil — makeFilterPill draws the brand glyph for it instead (the
+        // same mark as the menu bar), so it stays pixel-consistent instead of a lookalike.
         let specs: [(sym: String?, label: String, mode: FilterMode)] = [
-            ("photo",    "Images", .images),
-            (nil,        "All",    .all),
-            ("doc.text", "Text",   .text),
+            ("photo",       "Images",   .images),
+            (nil,           "All",      .all),
+            ("doc.text",    "Text",     .text),
+            ("waveform",    "Dictated", .dictated),
+            (nil,           "Sent",     .sent),
         ]
         let stack = NSStackView(); stack.orientation = .horizontal; stack.spacing = 3
         for spec in specs {
@@ -541,17 +589,26 @@ final class ClipPicker: NSObject, NSWindowDelegate {
             : NSColor.labelColor.withAlphaComponent(0.18).cgColor
         v.translatesAutoresizingMaskIntoConstraints = false
 
-        // Icon-only for pills that have a symbol; text-only for "All".
+        // Icon-only for pills that have a symbol, or the brand glyph for Sent
+        // (same mark as the menu bar, tinted the same grey→purple way); text-only for "All".
         let content = NSStackView(); content.orientation = .horizontal; content.spacing = 3
         content.translatesAutoresizingMaskIntoConstraints = false
-        if let sym = sym {
+        if mode == .sent || sym != nil {
             let iv = NSImageView()
-            let cfg = NSImage.SymbolConfiguration(pointSize: 11, weight: active ? .semibold : .medium)
-            iv.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil)?.withSymbolConfiguration(cfg)
+            // The brand glyph's rings sit inside a 9%-inset drawing box (see brandGlyph),
+            // so at the same nominal box size it reads visibly smaller than the SF Symbols
+            // beside it — bump its box up rather than the others down.
+            let boxSize: CGFloat = mode == .sent ? 17 : 13
+            if mode == .sent {
+                iv.image = brandGlyph(size: boxSize)
+            } else {
+                let cfg = NSImage.SymbolConfiguration(pointSize: 11, weight: active ? .semibold : .medium)
+                iv.image = NSImage(systemSymbolName: sym!, accessibilityDescription: nil)?.withSymbolConfiguration(cfg)
+            }
             iv.contentTintColor = active ? purpleAccent : .labelColor
             iv.translatesAutoresizingMaskIntoConstraints = false
-            iv.widthAnchor.constraint(equalToConstant: 13).isActive = true
-            iv.heightAnchor.constraint(equalToConstant: 13).isActive = true
+            iv.widthAnchor.constraint(equalToConstant: boxSize).isActive = true
+            iv.heightAnchor.constraint(equalToConstant: boxSize).isActive = true
             content.addArrangedSubview(iv)
         } else {
             let lbl = NSTextField(labelWithString: label)
@@ -684,13 +741,16 @@ final class ClipPicker: NSObject, NSWindowDelegate {
     }
 
     func filteredClips() -> [Clip] {
-        switch filterMode {
-        case .images: return all.filter { $0.type == "image" }
-        case .text:
-            let base = all.filter { $0.type != "image" }
+        func searched(_ base: [Clip]) -> [Clip] {
             if query.isEmpty { return base }
             let q = query.lowercased()
             return base.filter { $0.full.lowercased().contains(q) || $0.preview.lowercased().contains(q) }
+        }
+        switch filterMode {
+        case .images: return all.filter { $0.type == "image" }
+        case .text:   return searched(all.filter { $0.type != "image" && $0.origin != "dictation" && $0.origin != "sent" })
+        case .dictated: return searched(all.filter { $0.origin == "dictation" })
+        case .sent:     return searched(all.filter { $0.origin == "sent" })
         case .all:
             if query.isEmpty { return all }
             let q = query.lowercased()
@@ -765,16 +825,16 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         case 126:  // ↑
             if !shown.isEmpty { selected = max(selected - 1, 0); highlight() }
             return true
-        case 123:  // ← rotate carousel left: Images←All←Text←Images
-            let leftCycle: [FilterMode] = [.images, .all, .text]
-            let li = leftCycle.firstIndex(of: filterMode) ?? 1
-            filterMode = leftCycle[(li + leftCycle.count - 1) % leftCycle.count]
+        case 123:  // ← rotate carousel left: Images←All←Text←Dictated←Sent←Images
+            let cycle: [FilterMode] = [.images, .all, .text, .dictated, .sent]
+            let li = cycle.firstIndex(of: filterMode) ?? 1
+            filterMode = cycle[(li + cycle.count - 1) % cycle.count]
             query = ""; selected = 0; refresh()
             return true
-        case 124:  // → rotate carousel right: Images→All→Text→Images
-            let rightCycle: [FilterMode] = [.images, .all, .text]
-            let ri = rightCycle.firstIndex(of: filterMode) ?? 1
-            filterMode = rightCycle[(ri + 1) % rightCycle.count]
+        case 124:  // → rotate carousel right: Images→All→Text→Dictated→Sent→Images
+            let cycle: [FilterMode] = [.images, .all, .text, .dictated, .sent]
+            let ri = cycle.firstIndex(of: filterMode) ?? 1
+            filterMode = cycle[(ri + 1) % cycle.count]
             query = ""; selected = 0; refresh()
             return true
         case 36, 76:   // ↩ / numpad ↩
@@ -803,18 +863,19 @@ final class ClipPicker: NSObject, NSWindowDelegate {
     func choose(_ c: Clip, target: PasteTarget) {
         let savedBundle = prevBundle
         let path = (CLIPS as NSString).appendingPathComponent(c.file)
-        // Stamp last_copy.json as our own bundle before writing to clipboard so
-        // clipwatch (which polls at 25ms) attributes this write to com.claudecommand
-        // (in BLOCK_BUNDLES) and doesn't add it to history as a spurious entry.
-        if let d = try? JSONSerialization.data(withJSONObject: ["bundle": "com.claudecommand", "ts": Date().timeIntervalSince1970]) {
-            try? d.write(to: URL(fileURLWithPath: COPY_SOURCE_PATH))
-        }
         let pb = NSPasteboard.general
         pb.clearContents()
         if c.type == "image", let data = FileManager.default.contents(atPath: path) {
             if let img = NSImage(data: data) { pb.writeObjects([img]) } else { pb.setData(data, forType: .png) }
         } else if let text = try? String(contentsOfFile: path, encoding: .utf8) {
             pb.setString(text, forType: .string)
+        }
+        // Stamp AFTER writing, with the exact resulting changeCount — an exact match,
+        // not a timing guess, so clipwatch (25ms poll) reliably attributes this re-paste
+        // to com.claudecommand (in BLOCK_BUNDLES) and never re-records it as a new clip.
+        if let d = try? JSONSerialization.data(withJSONObject:
+            ["bundle": "com.claudecommand", "ts": Date().timeIntervalSince1970, "cc": pb.changeCount]) {
+            try? d.write(to: URL(fileURLWithPath: COPY_SOURCE_PATH))
         }
         isPicking = true
         win.orderOut(nil)  // hides window; windowDidResignKey fires but isPicking suppresses hide()

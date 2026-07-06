@@ -211,32 +211,46 @@ final class Recorder: ObservableObject {
         let mgr = currentMgr; currentMgr = nil
         log("■ stop wasListening=\(wasListening)")
         cancelSilenceTimer()
-        // Stop new audio input — but NOT the streamTask yet.
-        // Tap callbacks may have already enqueued streamAudio Tasks for the last
-        // 1-2 buffers (~85ms each); those Tasks are independent and keep running.
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop(); audioEngine = nil
         state = .idle
-        guard wasListening else { streamTask?.cancel(); streamTask = nil; return }
+        guard wasListening else {
+            audioEngine?.inputNode.removeTap(onBus: 0)
+            audioEngine?.stop(); audioEngine = nil
+            streamTask?.cancel(); streamTask = nil
+            return
+        }
 
         let capturedStreamTask = streamTask
         streamTask = nil
+        // Don't tear the tap/engine down synchronously here — that was the actual
+        // source of dropped tail words, not the downstream flush wait below. People
+        // keep talking through the last syllable as they release the key/hotkey;
+        // removeTap() discards whatever's in the CURRENTLY-FILLING buffer (up to
+        // ~85ms of audio at 4096 frames/48kHz) that hasn't hit a full callback yet.
+        // No amount of waiting for finish() can recover audio that was never
+        // captured. Keep the mic open a little longer than the stop signal instead.
+        let engineToStop = audioEngine
+        audioEngine = nil
 
         Task {
+            try? await Task.sleep(nanoseconds: 220_000_000)   // capture the trailing syllable
+            engineToStop?.inputNode.removeTap(onBus: 0)
+            engineToStop?.stop()
+
             // Wait for in-flight streamAudio Tasks (spawned by the tap callback just
-            // before stop) to deliver their buffers to the ASR manager.
-            // 300ms covers 3-4 tap buffers at 4096 frames / 48 kHz (~85ms each).
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            // before the teardown above) to deliver their buffers to the ASR manager.
+            // 500ms covers system-load variance; 300ms was occasionally too tight.
+            try? await Task.sleep(nanoseconds: 500_000_000)
             capturedStreamTask?.cancel()   // now safe to end the update loop
             do {
                 self.log("calling finish()…")
                 let text = try await mgr?.finish() ?? ""
-                self.log("finish() → \"\(text)\" (\(text.count) chars)")
-                if !text.isEmpty {
-                    self.onFinal?(text, mode)
-                } else if !self.lastTranscript.isEmpty {
-                    self.log("using lastTranscript fallback")
-                    self.onFinal?(self.lastTranscript, mode)
+                self.log("finish() → \"\(text)\" (\(text.count) chars), lastTranscript=\(self.lastTranscript.count) chars")
+                // Use whichever is longer: finish() should be complete, but if it
+                // returns less than the last partial (e.g. model flush gap), keep the
+                // partial — it's less likely to have dropped tail words than finish().
+                let best = text.count >= self.lastTranscript.count ? text : self.lastTranscript
+                if !best.isEmpty {
+                    self.onFinal?(best, mode)
                 } else {
                     self.log("⚠ finish empty — nothing to dispatch")
                     DispatchQueue.main.async { playUISound(settingsModel.stopSound) }

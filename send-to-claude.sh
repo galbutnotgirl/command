@@ -1,7 +1,9 @@
 #!/bin/zsh
 # send-to-claude.sh (v3)
 # Grab the current selection (text OR image) + source context and hand it to the
-# Claude Code DESKTOP app. Everything goes to Claude Code — never Cowork.
+# Claude DESKTOP app. CLAUDE_DESTINATION picks which mode inside that one app —
+# chat, cowork, or code — via the claude:// URL scheme; all three are the same
+# process, so paste/auto-submit/focus-restore work identically for all of them.
 #
 # ACTIONs (each wired to a right-click Quick Action):
 #   go        Background-feel: open a NEW Claude Code session, auto-submit, then
@@ -25,6 +27,7 @@ export PATH="/opt/homebrew/bin:${HOME}/.claude/local:${HOME}/.local/bin:/usr/loc
 LOG_FILE="${HOME}/Library/Logs/claude-command.log"
 DO_LOG="${HOME}/.claude/logs/claude-command-bg.log"
 STATE="${HOME}/.claude/state/clipboard.json"
+COPY_SOURCE="${HOME}/.claude/state/last_copy.json"
 ACTION="${ACTION:-comment}"
 CLIP_TTL="${CLIP_TTL:-60}"
 INCLUDE_CONTEXT="${INCLUDE_CONTEXT:-1}"
@@ -35,10 +38,7 @@ HELPER="${HELPER_APP}/Contents/MacOS/sendhelper"
 AGENT_SOCK="${AGENT_SOCK:-${HOME}/.claude/state/command-agent.sock}"
 SOURCE_BUNDLE="${SOURCE_BUNDLE:-}"   # set by CommandAgent when a hotkey fires
 CLAUDE_DESTINATION="${CLAUDE_DESTINATION:-code}"
-case "$CLAUDE_DESTINATION" in
-  chat|cowork) CLAUDE_BUNDLE="" ;;
-  *)           CLAUDE_BUNDLE="com.anthropic.claudefordesktop" ;;
-esac
+CLAUDE_BUNDLE="com.anthropic.claudefordesktop"   # chat/cowork/code are all this one app
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null)}"
 
 # All paths below are absolute (SCRIPT_DIR/STATE/HELPER via ${0:A}); nothing uses
@@ -93,6 +93,27 @@ helper_copy()  {
 }
 helper_activate(){ [ -n "$1" ] && { agent_cmd "activate $1" >/dev/null 2>&1 || open -b "$1" 2>/dev/null; }; }   # focus restore
 wait_for_claude(){ [ -z "$CLAUDE_BUNDLE" ] && return 1; local i=0; while (( i < 25 )); do [ "$(front_bundle)" = "$CLAUDE_BUNDLE" ] && return 0; sleep 0.2; (( i++ )); done; return 1; }
+
+# Write $1 to the clipboard and, in the SAME process, stamp last_copy.json with the
+# exact resulting changeCount (not just a timestamp) — clipwatch matches on that value,
+# not a timing guess, so it deterministically tags this as our own "send" write instead
+# of racing to attribute it to whichever app happens to be frontmost a moment later.
+# Tagged com.claudecommand.send (not the plain-blocked com.claudecommand) so it shows
+# up — once, correctly tagged — under the picker's "Claude Command" filter, unless
+# add_history() finds it's byte-identical to the item it'd dupe, in which case it merges
+# instead of inserting.
+copy_for_send() {  # $1 = text, $2 = stamp path
+  /usr/bin/python3 - "$1" "$2" <<'PY'
+import sys, json, time
+from AppKit import NSPasteboard
+text, path = sys.argv[1], sys.argv[2]
+pb = NSPasteboard.generalPasteboard()
+pb.clearContents()
+pb.setString_forType_(text, "public.utf8-plain-text")
+with open(path, "w") as f:
+    json.dump({"bundle": "com.claudecommand.send", "ts": time.time(), "cc": pb.changeCount()}, f)
+PY
+}
 
 clip_fresh_ok() {  # 0 if existing clipboard is fresh AND not blocked
   [ -f "$STATE" ] || return 1
@@ -236,23 +257,15 @@ fi
 open_new() {  # $1 = q text (may be empty)
   local q="$1"
   if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN open: dest=$CLAUDE_DESTINATION chars=${#q}"; return 0; fi
+  local path
   case "$CLAUDE_DESTINATION" in
-    chat)
-      printf '%s' "$q" | pbcopy 2>/dev/null
-      open "https://claude.ai/new" 2>/dev/null
-      notify "Prompt copied — paste it in Claude Chat (⌘V)" ""
-      ;;
-    cowork)
-      printf '%s' "$q" | pbcopy 2>/dev/null
-      open "https://claude.ai/cowork" 2>/dev/null
-      notify "Prompt copied — paste it in Claude Cowork (⌘V)" ""
-      ;;
-    *)
-      local link="claude://code/new?q=$(urlencode "$q")"
-      log "open new session chars=${#link}"
-      open "$link" 2>/dev/null
-      ;;
+    chat)   path="claude.ai/new" ;;
+    cowork) path="cowork/new" ;;
+    *)      path="code/new" ;;
   esac
+  local link="claude://${path}?q=$(urlencode "$q")"
+  log "open new session dest=$CLAUDE_DESTINATION chars=${#link}"
+  open "$link" 2>/dev/null
 }
 
 # --- 3. dispatch -------------------------------------------------------------
@@ -263,18 +276,15 @@ case "$ACTION" in
     if [ "$IMG" = "1" ]; then GO_Q="${CONTEXT}(image attached below)"$'\n\n'"(Right-click \"Go\": ${RESEARCH} Then do what's most useful and report.)"; fi
     open_new "$GO_Q" || { notify "Could not open Claude."; exit 1; }
     if [ "$DRY_RUN" = "1" ]; then [ "$IMG" = "1" ] && print -r -- "DRY_RUN would paste image"; print -r -- "DRY_RUN would submit + restore focus to $PRIOR"; exit 0; fi
-    # Auto-submit + focus restore only work with Claude Code (native app)
-    if [ "$CLAUDE_DESTINATION" = "code" ]; then
-      wait_for_claude || log "WARN Claude not frontmost"
-      sleep 0.8   # let input field populate + focus before submit
-      [ "$IMG" = "1" ] && { helper_paste; sleep 0.4; }
-      helper_return
-      sleep 0.25
-      case "$PRIOR" in
-        ""|"$CLAUDE_BUNDLE"|com.claudecommand.*) log "submitted (prior=${PRIOR:-none}; no restore)" ;;
-        *) helper_activate "$PRIOR"; log "submitted + restored focus to $PRIOR" ;;
-      esac
-    fi
+    wait_for_claude || log "WARN Claude not frontmost"
+    sleep 0.8   # let input field populate + focus before submit
+    [ "$IMG" = "1" ] && { helper_paste; sleep 0.4; }
+    helper_return
+    sleep 0.25
+    case "$PRIOR" in
+      ""|"$CLAUDE_BUNDLE"|com.claudecommand.*) log "submitted (prior=${PRIOR:-none}; no restore)" ;;
+      *) helper_activate "$PRIOR"; log "submitted + restored focus to $PRIOR" ;;
+    esac
     ;;
 
   comment)
@@ -288,20 +298,13 @@ case "$ACTION" in
     ;;
 
   add)
-    if [ "$CLAUDE_DESTINATION" != "code" ]; then
-      # Can't paste into a browser-based Claude — open new session instead
-      PAYLOAD="${CONTEXT}${SEL}"
-      [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would open new session (non-code dest)"; exit 0; }
-      open_new "$PAYLOAD"
-    elif [ "$IMG" = "1" ]; then
+    if [ "$IMG" = "1" ]; then
       [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would activate Claude + paste image into open chat"; exit 0; }
       helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
     else
       PAYLOAD="${CONTEXT}${SEL}"
       if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN would copy payload + paste into open Claude chat"; exit 0; fi
-      # Stamp clipboard attribution as our own app so clipwatch blocks this write from history.
-      /usr/bin/python3 -c "import json,time; open('${HOME}/.claude/state/last_copy.json','w').write(json.dumps({'bundle':'com.claudecommand','ts':time.time()}))" 2>/dev/null || true
-      printf '%s' "$PAYLOAD" | pbcopy
+      copy_for_send "$PAYLOAD" "$COPY_SOURCE"
       helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
     fi
     log "pasted into open Claude chat"
@@ -327,21 +330,20 @@ case "$ACTION" in
       PREFIX="${CONTEXT}"
     fi
     log "custom: session=${CUSTOM_SESSION:-new} submit=${CUSTOM_SUBMIT:-} src=${CUSTOM_INCLUDE_SOURCE:-1} img=$IMG sel_bytes=${#SEL}"
-    if [ "${CUSTOM_SESSION:-new}" = "add" ] && [ "$CLAUDE_DESTINATION" = "code" ]; then
+    if [ "${CUSTOM_SESSION:-new}" = "add" ]; then
       # Paste into existing open Claude Code chat
       if [ "$IMG" = "1" ]; then
         [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste image+prompt into open Claude"; exit 0; }
-        # Stamp so clipwatch doesn't record this write
-        /usr/bin/python3 -c "import json,time; open('${HOME}/.claude/state/last_copy.json','w').write(json.dumps({'bundle':'com.claudecommand','ts':time.time()}))" 2>/dev/null || true
-        printf '%s' "${PREFIX}${PAYLOAD}" | pbcopy
-        helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.5; helper_paste
+        # Image is still on the clipboard from the screenshot pre-step — paste it FIRST,
+        # then overwrite the clipboard with the text prompt. Reversing this order (text
+        # first) clobbers the image before it's ever pasted — the old bug here.
+        helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
         sleep 0.3
-        # Image is already on clipboard from the screenshot pre-step — paste it now
+        copy_for_send "${PREFIX}${PAYLOAD}" "$COPY_SOURCE"
         helper_paste
       else
         [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste into existing Claude"; exit 0; }
-        /usr/bin/python3 -c "import json,time; open('${HOME}/.claude/state/last_copy.json','w').write(json.dumps({'bundle':'com.claudecommand','ts':time.time()}))" 2>/dev/null || true
-        printf '%s' "${PREFIX}${PAYLOAD}" | pbcopy
+        copy_for_send "${PREFIX}${PAYLOAD}" "$COPY_SOURCE"
         helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.5; helper_paste
       fi
       if [ "${CUSTOM_SUBMIT:-}" = "go" ]; then sleep 0.3; agent_cmd return >/dev/null 2>&1 || true; fi

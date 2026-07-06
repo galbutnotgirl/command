@@ -66,7 +66,16 @@ BLOCK_BUNDLES = {
     "com.apple.keychainaccess", "com.apple.SecurityAgent",
     "com.1password.1password", "com.agilebits.onepassword7",
     "com.apple.wallet", "com.apple.Passwords",
-    "com.claudecommand",   # our own paste ops — never record clipboard writes we made
+    "com.claudecommand",   # truly-internal writes (e.g. Settings UI copy) — never recorded
+}
+
+# Sentinel bundles ClaudeCommand stamps onto its OWN clipboard writes, via last_copy.json,
+# so this watcher can tell "I just wrote this" apart from a real user copy — deterministically,
+# by exact NSPasteboard changeCount match (see read_copy_source), not a timing guess.
+# Each carries an `origin` tag for the picker's filter chips instead of a real source app.
+SELF_WRITE_ORIGIN = {
+    "com.claudecommand.dictation": "dictation",  # dictation insert/dictate-to-claude
+    "com.claudecommand.send": "sent",            # wrapped-prompt copy for a hotkey/custom action
 }
 
 # Screenshot apps dismiss before clipboard fires; we need recent frontmost history
@@ -133,24 +142,41 @@ def save_image(pb, path):
             if png: png.writeToFile_atomically_(path, True); return True
     return False
 
-def add_history(epoch, pb, bundle):
+def add_history(epoch, pb, bundle, origin=""):
     items = load_index()
     types = set(pb.types() or [])
     text = pb.stringForType_("public.utf8-plain-text") or pb.stringForType_("public.text")
     is_img = bool(types & {"public.png", "public.tiff"})
     if text and text.strip():
-        if items and items[0].get("type") == "text" and items[0].get("full") == text:
-            return  # dedup consecutive
+        if items and items[0].get("type") == "text":
+            same_text = items[0].get("full") == text
+            # A "sent" write (ClaudeCommand wrapping whatever you just copied — source
+            # prefix, research hint, a custom prompt template — before pasting it into
+            # Claude) is *always* a decorated version of the thing you just copied, even
+            # when the wrapped text no longer matches byte-for-byte. Recency is what ties
+            # them together, not content equality — merge into that row instead of
+            # inserting a second one, so "Add"/custom actions never produce two entries
+            # for what is, from your perspective, one action.
+            recently_ours = origin == "sent" and (epoch - items[0].get("ts", epoch)) < 5
+            if same_text or recently_ours:
+                if origin and items[0].get("origin") != origin:
+                    items[0]["origin"] = origin
+                    save_index(prune(items))
+                return
         fid = f"{epoch}.txt"
         with open(os.path.join(HIST, fid), "w") as f: f.write(text)
-        items.insert(0, {"id": str(epoch), "type": "text", "file": fid,
-                         "preview": text.strip().replace("\n", " ")[:PREVIEW_LEN],
-                         "full": text, "ts": epoch, "bundle": bundle})
+        item = {"id": str(epoch), "type": "text", "file": fid,
+                "preview": text.strip().replace("\n", " ")[:PREVIEW_LEN],
+                "full": text, "ts": epoch, "bundle": bundle}
+        if origin: item["origin"] = origin
+        items.insert(0, item)
     elif is_img:
         fid = f"{epoch}.png"
         if save_image(pb, os.path.join(HIST, fid)):
-            items.insert(0, {"id": str(epoch), "type": "image", "file": fid,
-                             "preview": "image", "ts": epoch, "bundle": bundle})
+            item = {"id": str(epoch), "type": "image", "file": fid,
+                    "preview": "image", "ts": epoch, "bundle": bundle}
+            if origin: item["origin"] = origin
+            items.insert(0, item)
         else:
             return
     else:
@@ -165,20 +191,36 @@ def alog(msg):
         with open(ATTR_LOG, "a") as f: f.write(line)
     except Exception: pass
 
-def read_copy_source():
+def read_copy_source(cc):
+    # cc = the NSPasteboard changeCount that was just observed. The stamp records the
+    # EXACT changeCount our own write produced — an exact match is proof positive it's
+    # ours, no timing guess involved. Falls back to the old age<1s heuristic only for
+    # stamps written before this field existed (shouldn't happen post-upgrade, but the
+    # file could in theory be mid-write from a version skew during an update).
     try:
         with open(COPY_SOURCE) as f:
             d = json.load(f)
         ts = float(d.get("ts", 0))
         b  = d.get("bundle", "")
+        stamped_cc = d.get("cc")
         age = time.time() - ts
+        if age > 5.0:
+            alog(f"read_copy_source → STALE (b={b!r} age={age:.1f}s) — ignoring")
+            return None
+        if stamped_cc is not None:
+            if b and stamped_cc == cc:
+                try: os.remove(COPY_SOURCE)
+                except Exception: pass
+                alog(f"read_copy_source → {b} (exact cc={cc}) ✓")
+                return b
+            alog(f"read_copy_source → cc mismatch (stamped={stamped_cc} actual={cc}) — not ours")
+            return None
         if b and age < 1.0:
             try: os.remove(COPY_SOURCE)
             except Exception: pass
-            alog(f"read_copy_source → {b} (age={age:.3f}s) ✓")
+            alog(f"read_copy_source → {b} (legacy age={age:.3f}s) ✓")
             return b
-        else:
-            alog(f"read_copy_source → EXPIRED/EMPTY (b={b!r} age={age:.1f}s)")
+        alog(f"read_copy_source → EXPIRED/EMPTY (b={b!r} age={age:.1f}s)")
     except FileNotFoundError:
         alog("read_copy_source → no file")
     except Exception as e:
@@ -212,11 +254,22 @@ def main():
             cc = pb.changeCount()
             if cc != last:
                 last = cc
-                copy_src = read_copy_source()
+                copy_src = read_copy_source(cc)
+                if copy_src is None and os.path.exists(COPY_SOURCE):
+                    # The stamp write (same-process, right after the pasteboard write in
+                    # the writer) can in rare cases still land a beat after our 25ms poll
+                    # wakes. Two quick re-checks absorb that jitter before we fall back
+                    # to frontmost-app guessing.
+                    for _ in range(2):
+                        time.sleep(0.015)
+                        copy_src = read_copy_source(cc)
+                        if copy_src is not None: break
                 if copy_src:
                     bundle = copy_src
+                    origin = SELF_WRITE_ORIGIN.get(bundle, "")
                     source_method = "last_copy.json"
                 else:
+                    origin = ""
                     # No Cmd+C intercept. Use best available attribution:
                     # 1. If frontmost app switched within last 500ms, the PREVIOUS app
                     #    likely did the copy (user copied then switched).
@@ -253,7 +306,7 @@ def main():
                 print(f"[clipwatch] change: bundle={bundle} via={source_method} blocked={blocked}", file=sys.stderr, flush=True)
                 write_meta(now, bundle, blocked)
                 if not blocked:
-                    try: add_history(now, pb, bundle)
+                    try: add_history(now, pb, bundle, origin)
                     except Exception as e: alog(f"add_history error: {e}")
             # Periodic prune so expired clips disappear without needing a new copy.
             if now - last_prune >= 60:

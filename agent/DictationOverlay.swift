@@ -80,26 +80,30 @@ final class DictationOverlay: NSObject {
     // MARK: - Dispatch final text
 
     private func dispatch(text: String, mode: DictMode) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        stampDictationSource(cc: pb.changeCount)   // after the write — exact cc, no race
+
         switch mode {
         case .insert:
-            stampDictationSource()
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
             if !prevBundle.isEmpty { activate(prevBundle); usleep(200_000) }
             postKey(kV, cmd: true)
 
         case .claude:
-            stampDictationSource()
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
             activate(CLAUDE_BUNDLE)
             usleep(300_000)
             postKey(kV, cmd: true)
         }
     }
 
-    private func stampDictationSource() {
-        let entry: [String: Any] = ["bundle": "com.claudecommand.dictation", "ts": Date().timeIntervalSince1970]
+    // Tags this write "com.claudecommand.dictation" — NOT in clipwatch's BLOCK_BUNDLES,
+    // so it's recorded (unlike the internal-only "com.claudecommand" sentinel) and
+    // shows up under the picker's "Dictated" filter. The exact changeCount (not just a
+    // timestamp) is what lets clipwatch match this deterministically to its own write.
+    private func stampDictationSource(cc: Int) {
+        let entry: [String: Any] = ["bundle": "com.claudecommand.dictation",
+                                     "ts": Date().timeIntervalSince1970, "cc": cc]
         if let d = try? JSONSerialization.data(withJSONObject: entry) {
             try? d.write(to: URL(fileURLWithPath: COPY_SOURCE_PATH))
         }

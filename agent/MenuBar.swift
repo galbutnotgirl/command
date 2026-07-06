@@ -154,28 +154,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     // The atom-orbital brand icon — two ellipses + nucleus dot, rendered as template.
+    // Shared with the clip picker (brandGlyph in main.swift) so the "Sent" filter and
+    // any ClaudeCommand-tagged history row show the exact same mark as the menu bar,
+    // not a lookalike SF Symbol or the full-color app icon.
     private func brandIcon() -> NSImage {
-        let h = NSStatusBar.system.thickness
-        let img = NSImage(size: NSSize(width: h, height: h), flipped: false) { full in
-            let rect = full.insetBy(dx: full.width * 0.09, dy: full.height * 0.09)
-            let mid = NSPoint(x: rect.midX, y: rect.midY)
-            let s = rect.width
-            NSColor.black.setFill(); NSColor.black.setStroke()
-            let rw = s * 0.92, rh = s * 0.56
-            let lw = max(1.0, s * 0.05)
-            for deg in [28.0, -28.0] {
-                let oval = NSBezierPath(ovalIn: NSRect(x: -rw / 2, y: -rh / 2, width: rw, height: rh))
-                var t = AffineTransform(translationByX: mid.x, byY: mid.y)
-                t.rotate(byDegrees: CGFloat(deg))
-                oval.transform(using: t)
-                oval.lineWidth = lw; oval.stroke()
-            }
-            let dot = s * 0.17
-            NSBezierPath(ovalIn: NSRect(x: mid.x - dot/2, y: mid.y - dot/2, width: dot, height: dot)).fill()
-            return true
-        }
-        img.isTemplate = true
-        return img
+        brandGlyph(size: NSStatusBar.system.thickness)
     }
 
     func hideIcon() {
