@@ -10,7 +10,7 @@ import AVFoundation
 // Repo URL lives in Updater.swift (GITHUB_REPO_URL) as the single source of truth.
 
 enum SettingsTab: Equatable {
-    case setup, shortcuts, history
+    case setup, shortcuts, history, templates
     case dictHistory, dictCorrections, dictVocabulary, dictSettings
     case about
 }
@@ -211,6 +211,7 @@ struct SettingsRootView: View {
         VStack(alignment: .leading, spacing: 4) {
             tabButton(.setup, "Set Up", "checklist")
             tabButton(.shortcuts, "Shortcuts", "keyboard")
+            tabButton(.templates, "Templates", "doc.text.below.ecg")
             tabButton(.history, "Clipboard History", "clock.arrow.circlepath")
 
             Divider().padding(.vertical, 4)
@@ -258,6 +259,7 @@ struct SettingsRootView: View {
         switch model.tab {
         case .setup:           SetupView(model: model)
         case .shortcuts:       ShortcutsView(model: model)
+        case .templates:       TemplatesView()
         case .history:         HistoryView()
         case .dictHistory:     DictHistoryView()
         case .dictCorrections: DictCorrectionsView()
@@ -734,6 +736,130 @@ struct CustomActionSheet: View {
                 sessionMode = e.sessionMode; includeSource = e.includeSource
             }
         }
+    }
+}
+
+// ---- Templates: pre/post wrapping for go/comment/add + auto-context rules ---
+
+struct TemplatesView: View {
+    @StateObject private var model = TemplatesModel()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Templates").font(.title2).bold()
+                Text("Text auto-inserted around the selection for Go / New / Add, plus the per-app context hints Go uses to research before acting. Defaults are shown below — edit anything, or Reset to go back.")
+                    .foregroundColor(.secondary)
+
+                ForEach(model.templates) { t in
+                    CommandTemplateBox(template: t, model: model)
+                }
+
+                Divider().padding(.vertical, 4)
+
+                HStack {
+                    Text("Auto-Context Rules").font(.headline)
+                    Spacer()
+                    Button("Reset All to Default") { model.resetRulesToDefault() }
+                        .buttonStyle(.plain).font(.caption).foregroundColor(.secondary)
+                    Button(action: { model.addRule() }) {
+                        Label("Add", systemImage: "plus.circle")
+                    }
+                }
+                Text("When \"Go\" fires, the matching rule below is woven into its research instruction — e.g. \"this is from Slack, use the Slack MCP.\" Matched by app bundle ID, app name, or URL host (supports leading \"*.\" glob). Use {url} in the text to insert the source URL.")
+                    .font(.caption).foregroundColor(.secondary)
+
+                VStack(spacing: 0) {
+                    ForEach(model.rules) { rule in
+                        EnrichRuleRow(rule: rule, model: model)
+                        Divider()
+                    }
+                }
+            }
+            .padding(24)
+        }
+    }
+}
+
+struct CommandTemplateBox: View {
+    let template: CommandTemplate
+    @ObservedObject var model: TemplatesModel
+    @State private var pre: String = ""
+    @State private var post: String = ""
+
+    var body: some View {
+        GroupBox(label: HStack {
+            Text(actionName(template.action)).bold()
+            Text(actionDetail(template.action)).font(.caption).foregroundColor(.secondary)
+            Spacer()
+            Button("Reset") {
+                model.resetTemplate(action: template.action)
+                pre = model.templates.first { $0.action == template.action }?.pre ?? ""
+                post = model.templates.first { $0.action == template.action }?.post ?? ""
+            }
+            .buttonStyle(.plain).font(.caption).foregroundColor(.secondary)
+        }) {
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Before selection").font(.caption).foregroundColor(.secondary)
+                    TextField("(nothing)", text: $pre)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 12, design: .monospaced))
+                        .onChange(of: pre) { _, v in model.setTemplate(action: template.action, pre: v) }
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(template.action == "go" ? "After selection — {research} inserts the auto-context line" : "After selection")
+                        .font(.caption).foregroundColor(.secondary)
+                    TextEditor(text: $post)
+                        .font(.system(size: 12, design: .monospaced))
+                        .frame(minHeight: 50)
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
+                        .onChange(of: post) { _, v in model.setTemplate(action: template.action, post: v) }
+                }
+            }
+            .padding(.vertical, 6)
+        }
+        .onAppear { pre = template.pre; post = template.post }
+    }
+}
+
+struct EnrichRuleRow: View {
+    let rule: EnrichRule
+    @ObservedObject var model: TemplatesModel
+    @State private var pattern: String = ""
+    @State private var text: String = ""
+    @State private var match: EnrichMatchType = .host
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Picker("", selection: $match) {
+                    ForEach(EnrichMatchType.allCases) { m in Text(m.label).tag(m) }
+                }
+                .labelsHidden()
+                .frame(width: 130)
+                .onChange(of: match) { _, v in
+                    var r = rule; r.match = v; model.updateRule(r)
+                }
+                TextField("pattern (e.g. *.atlassian.net)", text: $pattern)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12, design: .monospaced))
+                    .onChange(of: pattern) { _, v in
+                        var r = rule; r.pattern = v; model.updateRule(r)
+                    }
+                Button { model.removeRule(id: rule.id) } label: {
+                    Image(systemName: "minus.circle").foregroundColor(.red)
+                }.buttonStyle(.plain)
+            }
+            TextField("Context hint sent to Claude", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12))
+                .onChange(of: text) { _, v in
+                    var r = rule; r.text = v; model.updateRule(r)
+                }
+        }
+        .padding(.vertical, 6)
+        .onAppear { pattern = rule.pattern; text = rule.text; match = rule.match }
     }
 }
 
@@ -1342,10 +1468,20 @@ struct SelectableText: NSViewRepresentable {
     }
 }
 
+// Captures fullText + preselected together at the moment the wand is tapped, so
+// .sheet(item:) always presents with the selection that was live on click — no
+// race against SwiftUI re-rendering selectedText out from under a separate
+// isPresented flag.
+private struct CorrectionRequest: Identifiable {
+    let id = UUID()
+    let fullText: String
+    let preselected: String
+}
+
 struct HistoryEntryRow: View {
     let entry: HistoryStore.Record
     @ObservedObject private var hist: HistoryStore = .shared
-    @State private var showCorrection = false
+    @State private var correctionRequest: CorrectionRequest? = nil
     @State private var selectedText = ""
 
     var body: some View {
@@ -1364,7 +1500,9 @@ struct HistoryEntryRow: View {
                 } label: { Image(systemName: "doc.on.doc").font(.caption) }
                 .buttonStyle(.plain).help("Copy")
 
-                Button { showCorrection = true } label: {
+                Button {
+                    correctionRequest = CorrectionRequest(fullText: entry.processed, preselected: selectedText)
+                } label: {
                     Image(systemName: "wand.and.sparkles").font(.caption)
                 }.buttonStyle(.plain).help("Add correction — select a word first, then click")
 
@@ -1374,14 +1512,16 @@ struct HistoryEntryRow: View {
             }
             SelectableText(text: entry.processed, selection: $selectedText)
             if entry.processed != entry.raw {
-                Text("Raw: \(entry.raw)").font(.caption2).foregroundColor(.secondary).lineLimit(2)
+                Text("Raw: \(entry.raw)").font(.caption2).foregroundColor(.secondary)
             }
         }
         .padding(.vertical, 6)
-        .sheet(isPresented: $showCorrection) {
-            DictCorrectionSheet(fullText: entry.processed,
-                                preselected: selectedText,
-                                isPresented: $showCorrection)
+        .sheet(item: $correctionRequest) { req in
+            DictCorrectionSheet(fullText: req.fullText,
+                                preselected: req.preselected,
+                                isPresented: Binding(
+                                    get: { correctionRequest != nil },
+                                    set: { if !$0 { correctionRequest = nil } }))
         }
     }
 }
@@ -1400,14 +1540,17 @@ struct DictCorrectionSheet: View {
             Text("Add Correction").font(.headline)
 
             Text("From dictation:").font(.caption).foregroundColor(.secondary)
-            Text(fullText)
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-                .lineLimit(4)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.secondary.opacity(0.07))
-                .cornerRadius(6)
+            ScrollView {
+                Text(fullText)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .textSelection(.enabled)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 120)
+            .background(Color.secondary.opacity(0.07))
+            .cornerRadius(6)
 
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {

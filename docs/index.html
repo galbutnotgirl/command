@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Command — macOS hotkeys for Claude</title>
+<style>
+:root {
+  --bg: #0D0B15;
+  --surface: #131122;
+  --surface-raised: #1A1730;
+  --border: #21203A;
+  --border-light: #2C2848;
+  --text: #E4DFEF;
+  --muted: #9896C2;
+  --dimmer: #7A76A8;
+  --accent: #9278F2;
+  --accent-glow: rgba(146,120,242,0.16);
+  --accent-dim: rgba(146,120,242,0.09);
+  --green: #4ADE80;
+  --blue: #60A5FA;
+  --orange: #FB923C;
+  --mono: 'Courier New', 'Courier', 'Lucida Console', monospace;
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+#noise-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.028;
+  z-index: 0;
+}
+
+.wrap {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 28px;
+  position: relative;
+  z-index: 1;
+}
+
+section { padding: 96px 0; }
+section + section { border-top: 1px solid var(--border); }
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+h2 {
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 600;
+  line-height: 1.25;
+  text-wrap: balance;
+  margin-bottom: 14px;
+}
+
+p.lead {
+  font-size: 17px;
+  color: var(--muted);
+  line-height: 1.7;
+  max-width: 56ch;
+}
+
+/* ── KEY BADGE ── */
+.key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--text);
+  background: linear-gradient(160deg, #1E1B2E 0%, #17152A 100%);
+  border: 1px solid #2C2842;
+  border-bottom-color: #0C0A18;
+  border-radius: 7px;
+  padding: 6px 11px;
+  min-width: 44px;
+  box-shadow:
+    0 1px 0 0 rgba(255,255,255,0.06) inset,
+    0 -1px 0 0 rgba(0,0,0,0.5) inset,
+    0 3px 0 0 #08061A,
+    0 4px 8px rgba(0,0,0,0.45);
+  transition: transform 80ms ease, box-shadow 80ms ease;
+  user-select: none;
+  white-space: nowrap;
+}
+.key:active, .key.pressed {
+  transform: translateY(2px);
+  box-shadow:
+    0 1px 0 0 rgba(255,255,255,0.04) inset,
+    0 -1px 0 0 rgba(0,0,0,0.5) inset,
+    0 1px 0 0 #08061A,
+    0 2px 4px rgba(0,0,0,0.35);
+}
+.key.unbound {
+  color: var(--dimmer);
+  border-color: rgba(82,78,122,0.4);
+  background: linear-gradient(160deg, #161424 0%, #120F22 100%);
+  box-shadow:
+    0 1px 0 0 rgba(255,255,255,0.03) inset,
+    0 -1px 0 0 rgba(0,0,0,0.5) inset,
+    0 3px 0 0 #070514,
+    0 4px 8px rgba(0,0,0,0.35);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+/* ── HERO ── */
+.hero {
+  padding: 100px 0 80px;
+  border-bottom: 1px solid var(--border);
+}
+
+.hero-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 52px;
+  align-items: center;
+}
+
+.hero-keys .key {
+  font-size: 15px;
+  padding: 8px 14px;
+  min-width: 54px;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.4s ease, transform 0.4s ease, box-shadow 80ms ease;
+}
+.hero-keys .key.visible { opacity: 1; transform: translateY(0); }
+
+.hero-sep {
+  width: 1px;
+  height: 28px;
+  background: var(--border-light);
+  margin: 0 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.hero-sep.visible { opacity: 1; }
+
+.hero-headline {
+  font-family: var(--mono);
+  font-size: clamp(36px, 5.5vw, 58px);
+  font-weight: bold;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  margin-bottom: 20px;
+  color: var(--text);
+}
+
+.hero-sub {
+  font-size: 19px;
+  color: var(--muted);
+  max-width: 52ch;
+  line-height: 1.65;
+  margin-bottom: 36px;
+}
+
+.hero-ctas {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent);
+  color: #0C0C10;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 11px 22px;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: opacity 0.15s;
+  letter-spacing: 0.01em;
+}
+.btn-primary:hover { opacity: 0.88; }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+  padding: 11px 0;
+  text-decoration: none;
+  transition: color 0.15s;
+  letter-spacing: 0.01em;
+}
+.btn-ghost:hover { color: var(--text); }
+
+/* ── MOCKUPS ── */
+.mockups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 52px;
+}
+
+.mockup-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.mockup-card.visible { opacity: 1; transform: translateY(0); }
+
+.mockup-chrome {
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dot { width: 9px; height: 9px; border-radius: 50%; }
+.dot-r { background: #FF5F57; }
+.dot-y { background: #FEBC2E; }
+.dot-g { background: #28C840; }
+.chrome-title {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: auto;
+  margin-right: auto;
+  font-family: var(--sans);
+  transform: translateX(-18px);
+}
+
+.mockup-body { padding: 20px; min-height: 200px; }
+
+/* Clipboard picker */
+.clip-picker {
+  background: #18152A;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.clip-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+.search-icon { color: var(--dimmer); font-size: 12px; }
+.search-input-fake { font-size: 12px; color: var(--muted); font-family: var(--sans); }
+.search-cursor {
+  display: inline-block;
+  width: 1px;
+  height: 13px;
+  background: var(--accent);
+  margin-left: 2px;
+  vertical-align: middle;
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+.clip-item {
+  padding: 9px 12px;
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.clip-item:last-child { border-bottom: none; }
+.clip-item.selected { background: var(--accent-dim); color: var(--accent); }
+.clip-time { color: var(--dimmer); font-size: 10px; flex-shrink: 0; }
+.clip-text { overflow: hidden; text-overflow: ellipsis; }
+
+/* Menu bar mockup */
+.menubar-mockup { display: flex; flex-direction: column; gap: 1px; }
+.menu-item {
+  display: flex;
+  align-items: center;
+  padding: 7px 12px;
+  font-size: 13px;
+  border-radius: 5px;
+  gap: 10px;
+}
+.menu-item.active { background: var(--accent); color: #0C0C10; }
+.menu-item:not(.active) { color: var(--text); }
+.menu-key {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.65;
+}
+.menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 8px;
+}
+.menu-label {
+  padding: 5px 12px 2px;
+  font-size: 10px;
+  font-family: var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+}
+
+/* ── ACTIONS GRID ── */
+.actions-group-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  margin: 32px 0 10px;
+}
+.actions-group-label:first-of-type { margin-top: 48px; }
+
+.actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.action-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 22px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.4s ease, transform 0.4s ease, border-color 0.2s;
+}
+.action-card.visible { opacity: 1; transform: translateY(0); }
+.action-card:hover { border-color: var(--border-light); }
+.action-card.span2 { grid-column: span 2; }
+
+.action-key-col { flex-shrink: 0; padding-top: 2px; }
+.action-info h3 { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+.action-info p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.action-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid rgba(124,92,240,0.2);
+  border-radius: 4px;
+  padding: 2px 7px;
+  margin-top: 6px;
+}
+.action-tag.green {
+  color: var(--green);
+  background: rgba(74,222,128,0.08);
+  border-color: rgba(74,222,128,0.2);
+}
+.action-tag.blue {
+  color: var(--blue);
+  background: rgba(96,165,250,0.08);
+  border-color: rgba(96,165,250,0.2);
+}
+
+/* ── HOW IT WORKS ── */
+.flow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  gap: 0;
+  align-items: center;
+  margin-top: 52px;
+}
+
+.flow-step {
+  text-align: center;
+  padding: 28px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.flow-step.visible { opacity: 1; transform: translateY(0); }
+
+.flow-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(124,92,240,0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px;
+  font-size: 22px;
+}
+
+.flow-step h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+.flow-step p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+.flow-arrow {
+  padding: 0 8px;
+  color: var(--border-light);
+  font-size: 22px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.4s ease 0.4s;
+}
+.flow-arrow.visible { opacity: 1; }
+
+/* ── SMART CONTEXT ── */
+.context-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 48px;
+}
+
+.context-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.4s ease, transform 0.4s ease, border-color 0.2s;
+}
+.context-card.visible { opacity: 1; transform: translateY(0); }
+.context-card:hover { border-color: var(--border-light); }
+
+.context-source-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.context-card h3 { font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+.context-card p { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* ── TIME SAVINGS ── */
+.comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 48px;
+}
+
+.compare-col {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.compare-col.visible { opacity: 1; transform: translateY(0); }
+.compare-col.good {
+  border-color: rgba(124,92,240,0.25);
+  background: var(--accent-dim);
+}
+
+.compare-label {
+  font-size: 11px;
+  font-family: var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  margin-bottom: 18px;
+}
+.compare-col.good .compare-label { color: var(--accent); }
+
+.compare-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
+}
+.compare-step:last-of-type { border-bottom: none; }
+
+.step-time {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dimmer);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.compare-col.good .step-time { color: var(--accent); }
+
+.compare-total {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.total-label { font-size: 12px; color: var(--dimmer); font-family: var(--mono); }
+.total-time {
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+  color: var(--dimmer);
+}
+.compare-col.good .total-time { color: var(--accent); }
+
+/* ── INSTALL ── */
+.install-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 48px;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.install-block.visible { opacity: 1; transform: translateY(0); }
+
+.install-header {
+  padding: 12px 18px;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.install-header span {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.install-code {
+  padding: 22px 24px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 2;
+  overflow-x: auto;
+}
+
+.code-comment { color: var(--dimmer); }
+.code-prompt { color: var(--accent); }
+.code-cmd { color: var(--text); }
+
+.install-reqs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-top: 1px solid var(--border);
+}
+.install-req {
+  padding: 14px 18px;
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--muted);
+}
+.install-req strong { display: block; color: var(--text); font-size: 13px; margin-bottom: 2px; }
+
+/* ── DOWNLOAD ── */
+.download-block {
+  margin-top: 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  align-items: flex-start;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.download-block.visible { opacity: 1; transform: translateY(0); }
+
+.btn-download {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-items: center;
+  text-decoration: none;
+  background: var(--accent);
+  color: #0D0B15;
+  padding: 16px 26px;
+  border-radius: 12px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  box-shadow: 0 6px 22px rgba(124,92,240,0.28);
+}
+.btn-download:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(124,92,240,0.4); }
+.btn-download svg { grid-row: 1 / 3; }
+.dl-label { font-size: 18px; font-weight: 700; letter-spacing: 0.01em; }
+.dl-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.7;
+  letter-spacing: 0.02em;
+}
+
+.dl-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 56ch;
+}
+.dl-steps li {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  font-size: 15px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.dl-steps strong { color: var(--text); font-weight: 600; }
+.dl-num {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  border: 1px solid rgba(124,92,240,0.3);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dl-foot {
+  margin-top: 28px;
+  font-size: 13px;
+  color: var(--dimmer);
+  font-family: var(--mono);
+}
+
+/* ── FOOTER ── */
+.footer {
+  padding: 72px 0;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+.footer-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+.footer-headline {
+  font-family: var(--mono);
+  font-size: clamp(24px, 3.5vw, 36px);
+  font-weight: bold;
+  margin-bottom: 32px;
+  color: var(--text);
+}
+.footer-links {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 640px) {
+  .wrap { padding: 0 20px; }
+  section { padding: 64px 0; }
+  .hero { padding: 72px 0 56px; }
+  .mockups, .actions-grid, .comparison, .context-grid { grid-template-columns: 1fr; }
+  .flow { grid-template-columns: 1fr; }
+  .flow-arrow { display: none; }
+  .install-reqs { grid-template-columns: 1fr; }
+  .hero-headline { letter-spacing: -0.01em; }
+  .action-card.span2 { grid-column: span 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="noise-canvas" aria-hidden="true"></canvas>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="wrap">
+
+    <div class="hero-keys" id="heroKeys" aria-label="Hotkeys: F8 groups, F7 groups, F6 groups">
+      <span class="key" data-delay="0">F8</span>
+      <span class="key" data-delay="80">⌘F8</span>
+      <span class="key" data-delay="160">⌥F8</span>
+      <div class="hero-sep" data-sep></div>
+      <span class="key" data-delay="280">F7</span>
+      <span class="key" data-delay="360">⌘F7</span>
+      <span class="key" data-delay="440">⌥F7</span>
+      <div class="hero-sep" data-sep></div>
+      <span class="key" data-delay="560">F6</span>
+      <span class="key" data-delay="640">⌘F6</span>
+    </div>
+
+    <h1 class="hero-headline">Your Mac.<br>Direct line to Claude.</h1>
+    <p class="hero-sub">Nine global hotkeys. Select text or capture a screenshot in any app, press a key, and Claude has it — with full context about where it came from. No window switching. No copy-paste dance.</p>
+
+    <div class="hero-ctas">
+      <a href="https://github.com/galbutnotgirl/claude-command/releases/latest" class="btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z"/>
+        </svg>
+        Download for macOS
+      </a>
+      <a href="https://github.com/galbutnotgirl/claude-command" class="btn-ghost">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+        View on GitHub
+      </a>
+    </div>
+
+  </div>
+</div>
+
+<!-- IN ACTION (mockups) -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow">In action</p>
+    <h2>Native macOS feel,<br>Claude's full power.</h2>
+    <p class="lead">Claude Command lives in the menu bar. One Accessibility grant powers every hotkey, clipboard capture, and paste — no per-app setup.</p>
+
+    <div class="mockups">
+
+      <!-- Clipboard picker -->
+      <div class="mockup-card" data-reveal>
+        <div class="mockup-chrome">
+          <span class="dot dot-r"></span>
+          <span class="dot dot-y"></span>
+          <span class="dot dot-g"></span>
+          <span class="chrome-title">Clipboard History — F6</span>
+        </div>
+        <div class="mockup-body">
+          <div class="clip-picker">
+            <div class="clip-search">
+              <span class="search-icon">⌕</span>
+              <span class="search-input-fake">Search clips<span class="search-cursor"></span></span>
+            </div>
+            <div class="clip-item selected">
+              <span class="clip-text">Update the API endpoint to v3 and add error handling…</span>
+              <span class="clip-time">now</span>
+            </div>
+            <div class="clip-item">
+              <span class="clip-text">const response = await fetch('/api/sessions', {</span>
+              <span class="clip-time">2m</span>
+            </div>
+            <div class="clip-item">
+              <span class="clip-text">gal@contentstack.com</span>
+              <span class="clip-time">8m</span>
+            </div>
+            <div class="clip-item">
+              <span class="clip-text">https://github.com/anthropics/anthropic-sdk-python</span>
+              <span class="clip-time">14m</span>
+            </div>
+            <div class="clip-item">
+              <span class="clip-text">Phase 01 — Full Python package scaffold</span>
+              <span class="clip-time">1h</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Menu bar mockup -->
+      <div class="mockup-card" data-reveal style="transition-delay: 0.1s">
+        <div class="mockup-chrome">
+          <span class="dot dot-r"></span>
+          <span class="dot dot-y"></span>
+          <span class="dot dot-g"></span>
+          <span class="chrome-title">Claude Command — Menu</span>
+        </div>
+        <div class="mockup-body">
+          <div class="menubar-mockup">
+            <div class="menu-label">Text</div>
+            <div class="menu-item active">
+              <span>Comment</span>
+              <span class="menu-key">F8</span>
+            </div>
+            <div class="menu-item">
+              <span>Go</span>
+              <span class="menu-key">⌘F8</span>
+            </div>
+            <div class="menu-item">
+              <span>Add to Chat</span>
+              <span class="menu-key">⌥F8</span>
+            </div>
+            <div class="menu-sep"></div>
+            <div class="menu-label">Screenshot</div>
+            <div class="menu-item">
+              <span>Screenshot Comment</span>
+              <span class="menu-key">F7</span>
+            </div>
+            <div class="menu-item">
+              <span>Screenshot Go</span>
+              <span class="menu-key">⌘F7</span>
+            </div>
+            <div class="menu-item">
+              <span>Screenshot Add</span>
+              <span class="menu-key">⌥F7</span>
+            </div>
+            <div class="menu-sep"></div>
+            <div class="menu-item">
+              <span>Clipboard History</span>
+              <span class="menu-key">F6</span>
+            </div>
+            <div class="menu-item">
+              <span>To-Do</span>
+              <span class="menu-key">⌘F6</span>
+            </div>
+            <div class="menu-sep"></div>
+            <div class="menu-item">
+              <span>Settings</span>
+              <span class="menu-key">⌘,</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ACTIONS -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Commands</p>
+    <h2>Every action, zero interruptions.</h2>
+    <p class="lead">Built-in bindings use the F-key row. Rebind any action in Settings → Shortcuts, or disable ones you don't need. Dictation and Handoff start unbound.</p>
+
+    <p class="actions-group-label">Text</p>
+    <div class="actions-grid">
+      <div class="action-card" data-reveal>
+        <div class="action-key-col"><span class="key">F8</span></div>
+        <div class="action-info">
+          <h3>Comment</h3>
+          <p>Opens a new Claude session with your selection pre-filled. Focus stays in Claude so you can add context before submitting.</p>
+        </div>
+      </div>
+      <div class="action-card" data-reveal style="transition-delay:.05s">
+        <div class="action-key-col"><span class="key">⌘F8</span></div>
+        <div class="action-info">
+          <h3>Go</h3>
+          <p>Sends your selection to Claude and auto-submits. Focus returns to your previous app immediately after.</p>
+        </div>
+      </div>
+      <div class="action-card" data-reveal style="transition-delay:.1s">
+        <div class="action-key-col"><span class="key">⌥F8</span></div>
+        <div class="action-info">
+          <h3>Add to Chat</h3>
+          <p>Pastes your selection into the already-open Claude conversation. Great for feeding additional context mid-thread.</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="actions-group-label">Screenshot</p>
+    <div class="actions-grid">
+      <div class="action-card" data-reveal>
+        <div class="action-key-col"><span class="key">F7</span></div>
+        <div class="action-info">
+          <h3>Screenshot Comment</h3>
+          <p>Drag to capture any area or press Space for a window. Image lands in a new Claude session; you add a note.</p>
+        </div>
+      </div>
+      <div class="action-card" data-reveal style="transition-delay:.05s">
+        <div class="action-key-col"><span class="key">⌘F7</span></div>
+        <div class="action-info">
+          <h3>Screenshot Go</h3>
+          <p>Capture → auto-submit. Claude gets the image instantly. Focus returns when it starts responding.</p>
+        </div>
+      </div>
+      <div class="action-card" data-reveal style="transition-delay:.1s">
+        <div class="action-key-col"><span class="key">⌥F7</span></div>
+        <div class="action-info">
+          <h3>Screenshot Add</h3>
+          <p>Captures and pastes the screenshot into your already-open Claude chat. No new session opened.</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="actions-group-label">Utilities</p>
+    <div class="actions-grid">
+      <div class="action-card" data-reveal>
+        <div class="action-key-col"><span class="key">F6</span></div>
+        <div class="action-info">
+          <h3>Clipboard History</h3>
+          <p>Floating picker — type to search, ↑/↓ to select, ⏎ to paste, ⌘⏎ to paste and stay open. Configurable retention.</p>
+        </div>
+      </div>
+      <div class="action-card" data-reveal style="transition-delay:.05s">
+        <div class="action-key-col"><span class="key">⌘F6</span></div>
+        <div class="action-info">
+          <h3>To-Do</h3>
+          <p>Native popup that routes straight to your intake hook. No Claude session opened — just fast capture.</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="actions-group-label">Dictation — unbound by default</p>
+    <div class="actions-grid">
+      <div class="action-card" data-reveal>
+        <div class="action-key-col"><span class="key unbound">bind in settings</span></div>
+        <div class="action-info">
+          <h3>Dictate</h3>
+          <p>Speak to insert text at your cursor. Live transcription, auto-stops on silence. Optional Whisper refinement for accuracy.</p>
+          <span class="action-tag blue">OPTIONAL</span>
+        </div>
+      </div>
+      <div class="action-card" data-reveal style="transition-delay:.05s">
+        <div class="action-key-col"><span class="key unbound">bind in settings</span></div>
+        <div class="action-info">
+          <h3>Dictate → Claude</h3>
+          <p>Speak to open a new Claude session with your words. Dictation ends on silence; session opens pre-filled.</p>
+          <span class="action-tag blue">OPTIONAL</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="actions-group-label">Skill Handoff — unbound by default</p>
+    <div class="actions-grid">
+      <div class="action-card" data-reveal>
+        <div class="action-key-col"><span class="key unbound">bind in settings</span></div>
+        <div class="action-info">
+          <h3>Skill Handoff</h3>
+          <p>Routes your selection to a named Claude skill via <code style="font-size:11px;color:var(--accent)">claude -p</code> in the background. No Claude window opens. Shows a notification when done; logs stay in menu bar → Handoffs.</p>
+          <span class="action-tag green">BACKGROUND</span>
+        </div>
+      </div>
+      <div class="action-card" data-reveal style="transition-delay:.05s">
+        <div class="action-key-col"><span class="key unbound">bind in settings</span></div>
+        <div class="action-info">
+          <h3>Screenshot Handoff</h3>
+          <p>Capture a region or window → routed to your skill in the background. Same durable submission record as text handoff.</p>
+          <span class="action-tag green">BACKGROUND</span>
+        </div>
+      </div>
+      <div class="action-card" data-reveal style="transition-delay:.1s">
+        <div class="action-key-col"><span class="key unbound">bind in settings</span></div>
+        <div class="action-info">
+          <h3>Text Handoff</h3>
+          <p>Floating text-entry panel. Type, hit ⌘⏎, and the text goes straight to your skill — no clipboard needed.</p>
+          <span class="action-tag green">BACKGROUND</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how-it-works">
+  <div class="wrap">
+    <p class="eyebrow">How it works</p>
+    <h2>Three steps. Under a second.</h2>
+    <p class="lead">Claude Command runs as a background agent. It listens for hotkeys system-wide and handles clipboard capture, context enrichment, focus switching, and the Claude session lifecycle.</p>
+
+    <div class="flow">
+      <div class="flow-step" data-reveal>
+        <div class="flow-icon">✦</div>
+        <h3>Select in any app</h3>
+        <p>Highlight text — in a doc, a browser, a terminal, anywhere on your Mac.</p>
+      </div>
+      <div class="flow-arrow" data-reveal>→</div>
+      <div class="flow-step" data-reveal style="transition-delay:.15s">
+        <div class="flow-icon">⌨</div>
+        <h3>Press your hotkey</h3>
+        <p>F8 to comment. ⌘F8 to go. F7 to capture. Your muscle memory, your keys.</p>
+      </div>
+      <div class="flow-arrow" data-reveal style="transition-delay:.2s">→</div>
+      <div class="flow-step" data-reveal style="transition-delay:.3s">
+        <div class="flow-icon">◈</div>
+        <h3>Claude has it. You're back.</h3>
+        <p>Selection lands in Claude with source context attached. Go mode auto-submits and returns focus.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SMART CONTEXT -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Smart Context</p>
+    <h2>Claude knows where it came from.</h2>
+    <p class="lead">When you copy from Slack, Gmail, Jira, Google Docs, Gong, or Salesforce, Claude Command automatically tells Claude the source and which MCP to use. No extra typing. Configure your own rules in Settings → Enrichment.</p>
+
+    <div class="context-grid">
+      <div class="context-card" data-reveal>
+        <div class="context-source-icon">💬</div>
+        <div>
+          <h3>Slack</h3>
+          <p>Finds the exact message via Slack MCP, pulls the channel, thread permalink, author, and surrounding context.</p>
+        </div>
+      </div>
+      <div class="context-card" data-reveal style="transition-delay:.05s">
+        <div class="context-source-icon">📧</div>
+        <div>
+          <h3>Gmail</h3>
+          <p>Locates the source thread for full email context — not just the snippet you copied.</p>
+        </div>
+      </div>
+      <div class="context-card" data-reveal style="transition-delay:.1s">
+        <div class="context-source-icon">🟦</div>
+        <div>
+          <h3>Jira / Confluence</h3>
+          <p>Uses the Atlassian MCP to pull the referenced issue or page before Claude responds.</p>
+        </div>
+      </div>
+      <div class="context-card" data-reveal style="transition-delay:.15s">
+        <div class="context-source-icon">📄</div>
+        <div>
+          <h3>Google Docs &amp; Drive</h3>
+          <p>Reads the full document via gws before acting — never works from a truncated copy.</p>
+        </div>
+      </div>
+      <div class="context-card" data-reveal style="transition-delay:.2s">
+        <div class="context-source-icon">🎙</div>
+        <div>
+          <h3>Gong</h3>
+          <p>Pulls the related call transcript via the Gong MCP to ground Claude in the full conversation.</p>
+        </div>
+      </div>
+      <div class="context-card" data-reveal style="transition-delay:.25s">
+        <div class="context-source-icon">☁️</div>
+        <div>
+          <h3>Salesforce</h3>
+          <p>Fetches the related record — account, opportunity, case — before Claude answers about it.</p>
+        </div>
+      </div>
+      <div class="context-card" data-reveal style="transition-delay:.3s;grid-column:span 2">
+        <div class="context-source-icon">＋</div>
+        <div>
+          <h3>Add your own</h3>
+          <p>Match by bundle ID, URL host (glob), or app name. Write the enrichment text Claude sees. Settings → Enrichment.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHY IT MATTERS -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Why it matters</p>
+    <h2>The friction is real.</h2>
+    <p class="lead">Switching context to ask Claude something — even quickly — breaks your flow. Claude Command eliminates that gap entirely.</p>
+
+    <div class="comparison">
+      <div class="compare-col" data-reveal>
+        <div class="compare-label">Without Claude Command</div>
+        <div class="compare-step">
+          <span>Switch to Claude app or browser tab</span>
+          <span class="step-time">3–5 s</span>
+        </div>
+        <div class="compare-step">
+          <span>Switch back, select, copy text</span>
+          <span class="step-time">4–8 s</span>
+        </div>
+        <div class="compare-step">
+          <span>Switch to Claude, paste, type prompt</span>
+          <span class="step-time">5–10 s</span>
+        </div>
+        <div class="compare-step">
+          <span>Submit, wait, read, switch back</span>
+          <span class="step-time">3–6 s</span>
+        </div>
+        <div class="compare-total">
+          <span class="total-label">TOTAL FRICTION</span>
+          <span class="total-time">~20 s</span>
+        </div>
+      </div>
+
+      <div class="compare-col good" data-reveal style="transition-delay:.1s">
+        <div class="compare-label">With Claude Command</div>
+        <div class="compare-step">
+          <span>Select text (already selected)</span>
+          <span class="step-time">0 s</span>
+        </div>
+        <div class="compare-step">
+          <span>Press ⌘F8 (Go)</span>
+          <span class="step-time">0.1 s</span>
+        </div>
+        <div class="compare-step">
+          <span>Claude opens, text submitted, context attached</span>
+          <span class="step-time">0.4 s</span>
+        </div>
+        <div class="compare-step">
+          <span>Focus returns automatically</span>
+          <span class="step-time">0 s</span>
+        </div>
+        <div class="compare-total">
+          <span class="total-label">TOTAL FRICTION</span>
+          <span class="total-time">&lt;1 s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DOWNLOAD -->
+<section id="download">
+  <div class="wrap">
+    <p class="eyebrow">Download</p>
+    <h2>Get it for macOS.</h2>
+    <p class="lead">One download. Drag to Applications. Grant Accessibility when it asks — that's the whole setup.</p>
+
+    <div class="download-block" data-reveal>
+      <a href="https://github.com/galbutnotgirl/claude-command/releases/latest" class="btn-download">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z"/>
+        </svg>
+        <span class="dl-label">Download for macOS</span>
+        <span class="dl-meta">.zip · Apple Silicon &amp; Intel · macOS 13+</span>
+      </a>
+
+      <ol class="dl-steps">
+        <li><span class="dl-num">1</span><span>Unzip and drag <strong>Claude Command</strong> into Applications.</span></li>
+        <li><span class="dl-num">2</span><span>First launch: right-click → <strong>Open</strong> (open-source build, not notarized).</span></li>
+        <li><span class="dl-num">3</span><span>Grant <strong>Accessibility</strong> when prompted. That's the one grant that powers everything.</span></li>
+        <li><span class="dl-num">4</span><span>Menu bar ⌘ icon → <strong>Settings → Set Up</strong> to validate permissions and configure your shortcuts.</span></li>
+      </ol>
+
+      <p class="dl-foot">Or build from source: <code>./build-agent.sh &amp;&amp; ./install-agent.sh</code> · Updates: Settings → About → Check for Updates</p>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div class="wrap">
+    <p class="footer-eyebrow">Open Source</p>
+    <p class="footer-headline">Read the code.<br>Fork it. Customize it.</p>
+    <div class="footer-links">
+      <a href="https://github.com/galbutnotgirl/claude-command" class="btn-primary">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+        Star on GitHub
+      </a>
+      <a href="#" class="btn-ghost">Back to top ↑</a>
+    </div>
+  </div>
+</div>
+
+<script>
+// Canvas noise
+(function() {
+  const canvas = document.getElementById('noise-canvas');
+  canvas.width = 256; canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(256, 256);
+  const data = img.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const v = Math.random() > 0.5 ? 255 : 0;
+    data[i] = data[i+1] = data[i+2] = v;
+    data[i+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  canvas.style.backgroundImage = 'url(' + canvas.toDataURL() + ')';
+  canvas.style.backgroundRepeat = 'repeat';
+  canvas.width = canvas.height = 1;
+})();
+
+// Hero key stagger
+(function() {
+  const keys = document.querySelectorAll('#heroKeys .key');
+  const seps = document.querySelectorAll('#heroKeys [data-sep]');
+  keys.forEach(k => {
+    const delay = parseInt(k.dataset.delay || 0, 10);
+    setTimeout(() => {
+      k.classList.add('visible');
+      setTimeout(() => { k.classList.add('pressed'); }, 60);
+      setTimeout(() => { k.classList.remove('pressed'); }, 160);
+    }, 300 + delay);
+  });
+  seps.forEach(s => setTimeout(() => s.classList.add('visible'), 300 + 240));
+})();
+
+// Scroll reveals
+(function() {
+  const items = document.querySelectorAll('[data-reveal]');
+  if (!('IntersectionObserver' in window)) {
+    items.forEach(el => el.classList.add('visible'));
+    return;
+  }
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+  items.forEach(el => obs.observe(el));
+
+  const arrows = document.querySelectorAll('.flow-arrow');
+  const arrObs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.1 });
+  arrows.forEach(el => arrObs.observe(el));
+})();
+</script>
+
+</body>
+</html>
