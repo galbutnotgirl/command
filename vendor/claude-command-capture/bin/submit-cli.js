@@ -9,6 +9,11 @@
 // Usage:
 //   submit-cli.js --source selection --kind text          # text on stdin
 //   submit-cli.js --source screenshot --kind image --file /abs/path.png
+//   submit-cli.js --retry-prompt --source selection --kind text [--skill foo]
+//                                                          # re-run an already-
+//                                                          # rendered prompt on
+//                                                          # stdin, skipping the
+//                                                          # template step
 //   submit-cli.js --init-settings                          # scaffold settings.json
 //   submit-cli.js --print-settings
 //
@@ -17,6 +22,9 @@
 //                      platform path Electron's app.getPath('userData') would
 //                      use for this app name, e.g.
 //                      ~/Library/Application Support/claude-command on macOS)
+//   --retry-prompt     stdin is a finished prompt, not raw captured content —
+//                      used to retry a failed/past submission verbatim
+//   --skill <name>     only with --retry-prompt: skill name for the new record
 //   --no-wait          exit after the submission record is written; the CLI
 //                      keeps running detached
 //   --quiet            suppress desktop notifications
@@ -31,7 +39,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { appDirs } = require('../src/paths');
 const { loadSettings, saveSettings, settingsPath, DEFAULT_SETTINGS } = require('../src/settings');
-const { submitCapture } = require('../src/submit');
+const { submitCapture, resubmitPrompt } = require('../src/submit');
 
 function defaultBaseDir() {
   const name = 'claude-command'; // matches the Electron app's userData dir name
@@ -58,6 +66,8 @@ function parseArgs(argv) {
       case '--kind': args.kind = next(); break;
       case '--file': args.file = next(); break;
       case '--base-dir': args.baseDir = next(); break;
+      case '--retry-prompt': args.retryPrompt = true; break;
+      case '--skill': args.skill = next(); break;
       case '--no-wait': args.wait = false; break;
       case '--quiet': args.quiet = true; break;
       case '--init-settings': args.initSettings = true; break;
@@ -119,6 +129,31 @@ async function main() {
 
   if (args.printSettings) {
     process.stdout.write(JSON.stringify(loadSettings(baseDir), null, 2) + '\n');
+    return;
+  }
+
+  if (args.retryPrompt) {
+    const prompt = await readStdin();
+    if (!prompt.trim()) {
+      process.stderr.write('submit-cli: --retry-prompt got an empty prompt on stdin\n');
+      process.exit(2);
+    }
+    const settings = loadSettings(baseDir);
+    const notify = !args.quiet && settings.notifications ? notifyDesktop : () => {};
+    const { record, donePromise } = resubmitPrompt({
+      dirs: appDirs(baseDir),
+      settings,
+      prompt,
+      source: args.source || 'retry',
+      kind: args.kind || 'text',
+      skill: args.skill,
+      notify,
+    });
+    process.stdout.write(JSON.stringify(record) + '\n');
+    if (!args.wait) return;
+    const finalRecord = await donePromise;
+    process.stdout.write(JSON.stringify(finalRecord) + '\n');
+    process.exitCode = finalRecord.status === 'succeeded' ? 0 : 1;
     return;
   }
 

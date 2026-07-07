@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { appDirs } = require('../src/paths');
-const { submitCapture } = require('../src/submit');
+const { submitCapture, resubmitPrompt } = require('../src/submit');
 const { DEFAULT_SETTINGS, mergeSettings } = require('../src/settings');
 
 function tmpDirs() {
@@ -92,4 +92,41 @@ test('submitCapture marks failures and notifies with the log path', async () => 
   const failure = notifications.find((n) => n.title === 'Claude submission failed');
   assert.ok(failure);
   assert.ok(failure.body.includes(finished.logFile));
+});
+
+test('resubmitPrompt reruns the exact prompt without re-rendering it', async () => {
+  const dirs = tmpDirs();
+  const originalPrompt = '/triage-capture\n\nSource: selection\n\nsome captured text';
+  const { record, donePromise } = resubmitPrompt({
+    dirs,
+    settings: fakeCliSettings(),
+    prompt: originalPrompt,
+    source: 'selection',
+    kind: 'text',
+    skill: 'triage-capture',
+    notify: () => {},
+  });
+  // A fresh id/log — never collides with (or overwrites) the record being retried.
+  assert.strictEqual(record.prompt, originalPrompt);
+  assert.strictEqual(record.status, 'running');
+  const finished = await donePromise;
+  assert.strictEqual(finished.status, 'succeeded');
+  assert.strictEqual(finished.prompt, originalPrompt);
+});
+
+test('resubmitPrompt marks failures the same way submitCapture does', async () => {
+  const dirs = tmpDirs();
+  const notifications = [];
+  const { donePromise } = resubmitPrompt({
+    dirs,
+    settings: fakeCliSettings({ cli: { command: 'no-such-cli-abc', baseArgs: [], extraArgs: [], cwd: '' } }),
+    prompt: 'retry me',
+    source: 'selection',
+    kind: 'text',
+    skill: null,
+    notify: (title, body) => notifications.push({ title, body }),
+  });
+  const finished = await donePromise;
+  assert.strictEqual(finished.status, 'failed');
+  assert.ok(notifications.some((n) => n.title === 'Claude submission failed'));
 });

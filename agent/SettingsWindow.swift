@@ -1501,7 +1501,7 @@ struct HandoffsView: View {
                 } else {
                     VStack(spacing: 0) {
                         ForEach(filtered) { s in
-                            HandoffSubmissionRow(submission: s, onDelete: { pendingDelete = s })
+                            HandoffSubmissionRow(submission: s, onRetry: { retryHandoffSubmission(s) }, onDelete: { pendingDelete = s })
                             Divider()
                         }
                     }
@@ -1528,8 +1528,10 @@ struct HandoffsView: View {
 
 struct HandoffSubmissionRow: View {
     let submission: HandoffSubmission
+    let onRetry: () -> Void
     let onDelete: () -> Void
     @State private var expanded = false
+    @State private var retried = false
 
     private var statusColor: Color {
         switch submission.status {
@@ -1561,6 +1563,15 @@ struct HandoffSubmissionRow: View {
                     Button { NSWorkspace.shared.open(URL(fileURLWithPath: log)) } label: {
                         Image(systemName: "doc.text.magnifyingglass")
                     }.buttonStyle(.plain).help("Open log")
+                }
+                if submission.status == "failed" {
+                    Button {
+                        onRetry()
+                        retried = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { retried = false }
+                    } label: {
+                        Image(systemName: retried ? "checkmark" : "arrow.clockwise")
+                    }.buttonStyle(.plain).help("Retry").disabled(retried)
                 }
                 Button { onDelete() } label: {
                     Image(systemName: "trash").foregroundColor(.red)

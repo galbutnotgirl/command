@@ -181,6 +181,53 @@ func runTextHandoff(_ text: String, source: String = "text") {
     }
 }
 
+// Re-run a failed (or any past) submission's exact stored prompt — bypasses
+// capture-handoff.sh (whose job is rendering raw captures into a prompt) and
+// calls submit-cli.js's --retry-prompt path directly, mirroring capture-handoff.sh's
+// own CORE/SHIM/NODE resolution so both dev and bundled-app layouts work.
+func retryHandoffSubmission(_ s: HandoffSubmission) {
+    guard let prompt = s.prompt, !prompt.isEmpty else {
+        notify("Retry failed", "No stored prompt for this submission.")
+        return
+    }
+    let scriptDir = (bundledResource("capture-handoff.sh") as NSString).deletingLastPathComponent
+    var core = (scriptDir as NSString).appendingPathComponent("claude-command-capture")
+    if !FileManager.default.fileExists(atPath: core) {
+        core = (scriptDir as NSString).appendingPathComponent("vendor/claude-command-capture")
+    }
+    let shim = (core as NSString).appendingPathComponent("bin/submit-cli.js")
+    guard FileManager.default.fileExists(atPath: shim) else {
+        notify("Retry failed", "Handoff core missing — rebuild the agent.")
+        return
+    }
+    guard let node = which("node") else {
+        notify("Retry failed", "Node.js 20+ not found on PATH.")
+        return
+    }
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: node)
+    p.arguments = [shim, "--base-dir", HANDOFF_BASE, "--retry-prompt", "--source", s.source, "--kind", s.kind]
+        + (s.skill.map { ["--skill", $0] } ?? [])
+    let stdin = Pipe()
+    p.standardInput = stdin
+    do {
+        try p.run()
+        stdin.fileHandleForWriting.write(prompt.data(using: .utf8) ?? Data())
+        stdin.fileHandleForWriting.closeFile()
+    } catch {
+        appendLog("[handoff] retry launch failed: \(error)")
+        notify("Retry failed", "Could not start submit-cli.js")
+    }
+}
+
+private func which(_ name: String) -> String? {
+    for dir in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"] {
+        let path = "\(dir)/\(name)"
+        if FileManager.default.isExecutableFile(atPath: path) { return path }
+    }
+    return nil
+}
+
 // ---- settings window ----------------------------------------------------------
 
 final class HandoffSettingsWindowController: NSObject, NSWindowDelegate {

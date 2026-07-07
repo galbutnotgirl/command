@@ -69,4 +69,45 @@ function submitCapture({ dirs, settings, capture, notify = () => {} }) {
   return { record, donePromise };
 }
 
-module.exports = { submitCapture };
+// Re-run an already-rendered prompt (e.g. retrying a failed submission) without
+// going through buildPrompt again — the stored prompt already has
+// {skillInvocation}/{source}/{timestamp}/{content} substituted, so re-rendering
+// would wrap it a second time. Otherwise mirrors submitCapture: new id, new log
+// file, same runCli + submissions bookkeeping.
+function resubmitPrompt({ dirs, settings, prompt, source, kind, skill, contentFile, notify = () => {} }) {
+  ensureDirs(dirs);
+  const id = crypto.randomUUID();
+  const logFile = path.join(dirs.logs, `${id}.log`);
+
+  const record = createSubmission(dirs, {
+    id,
+    source,
+    kind,
+    skill: skill || null,
+    prompt,
+    contentFile: contentFile || null,
+    logFile,
+  });
+
+  notify('Submitted to Claude', skill ? `retry: ${source} capture handed to /${skill}` : `retry: ${source} capture submitted`);
+
+  const donePromise = runCli({ cli: settings.cli, prompt, logFile }).then(({ exitCode, error }) => {
+    const status = error ? 'failed' : 'succeeded';
+    const updated = updateSubmission(dirs, id, {
+      status,
+      exitCode,
+      error,
+      finishedAt: new Date().toISOString(),
+    });
+    if (error) {
+      notify('Claude submission failed', `${error} — see log: ${logFile}`);
+    } else {
+      notify('Claude finished', skill ? `/${skill} completed for ${source} capture (retry)` : 'Submission completed (retry)');
+    }
+    return updated;
+  });
+
+  return { record, donePromise };
+}
+
+module.exports = { submitCapture, resubmitPrompt };

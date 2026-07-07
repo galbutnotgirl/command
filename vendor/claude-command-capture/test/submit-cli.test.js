@@ -149,3 +149,31 @@ test('CLAUDE_CAPTURE_HOME selects the base dir', async () => {
   const final = JSON.parse(stdout.trim().split('\n').pop());
   assert.ok(final.contentFile.startsWith(base));
 });
+
+test('--retry-prompt reruns an already-rendered prompt verbatim, no re-templating', async () => {
+  const base = tmpBase();
+  writeSettings(base, writeFakeCli(base));
+
+  const finishedPrompt = '/triage-capture\n\nSource: selection\n\nalready-rendered content';
+  const { code, stdout, stderr } = await runShim(
+    ['--base-dir', base, '--retry-prompt', '--source', 'selection', '--skill', 'triage-capture'],
+    { input: finishedPrompt }
+  );
+  assert.strictEqual(code, 0, stderr);
+
+  const lines = stdout.trim().split('\n').map((l) => JSON.parse(l));
+  assert.strictEqual(lines[1].status, 'succeeded');
+  assert.strictEqual(lines[1].prompt, finishedPrompt);
+  // Verbatim — not run back through buildPrompt (would double-wrap the skill line).
+  const log = fs.readFileSync(lines[1].logFile, 'utf8');
+  assert.match(log, /SAW: \/triage-capture\n\nSource: selection\n\nalready-rendered content/);
+  assert.doesNotMatch(log, /triage-capture[\s\S]*triage-capture/);
+});
+
+test('--retry-prompt with an empty stdin prompt is a usage error', async () => {
+  const base = tmpBase();
+  writeSettings(base, writeFakeCli(base));
+  const { code, stderr } = await runShim(['--base-dir', base, '--retry-prompt'], { input: '   ' });
+  assert.strictEqual(code, 2);
+  assert.match(stderr, /empty prompt/);
+});
