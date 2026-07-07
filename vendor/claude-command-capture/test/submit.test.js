@@ -58,6 +58,24 @@ test('submitCapture runs the full pipeline for a text capture', async () => {
   assert.ok(notifications.some((n) => n.title === 'Claude finished'));
 });
 
+test('submitCapture extracts a structured result and includes it in the finish notification', async () => {
+  const dirs = tmpDirs();
+  const notifications = [];
+  // The default text template puts {content} last, so a capture whose text IS
+  // the result line survives to the end of what `cat` echoes back.
+  const { donePromise } = submitCapture({
+    dirs,
+    settings: fakeCliSettings(),
+    capture: { kind: 'text', source: 'selection', capturedAt: '', text: 'TASK_ID=abc123' },
+    notify: (title, body) => notifications.push({ title, body }),
+  });
+  const finished = await donePromise;
+  assert.strictEqual(finished.result, 'TASK_ID=abc123');
+  const done = notifications.find((n) => n.title === 'Claude finished');
+  assert.ok(done);
+  assert.ok(done.body.includes('TASK_ID=abc123'));
+});
+
 test('submitCapture keeps the image file as contentFile', async () => {
   const dirs = tmpDirs();
   const imageFile = path.join(os.tmpdir(), 'fake-shot.png');

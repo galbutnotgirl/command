@@ -18,14 +18,18 @@ public struct HandoffSubmission: Identifiable {
     public let prompt: String?
     public let contentFile: String?
     public let logFile: String?
+    // Last stdout line matching KEY=value, if the prompt's own contract asked
+    // for one (see runner.js's extractResult) — nil until the run finishes, and
+    // stays nil if the CLI never printed a matching line.
+    public let result: String?
 
     public init(id: String, createdAt: Date, finishedAt: Date?, source: String, kind: String,
                 skill: String?, status: String, exitCode: Int?, error: String?, prompt: String?,
-                contentFile: String?, logFile: String?) {
+                contentFile: String?, logFile: String?, result: String? = nil) {
         self.id = id; self.createdAt = createdAt; self.finishedAt = finishedAt
         self.source = source; self.kind = kind; self.skill = skill; self.status = status
         self.exitCode = exitCode; self.error = error; self.prompt = prompt
-        self.contentFile = contentFile; self.logFile = logFile
+        self.contentFile = contentFile; self.logFile = logFile; self.result = result
     }
 
     // A record can stay "running" forever if the CLI (or the machine) died
@@ -34,7 +38,7 @@ public struct HandoffSubmission: Identifiable {
     public var statusGlyph: String { handoffStatusGlyph(status: status, isStalled: isStalled) }
     public var age: String { handoffAgeString(createdAt: createdAt) }
     public var menuTitle: String {
-        handoffMenuTitle(statusGlyph: statusGlyph, source: source, skill: skill, age: age, isStalled: isStalled)
+        handoffMenuTitle(statusGlyph: statusGlyph, source: source, skill: skill, age: age, isStalled: isStalled, result: result)
     }
 }
 
@@ -58,9 +62,12 @@ public func handoffAgeString(createdAt: Date, now: Date = Date()) -> String {
     return "\(s / 86400)d ago"
 }
 
-public func handoffMenuTitle(statusGlyph: String, source: String, skill: String?, age: String, isStalled: Bool) -> String {
+public func handoffMenuTitle(statusGlyph: String, source: String, skill: String?, age: String,
+                              isStalled: Bool, result: String? = nil) -> String {
     let target = (skill?.isEmpty == false) ? "/\(skill!)" : "claude -p"
-    return "\(statusGlyph) \(source) → \(target) — \(age)\(isStalled ? " (stalled?)" : "")"
+    let base = "\(statusGlyph) \(source) → \(target) — \(age)\(isStalled ? " (stalled?)" : "")"
+    guard let result, !result.isEmpty else { return base }
+    return "\(base) — \(result)"
 }
 
 // Retention pruning eligibility — running submissions are never pruned,

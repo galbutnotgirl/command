@@ -42,6 +42,18 @@ final class HandoffModelsTests: XCTestCase {
         XCTAssertEqual(title, "✓ selection → /triage-capture — 2m ago")
     }
 
+    func testMenuTitleAppendsResultWhenPresent() {
+        let title = handoffMenuTitle(statusGlyph: "✓", source: "selection", skill: "triage", age: "2m ago", isStalled: false, result: "TASK_ID=abc123")
+        XCTAssertEqual(title, "✓ selection → /triage — 2m ago — TASK_ID=abc123")
+    }
+
+    func testMenuTitleOmitsResultWhenNilOrEmpty() {
+        XCTAssertFalse(handoffMenuTitle(statusGlyph: "✓", source: "selection", skill: nil, age: "2m ago", isStalled: false, result: nil).contains("—  "))
+        let withEmpty = handoffMenuTitle(statusGlyph: "✓", source: "selection", skill: nil, age: "2m ago", isStalled: false, result: "")
+        let withNil = handoffMenuTitle(statusGlyph: "✓", source: "selection", skill: nil, age: "2m ago", isStalled: false, result: nil)
+        XCTAssertEqual(withEmpty, withNil)
+    }
+
     func testMenuTitleWithoutSkillFallsBackToClaudeP() {
         let title = handoffMenuTitle(statusGlyph: "…", source: "screenshot", skill: nil, age: "5s ago", isStalled: false)
         XCTAssertEqual(title, "… screenshot → claude -p — 5s ago")

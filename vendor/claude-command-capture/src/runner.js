@@ -14,8 +14,27 @@ function buildArgs(cli) {
   return [...base, ...extra];
 }
 
-// Returns a promise resolving to { exitCode, error }. Never rejects — the
-// caller decides how to surface failures (notification + submission record).
+// Convention for a structured result, with no per-call configuration needed:
+// if the prompt told claude -p to end its output with one line like
+// "TASK_ID=abc123" or "ERROR=reason" (a common contract for background/
+// unattended prompts — see docs/BACKGROUND_TRIGGER_INTEGRATION.md's Custom
+// Handoffs section), that line becomes the submission's `result`. Only the
+// last non-empty line is checked — a KEY=value pair buried in the middle of
+// prose isn't a result, it's the model talking about something.
+const RESULT_LINE = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
+function extractResult(stdout) {
+  const lines = stdout.split(/\r?\n/);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const m = RESULT_LINE.exec(line);
+    return m ? `${m[1]}=${m[2]}` : null;
+  }
+  return null;
+}
+
+// Returns a promise resolving to { exitCode, error, result }. Never rejects —
+// the caller decides how to surface failures (notification + submission record).
 function runCli({ cli, prompt, logFile }) {
   return new Promise((resolve) => {
     let logStream = null;
@@ -52,7 +71,7 @@ function runCli({ cli, prompt, logFile }) {
     } catch (err) {
       log(`[claude-command] spawn failed: ${err.message}\n`);
       closeLog();
-      resolve({ exitCode: null, error: err.message });
+      resolve({ exitCode: null, error: err.message, result: null });
       return;
     }
 
@@ -66,15 +85,20 @@ function runCli({ cli, prompt, logFile }) {
     child.on('error', (err) => {
       // Typically ENOENT: CLI not found at the configured command.
       log(`[claude-command] error: ${err.message}\n`);
-      settle({ exitCode: null, error: err.message });
+      settle({ exitCode: null, error: err.message, result: null });
     });
 
-    child.stdout.on('data', (chunk) => log(chunk));
+    let stdoutBuf = '';
+    child.stdout.on('data', (chunk) => { log(chunk); stdoutBuf += chunk; });
     child.stderr.on('data', (chunk) => log(chunk));
 
     child.on('close', (code) => {
       log(`\n[claude-command] ${new Date().toISOString()} exited with code ${code}\n`);
-      settle({ exitCode: code, error: code === 0 ? null : `CLI exited with code ${code}` });
+      settle({
+        exitCode: code,
+        error: code === 0 ? null : `CLI exited with code ${code}`,
+        result: extractResult(stdoutBuf),
+      });
     });
 
     child.stdin.on('error', () => {
@@ -85,4 +109,4 @@ function runCli({ cli, prompt, logFile }) {
   });
 }
 
-module.exports = { runCli, buildArgs };
+module.exports = { runCli, buildArgs, extractResult };

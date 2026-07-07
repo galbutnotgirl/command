@@ -105,7 +105,8 @@ func loadHandoffSubmissions(limit: Int? = 8) -> [HandoffSubmission] {
             error: d["error"] as? String,
             prompt: d["prompt"] as? String,
             contentFile: d["contentFile"] as? String,
-            logFile: d["logFile"] as? String
+            logFile: d["logFile"] as? String,
+            result: d["result"] as? String
         ))
     }
     let sorted = records.sorted { $0.createdAt > $1.createdAt }

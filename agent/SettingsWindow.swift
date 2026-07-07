@@ -1624,6 +1624,12 @@ struct HandoffSubmissionRow: View {
                     }
                     Text(submission.age + (submission.isStalled ? " — stalled?" : "") + (submission.error.map { " — \($0)" } ?? ""))
                         .font(.caption2).foregroundColor(.secondary)
+                    if let result = submission.result, !result.isEmpty {
+                        Text(result)
+                            .font(.system(size: 10, design: .monospaced)).foregroundColor(appPurple)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(appPurple.opacity(0.12)).cornerRadius(4)
+                    }
                 }
                 Spacer()
                 Button(expanded ? "Hide" : "Details") { expanded.toggle() }

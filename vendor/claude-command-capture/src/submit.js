@@ -50,18 +50,20 @@ function submitCapture({ dirs, settings, capture, notify = () => {} }) {
     skill ? `${capture.source} capture handed to /${skill}` : `${capture.source} capture submitted`
   );
 
-  const donePromise = runCli({ cli: settings.cli, prompt, logFile }).then(({ exitCode, error }) => {
+  const donePromise = runCli({ cli: settings.cli, prompt, logFile }).then(({ exitCode, error, result }) => {
     const status = error ? 'failed' : 'succeeded';
     const updated = updateSubmission(dirs, id, {
       status,
       exitCode,
       error,
+      result: result || null,
       finishedAt: new Date().toISOString(),
     });
     if (error) {
       notify('Claude submission failed', `${error} — see log: ${logFile}`);
     } else {
-      notify('Claude finished', skill ? `/${skill} completed for ${capture.source} capture` : 'Submission completed');
+      const base = skill ? `/${skill} completed for ${capture.source} capture` : 'Submission completed';
+      notify('Claude finished', result ? `${base} — ${result}` : base);
     }
     return updated;
   });
@@ -91,18 +93,20 @@ function resubmitPrompt({ dirs, settings, prompt, source, kind, skill, contentFi
 
   notify('Submitted to Claude', skill ? `retry: ${source} capture handed to /${skill}` : `retry: ${source} capture submitted`);
 
-  const donePromise = runCli({ cli: settings.cli, prompt, logFile }).then(({ exitCode, error }) => {
+  const donePromise = runCli({ cli: settings.cli, prompt, logFile }).then(({ exitCode, error, result }) => {
     const status = error ? 'failed' : 'succeeded';
     const updated = updateSubmission(dirs, id, {
       status,
       exitCode,
       error,
+      result: result || null,
       finishedAt: new Date().toISOString(),
     });
     if (error) {
       notify('Claude submission failed', `${error} — see log: ${logFile}`);
     } else {
-      notify('Claude finished', skill ? `/${skill} completed for ${source} capture (retry)` : 'Submission completed (retry)');
+      const base = skill ? `/${skill} completed for ${source} capture (retry)` : 'Submission completed (retry)';
+      notify('Claude finished', result ? `${base} — ${result}` : base);
     }
     return updated;
   });

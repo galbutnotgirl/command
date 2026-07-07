@@ -188,9 +188,16 @@ contract, then acts on the result):
    its own `claude -p` flags once rather than per-call.
 4. **Bind a hotkey** to the Custom Action (same key-binding field every action gets) —
    this replaces whatever gesture/trigger a Shortcuts automation would use.
-5. **Check the result** — Menu bar ▸ Handoff History (or the Handoff History Settings tab)
-   shows the run's status and its log. There's no built-in parsing of the `TASK_ID=`/`ERROR=`
-   contract from step 2 — the app tracks `succeeded`/`failed` purely by the CLI's exit code,
-   the log file has everything else. If you need the app itself to react differently based on
-   what `claude -p` printed (not just whether it exited 0), that's not built yet — the log is
-   there, but there's no structured-output-parsing/action layer on top of it.
+5. **Check the result** — the app auto-detects the `TASK_ID=`/`ERROR=` contract from step 2:
+   whatever the *last non-empty line* of `claude -p`'s output is, if it matches `KEY=value`,
+   gets picked up as the submission's `result` — no extra config, it's a convention, not a
+   setting. It shows up in three places: the "Claude finished" notification (appended after
+   an em dash), the Handoff History row (a small badge under the age line), and the Handoff
+   History **menu bar** submenu title (so you can see `TASK_ID=abc123` without opening
+   anything). A line buried mid-output doesn't count — only the true last line, same as the
+   worked script's own "output ONLY one line" discipline. See `runner.js`'s `extractResult()`
+   for the exact rule, and `test/runner.test.js` for its edge cases.
+
+   This is intentionally just a convention, not a plugin system — it doesn't POST anywhere or
+   run follow-up actions on your behalf. If you need the app to actually *act* on the parsed
+   value (not just show it), that's still a real gap worth designing separately.

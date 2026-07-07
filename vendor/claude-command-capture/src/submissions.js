@@ -36,6 +36,10 @@ function createSubmission(dirs, { id, source, kind, skill, prompt, contentFile, 
     exitCode: null,
     finishedAt: null,
     error: null,
+    // Last stdout line matching KEY=value, if the prompt's own contract asked
+    // for one (see runner.js's extractResult) — null until the run finishes,
+    // and stays null if the CLI never printed a matching line.
+    result: null,
   };
   return writeRecord(dirs, record);
 }
