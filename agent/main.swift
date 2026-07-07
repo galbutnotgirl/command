@@ -664,7 +664,9 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         if let icon = appIcon(bundle: c.bundle) {
             appIV.image = icon
         } else {
-            appIV.image = NSImage(systemSymbolName: c.type == "image" ? "photo" : "doc.text", accessibilityDescription: nil)
+            // "textformat" (an underlined A) reads as plain text at a glance — a doc.*
+            // symbol here looked like a document/file icon, not "this is just text".
+            appIV.image = NSImage(systemSymbolName: c.type == "image" ? "photo" : "textformat", accessibilityDescription: nil)
             appIV.contentTintColor = .tertiaryLabelColor
         }
         if !c.bundle.isEmpty,
@@ -679,7 +681,39 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         appIV.translatesAutoresizingMaskIntoConstraints = false
         appIV.widthAnchor.constraint(equalToConstant: 18).isActive = true
         appIV.heightAnchor.constraint(equalToConstant: 18).isActive = true
-        h.addArrangedSubview(appIV)
+
+        // A row can be "from Chrome" AND "sent via Claude Command" at once (the
+        // common Add/custom-Add case) — the row icon stays the source app's so you
+        // still know where it came from, but a small brand badge peeking out past
+        // its trailing edge flags the "also sent" part without switching filters.
+        let iconContainer = NSView()
+        iconContainer.translatesAutoresizingMaskIntoConstraints = false
+        iconContainer.addSubview(appIV)
+        NSLayoutConstraint.activate([
+            appIV.leadingAnchor.constraint(equalTo: iconContainer.leadingAnchor),
+            appIV.centerYAnchor.constraint(equalTo: iconContainer.centerYAnchor),
+        ])
+        var containerWidth: CGFloat = 18
+        if c.origin == "sent" {
+            let badge = NSImageView()
+            badge.image = brandGlyph(size: 11)
+            badge.contentTintColor = purpleAccent
+            badge.wantsLayer = true
+            badge.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            badge.layer?.cornerRadius = 6; badge.layer?.masksToBounds = true
+            badge.translatesAutoresizingMaskIntoConstraints = false
+            iconContainer.addSubview(badge)
+            NSLayoutConstraint.activate([
+                badge.widthAnchor.constraint(equalToConstant: 12),
+                badge.heightAnchor.constraint(equalToConstant: 12),
+                badge.trailingAnchor.constraint(equalTo: iconContainer.trailingAnchor),
+                badge.centerYAnchor.constraint(equalTo: iconContainer.centerYAnchor),
+            ])
+            containerWidth = 18 + 6   // room for the badge to peek out past the icon
+        }
+        iconContainer.widthAnchor.constraint(equalToConstant: containerWidth).isActive = true
+        iconContainer.heightAnchor.constraint(equalToConstant: 18).isActive = true
+        h.addArrangedSubview(iconContainer)
 
         if c.type == "image" {
             let iv = NSImageView()
