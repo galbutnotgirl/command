@@ -18,6 +18,17 @@ BUNDLE_ID="com.claudecommand"
 VERSION="$( [ -f "${DIR}/VERSION" ] && tr -d ' \t\n' < "${DIR}/VERSION" || echo "1.0.0" )"
 print -- "[agent] version ${VERSION}"
 
+# Branch + short commit, so a local dev build says which worktree/branch it came
+# from (Settings ▸ About). Empty when not a git checkout (e.g. a release zip has
+# no .git) — About only shows this line when it's non-empty.
+GIT_BRANCH=""
+if command -v git >/dev/null 2>&1 && git -C "$DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  b="$(git -C "$DIR" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+  h="$(git -C "$DIR" rev-parse --short HEAD 2>/dev/null)"
+  [ -n "$b" ] && [ "$b" != "HEAD" ] && GIT_BRANCH="${b}@${h}"
+fi
+[ -n "$GIT_BRANCH" ] && print -- "[agent] branch ${GIT_BRANCH}"
+
 rm -rf "$APP"
 mkdir -p "$BIN_DIR"
 
@@ -39,6 +50,7 @@ cat > "${APP}/Contents/Info.plist" <<PLIST
 	<key>CFBundleDisplayName</key><string>Claude Command</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleShortVersionString</key><string>${VERSION}</string>
+	<key>ClaudeCommandGitBranch</key><string>${GIT_BRANCH}</string>
 	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>LSUIElement</key><true/>
 	<key>LSMinimumSystemVersion</key><string>13.0</string>

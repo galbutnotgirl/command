@@ -1,7 +1,7 @@
 // CommandTemplates.swift — user-editable wrapping text for the built-in go/comment/add
-// commands, and the per-app auto-context rules (Slack, Drive, Gmail, etc.) that get
-// woven into "Go"'s research instruction. Both are optional overlays: send-to-claude.sh
-// falls back to its hardcoded defaults when these files are absent, so a fresh install
+// commands, and the per-app auto-context rules (Slack, Drive, Gmail, etc.) that feed
+// {context} in any of the three. Both are optional overlays: send-to-claude.sh falls
+// back to its hardcoded defaults when these files are absent, so a fresh install
 // behaves exactly as before until the user opens Settings and changes something.
 //
 // Backlog (not built yet — moved here from the old top-level BACKLOG.md):
@@ -22,16 +22,19 @@ let COMMAND_TEMPLATES_PATH = (NSHomeDirectory() as NSString)
 
 struct CommandTemplate: Identifiable {
     let action: String   // "go" | "comment" | "add"
-    var pre: String       // text inserted before the selection
-    var post: String      // text inserted after the selection — {research} expands to the auto-context line
+    var pre: String       // text inserted before the selection — {context} works here too
+    var post: String      // text inserted after the selection — {context} expands to the auto-context line
     var id: String { action }
 }
 
 // Matches the strings currently hardcoded in send-to-claude.sh, so shipping this
-// feature changes nothing until a user actually edits a template.
+// feature changes nothing until a user actually edits a template. {context} is only
+// in Go's default post because Go is the one action framed as "go research and act" —
+// Comment/Add can use {context} too (send-to-claude.sh expands it in pre/post for all
+// three), it's just not part of their *default* text.
 let DEFAULT_COMMAND_TEMPLATES: [CommandTemplate] = [
     CommandTemplate(action: "go", pre: "",
-                     post: "(Right-click \"Go\": {research} Then do what's most useful and report.)"),
+                     post: "(Right-click \"Go\": {context} Then do what's most useful and report.)"),
     CommandTemplate(action: "comment", pre: "", post: ""),
     CommandTemplate(action: "add", pre: "", post: ""),
 ]
@@ -124,6 +127,66 @@ func saveEnrichRules(_ rules: [EnrichRule]) {
     let arr = rules.map { ["match": $0.match.rawValue, "pattern": $0.pattern, "text": $0.text] }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
         try? data.write(to: URL(fileURLWithPath: ENRICHMENT_RULES_PATH))
+    }
+}
+
+// ---- live preview -------------------------------------------------------------
+// Mirrors send-to-claude.sh's CONTEXT/{context} composition exactly (see the
+// "context + always-on enrichment" and dispatch sections there) so what you see
+// in Settings ▸ Templates is what actually gets sent — not an approximation.
+
+struct PreviewSource: Identifiable, Hashable {
+    let id = UUID()
+    let label: String    // shown in the picker, e.g. "Slack" or "Generic (no match)"
+    let appName: String
+    let url: String       // "" if the sample source has no URL (Slack, Granola, generic)
+    let enrich: String    // "" for the no-match generic case
+}
+
+func previewSources(from rules: [EnrichRule]) -> [PreviewSource] {
+    var seen = Set<String>()
+    var out: [PreviewSource] = [PreviewSource(label: "Generic (no match)", appName: "Chrome", url: "", enrich: "")]
+    for r in rules where !r.pattern.isEmpty {
+        let label: String
+        switch r.match {
+        case .app:    label = r.pattern
+        case .bundle: label = r.pattern
+        case .host:   label = r.pattern.replacingOccurrences(of: "*.", with: "")
+        }
+        guard seen.insert(label).inserted else { continue }
+        let sampleURL = r.match == .host ? "https://\(r.pattern.replacingOccurrences(of: "*.", with: "example."))/doc/123" : ""
+        let app = r.match == .app ? r.pattern : (r.match == .host ? "Chrome" : label)
+        out.append(PreviewSource(label: label, appName: app, url: sampleURL,
+                                  enrich: r.text.replacingOccurrences(of: "{url}", with: sampleURL)))
+    }
+    return out
+}
+
+// action: "go" | "comment" | "add". Set includeContext: false to preview with
+// "Include source app" off (mirrors send-to-claude.sh's INCLUDE_CONTEXT=0 / a
+// custom action's toggle) — the [from: …] + enrich block simply disappears.
+func composePreview(action: String, pre: String, post: String,
+                     source: PreviewSource, selection: String,
+                     includeContext: Bool = true) -> String {
+    var context = ""
+    if includeContext {
+        let src = source.url.isEmpty ? source.appName : "\(source.appName) — \(source.url)"
+        context = "[from: \(src)]\n"
+        if !source.enrich.isEmpty { context += "\(source.enrich)\n" }
+        context += "\n"
+    }
+    let contextLine = "Before acting, research for context to be maximally useful: "
+        + (source.enrich.isEmpty ? "identify the source and pull any related thread, doc, message or record via the matching MCP connector." : source.enrich)
+    let expandedPost = post.replacingOccurrences(of: "{context}", with: contextLine)
+    let expandedPre = pre.replacingOccurrences(of: "{context}", with: contextLine)
+
+    switch action {
+    case "go":
+        return context + expandedPre + selection + "\n\n" + expandedPost
+    case "comment":
+        return context + expandedPre + selection + expandedPost + "\n\n"
+    default: // "add"
+        return context + expandedPre + selection + expandedPost
     }
 }
 

@@ -268,7 +268,9 @@ else
   esac
   [ "$APP_NAME" = "Granola" ] && ENRICH="From Granola — treat the meeting transcript as context via the Granola MCP."
 fi
-RESEARCH="Before acting, research for context to be maximally useful: ${ENRICH:-identify the source and pull any related thread, doc, message or record via the matching MCP connector.}"
+# {context} in any pre/post template below expands to this — the auto-context
+# rule text (if one matched) wrapped in an instruction to actually go use it.
+CONTEXT_LINE="Before acting, research for context to be maximally useful: ${ENRICH:-identify the source and pull any related thread, doc, message or record via the matching MCP connector.}"
 
 CONTEXT=""
 if [ "$INCLUDE_CONTEXT" = "1" ]; then
@@ -280,7 +282,9 @@ fi
 
 # Pre/post wrap templates for the built-in go/comment/add commands: user-editable
 # in Settings ▸ Templates (~/.claude/state/command-templates.json). Empty pre/post
-# (the default — file usually doesn't exist) means zero behavior change.
+# (the default — file usually doesn't exist) means zero behavior change. {context}
+# works in any of the six fields below, not just Go's — Go's just the only one
+# that uses it by default.
 TEMPLATES_PATH="${HOME}/.claude/state/command-templates.json"
 read_template() {  # $1 = action, $2 = pre|post
   [ -f "$TEMPLATES_PATH" ] || { printf ''; return; }
@@ -293,14 +297,15 @@ except Exception:
     pass
 " 2>/dev/null
 }
-GO_PRE="$(read_template go pre)"
+expand_context() { printf '%s' "${1//\{context\}/$CONTEXT_LINE}"; }
+GO_PRE="$(expand_context "$(read_template go pre)")"
 GO_POST="$(read_template go post)"
-[ -z "$GO_POST" ] && GO_POST='(Right-click "Go": {research} Then do what'"'"'s most useful and report.)'
-GO_POST="${GO_POST//\{research\}/$RESEARCH}"
-COMMENT_PRE="$(read_template comment pre)"
-COMMENT_POST="$(read_template comment post)"
-ADD_PRE="$(read_template add pre)"
-ADD_POST="$(read_template add post)"
+[ -z "$GO_POST" ] && GO_POST='(Right-click "Go": {context} Then do what'"'"'s most useful and report.)'
+GO_POST="$(expand_context "$GO_POST")"
+COMMENT_PRE="$(expand_context "$(read_template comment pre)")"
+COMMENT_POST="$(expand_context "$(read_template comment post)")"
+ADD_PRE="$(expand_context "$(read_template add pre)")"
+ADD_POST="$(expand_context "$(read_template add post)")"
 
 open_new() {  # $1 = q text (may be empty)
   local q="$1"

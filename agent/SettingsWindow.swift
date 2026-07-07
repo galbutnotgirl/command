@@ -748,7 +748,7 @@ struct TemplatesView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Templates").font(.title2).bold()
-                Text("Text auto-inserted around the selection for Go / New / Add, plus the per-app context hints Go uses to research before acting. Defaults are shown below — edit anything, or Reset to go back.")
+                Text("Text auto-inserted around the selection for Go / New / Add. Use {context} in any of them to insert the per-app context hint below — Go's default uses it, but it works the same in all three. Defaults are shown below — edit anything, or Reset to go back.")
                     .foregroundColor(.secondary)
 
                 ForEach(model.templates) { t in
@@ -766,7 +766,7 @@ struct TemplatesView: View {
                         Label("Add", systemImage: "plus.circle")
                     }
                 }
-                Text("When \"Go\" fires, the matching rule below is woven into its research instruction — e.g. \"this is from Slack, use the Slack MCP.\" Matched by app bundle ID, app name, or URL host (supports leading \"*.\" glob). Use {url} in the text to insert the source URL.")
+                Text("Feeds {context} above and the [from: App] line every action includes — e.g. \"this is from Slack, use the Slack MCP.\" Matched by app bundle ID, app name, or URL host (supports leading \"*.\" glob). Use {url} in the text to insert the source URL.")
                     .font(.caption).foregroundColor(.secondary)
 
                 VStack(spacing: 0) {
@@ -786,6 +786,16 @@ struct CommandTemplateBox: View {
     @ObservedObject var model: TemplatesModel
     @State private var pre: String = ""
     @State private var post: String = ""
+    @State private var previewSource: PreviewSource = PreviewSource(label: "Generic (no match)", appName: "Chrome", url: "", enrich: "")
+
+    private let sampleSelection = "the exact text you'd have selected"
+
+    private var sources: [PreviewSource] { previewSources(from: model.rules) }
+
+    private var preview: String {
+        composePreview(action: template.action, pre: pre, post: post,
+                        source: previewSource, selection: sampleSelection)
+    }
 
     var body: some View {
         GroupBox(label: HStack {
@@ -808,7 +818,7 @@ struct CommandTemplateBox: View {
                         .onChange(of: pre) { _, v in model.setTemplate(action: template.action, pre: v) }
                 }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(template.action == "go" ? "After selection — {research} inserts the auto-context line" : "After selection")
+                    Text("After selection — {context} inserts the auto-context line below")
                         .font(.caption).foregroundColor(.secondary)
                     TextEditor(text: $post)
                         .font(.system(size: 12, design: .monospaced))
@@ -816,6 +826,27 @@ struct CommandTemplateBox: View {
                         .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
                         .onChange(of: post) { _, v in model.setTemplate(action: template.action, post: v) }
                 }
+
+                Divider().padding(.vertical, 2)
+
+                HStack(spacing: 8) {
+                    Text("Preview as").font(.caption).foregroundColor(.secondary)
+                    Picker("", selection: $previewSource) {
+                        ForEach(sources) { s in Text(s.label).tag(s) }
+                    }
+                    .labelsHidden().frame(width: 180)
+                    .onAppear { if let first = sources.first { previewSource = first } }
+                    Spacer()
+                }
+                Text(preview.isEmpty ? "(empty)" : preview)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
+                    .cornerRadius(6)
             }
             .padding(.vertical, 6)
         }
@@ -1259,6 +1290,12 @@ struct AboutView: View {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
     }
 
+    // Set by build-agent.sh from `git rev-parse` at build time — empty for a
+    // release zip (no .git to read), so this only ever shows on local dev builds.
+    private var gitBranch: String {
+        (Bundle.main.infoDictionary?["ClaudeCommandGitBranch"] as? String) ?? ""
+    }
+
     private var channelHint: String {
         switch channel {
         case .alpha: return "Alpha — earliest builds, least tested."
@@ -1280,6 +1317,10 @@ struct AboutView: View {
                     Button(checking ? "Checking…" : "Check for Updates") { runCheck() }
                         .buttonStyle(.bordered).controlSize(.small)
                         .disabled(checking || installing)
+                }
+                if !gitBranch.isEmpty {
+                    Text("Local dev build — \(gitBranch)")
+                        .font(.caption2).foregroundColor(.secondary)
                 }
 
                 // Update channel
