@@ -39,39 +39,50 @@ Kept unchanged: `src/{settings,prompt,runner,submit,submissions,paths}.js`, `tes
 
 ## Architecture
 
+Two paths into the same submission pipeline:
+
 ```
-hotkey (handoff / shothandoff)                     agent/Actions.swift catalog
-  └─ CommandAgent → runWorker ACTION=…             (generic dispatch, no Swift changes)
-       └─ send-to-claude.sh
-            ├─ existing capture stages: selection auto-⌘C, clipboard fallback,
-            │  screenshot pre-step, secret blocklist, source context
-            └─ handoff) case → capture-handoff.sh          (new, repo root)
-                 ├─ image on clipboard → PNG into <data>/captures/
-                 └─ node vendor/claude-command-capture/bin/submit-cli.js
-                      └─ loadSettings → submitCapture()    (imported core, unchanged)
-                           ├─ captures/<id>.txt|png
-                           ├─ submissions/<id>.json  (status running → succeeded/failed)
-                           ├─ logs/<id>.log
-                           └─ claude -p  (prompt on stdin, /<skill> addressed)
+Text Handoff hotkey/menu                           agent/Actions.swift catalog
+  └─ CommandAgent → runWorker ACTION=handoff        (generic dispatch)
+       └─ send-to-claude.sh → handoff) case → capture-handoff.sh
+            ├─ image on clipboard → PNG into <data>/captures/
+            └─ node vendor/claude-command-capture/bin/submit-cli.js
+                 └─ loadSettings → submitCapture()   (global settings.json skill+template)
+
+Custom Handoff hotkey (any Custom Action w/ isHandoff=true)
+  └─ agent/Handoff.swift runCustomHandoff()          (renders its OWN skill+template,
+       ├─ screenshot: NSPasteboard → PNG directly     no shell round-trip, no global
+       └─ submitHandoffPrompt()                       settings.json involved)
+            └─ node vendor/claude-command-capture/bin/submit-cli.js --retry-prompt
+
+Both converge here:
+  submit-cli.js → submitCapture() / resubmitPrompt()  (imported core, unchanged)
+       ├─ captures/<id>.txt|png
+       ├─ submissions/<id>.json  (status running → succeeded/failed)
+       ├─ logs/<id>.log
+       └─ claude -p  (prompt on stdin, /<skill> addressed if one's set)
 ```
 
 ### New pieces
 
 - **`vendor/claude-command-capture/bin/submit-cli.js`** — headless entry point wrapping
-  `submitCapture()`. Additive; core modules untouched. Text on stdin or `--file` for images.
-  Prints the submission record as JSON, waits for the CLI, exit code mirrors the run.
-  `--init-settings` scaffolds `settings.json`; `--print-settings` shows the effective config.
-  Covered by `test/submit-cli.test.js` alongside the imported suite.
-- **`capture-handoff.sh`** — native glue. Receives captured text on stdin (or an image on the
+  `submitCapture()`/`resubmitPrompt()`. Additive; core modules untouched. Text on stdin or
+  `--file` for images; `--retry-prompt` re-runs an already-rendered prompt verbatim (used by
+  Custom Handoffs and the Retry button — see below). Prints the submission record as JSON,
+  waits for the CLI, exit code mirrors the run. `--init-settings` scaffolds `settings.json`;
+  `--print-settings` shows the effective config. Covered by `test/submit-cli.test.js`
+  alongside the imported suite.
+- **`capture-handoff.sh`** — native glue for the one remaining fixed handoff action, **Text
+  Handoff** (the quick-entry panel). Receives captured text on stdin (or an image on the
   clipboard with `HANDOFF_IMG=1`), plus `HANDOFF_SOURCE` / `HANDOFF_CONTEXT` env from the
-  worker. Dumps clipboard PNGs via AppKit/python3, locates node, invokes the shim.
-- **`send-to-claude.sh`** — two small additions: `shothandoff` joins the screenshot pre-step
-  (without hiding/refocusing the Claude window — this action never touches it), and a
-  `handoff)` delivery case that execs `capture-handoff.sh`. All existing actions untouched.
-- **`agent/Actions.swift`** — two catalog entries, `handoff` ("Skill Handoff") and
-  `shothandoff` ("Screenshot Handoff"), unbound by default. The Shortcuts settings tab,
-  hotkey registration, and worker dispatch all derive from the catalog, so no other Swift
-  changes are needed.
+  worker. Dumps clipboard PNGs via AppKit/python3, locates node, invokes the shim. Custom
+  Handoffs (below) bypass this entirely — they render their own prompt in Swift and call
+  `submit-cli.js --retry-prompt` directly (`agent/Handoff.swift`'s `submitHandoffPrompt`).
+- **`send-to-claude.sh`** — `handoff)` delivery case that execs `capture-handoff.sh`, used
+  only by the Text Handoff action now. All existing actions untouched.
+- **`agent/Actions.swift`** — the `CustomAction` model has an `isHandoff` flag (plus a
+  `skill` field): any Custom Action can run as a background `claude -p` handoff instead of
+  pasting into the Claude window. No separate catalog entries — see "Custom Handoffs" below.
 - **`build-agent.sh`** — bundles `capture-handoff.sh` + the vendor core (src/bin only) into
   the app's Resources so installed builds work outside the repo checkout.
 
@@ -96,28 +107,90 @@ valid inputs to `submit-cli.js` for other callers.
 
 ## Using it
 
+For **Text Handoff** (the one fixed, global-config action — a quick-entry panel, not a
+capture, so it doesn't fit the per-action model below):
+
 1. Rebuild + restart the agent (`./build-agent.sh`, `./install-agent.sh`).
-2. Menu bar ▸ **Handoffs ▸ Handoff Settings…** — set the skill name and the CLI working
-   directory (the project that owns the skill). Equivalent: edit
+2. Menu bar ▸ **Handoff History ▸ Handoff Settings…** — set the skill name and the CLI
+   working directory (the project that owns the skill). Equivalent: edit
    `~/Library/Application Support/claude-command/settings.json` or run
    `node vendor/claude-command-capture/bin/submit-cli.js --init-settings`.
-3. Bind **Skill Handoff** / **Screenshot Handoff** / **Text Handoff** in Settings →
-   Shortcuts.
-4. Select text (or shoot a region, or type into the entry window) → notification "Submitted
-   to Claude" → record in `submissions/`, output in `logs/<id>.log`, last runs under
-   menu bar ▸ Handoffs.
+3. Bind **Text Handoff** in Settings → Shortcuts.
+4. Type into the entry window (⌘⏎ submits) → notification "Submitted to Claude" → record in
+   `submissions/`, output in `logs/<id>.log`, last runs under menu bar ▸ Handoff History.
+
+For everything else — selection-based or screenshot-based background runs — use a **Custom
+Handoff** (see below): Settings ▸ Shortcuts ▸ Custom Actions ▸ Add ▸ toggle "Run as
+background handoff". Each one carries its own skill + prompt template, independent of the
+one global `settings.json` skill/template Text Handoff uses.
 
 ## Native UI (agent/Handoff.swift + MenuBar.swift)
 
 Ports of the imported Electron UI surfaces, kept out of the WIP-heavy Settings window:
 
-- **Handoff Settings window** — skill, CLI command / cwd / extra args, both prompt
-  templates, notifications toggle. Reads/patches `settings.json` in place; keys this UI
-  doesn't own (`cli.baseArgs`, the ignored Electron `hotkeys` block, future fields) are
-  preserved verbatim.
-- **Handoffs menu** (menu bar) — last 8 submission records as `✓/✗/… source → /skill — age`
-  (replaces the imported tray's Recent Submissions; click opens the log), plus Text Entry
-  and Handoff Settings.
+- **Handoff Settings window** (Text Handoff's config) — skill, CLI command / cwd / extra
+  args, both prompt templates, notifications toggle. Reads/patches `settings.json` in place;
+  keys this UI doesn't own (`cli.baseArgs`, the ignored Electron `hotkeys` block, future
+  fields) are preserved verbatim.
+- **Handoff History menu** (menu bar) — last 8 submission records as
+  `✓/✗/… source → /skill — age` (replaces the imported tray's Recent Submissions; click opens
+  the log), plus Text Entry and Handoff Settings.
 - **Text-entry panel** (replaces imported `renderer/text-entry`) — floating panel, ⌘⏎
   submits with `source: "text"`, Esc closes. Also reachable via the **Text Handoff**
   hotkey action.
+- **Handoff History tab** (Settings ▸ Handoff History) — every submission, filterable by
+  status, with Retry (failed runs), a retention-days stepper (auto-deletes finished runs;
+  default 7d, matches Clipboard History), and a "mark as failed" action for a run stuck at
+  "running" (the CLI process died without the record ever getting rewritten).
+
+## Custom Handoffs — building a structured background-prompt flow
+
+A Custom Handoff is just a Custom Action (Settings ▸ Shortcuts ▸ Custom Actions) with "Run
+as background handoff" turned on: instead of pasting the rendered prompt into the Claude
+window, it pipes it to `claude -p` in the background and leaves a submission record — the
+same mechanism as a Shortcuts automation that shells out to `claude -p` and posts the result
+somewhere, just wired into a hotkey/menu instead of the Shortcuts app.
+
+**Worked example** — replicating a "freeform text → parsed task → POST to an API" flow (the
+shape of a typical Shortcuts intake script: Share Sheet or a hotkey hands off text, a shell
+script wraps it in a `claude -p` prompt with explicit numbered steps and a strict output
+contract, then acts on the result):
+
+1. **Add a Custom Action.** Name it, pick **Text** (selection/clipboard) as the type, turn on
+   **Run as background handoff**, set **Skill** if you have one written as a
+   `.claude/skills/<name>/SKILL.md` (empty is fine — the prompt below is fully self-contained
+   and doesn't need one).
+2. **Prompt template** — write the same kind of explicit, numbered contract a hand-rolled
+   shell script would build into its `claude -p` call: parse the input, do the work, then
+   emit *one* machine-parseable line. `{selection}` is replaced with the captured text (or
+   appended below the template if you don't reference it — same convention as every other
+   Custom Action):
+
+   ```text
+   Extract a task from this input and create it via the tracker API.
+
+   <input>{selection}</input>
+
+   Parse title/notes/due date. POST to https://your-tracker/api/tasks with
+   curl (see the API docs in this project for the shape). Then output ONLY:
+     TASK_ID=<id>
+   or, if it failed:
+     ERROR=<reason>
+   ```
+
+3. **Permission flags** — a background run has no one at the keyboard to click through a
+   permission prompt, so it needs a CLI invocation that doesn't stop and ask. That's
+   `cli.extraArgs` in `settings.json` (Menu bar ▸ Handoff History ▸ Handoff Settings…, or
+   edit the file directly): add `--dangerously-skip-permissions` and, to scope what it can
+   touch instead of trusting it with everything, `--allowedTools "Bash"` (or whatever
+   MCP tools the prompt above actually needs, comma-separated). This is a global setting —
+   it applies to every handoff (Custom or Text), the same way a real intake script would pin
+   its own `claude -p` flags once rather than per-call.
+4. **Bind a hotkey** to the Custom Action (same key-binding field every action gets) —
+   this replaces whatever gesture/trigger a Shortcuts automation would use.
+5. **Check the result** — Menu bar ▸ Handoff History (or the Handoff History Settings tab)
+   shows the run's status and its log. There's no built-in parsing of the `TASK_ID=`/`ERROR=`
+   contract from step 2 — the app tracks `succeeded`/`failed` purely by the CLI's exit code,
+   the log file has everything else. If you need the app itself to react differently based on
+   what `claude -p` printed (not just whether it exited 0), that's not built yet — the log is
+   there, but there's no structured-output-parsing/action layer on top of it.
