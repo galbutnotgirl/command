@@ -232,13 +232,14 @@ esac
 HOST="$(printf '%s' "$URL" | sed -n 's#^[a-z][a-z]*://\([^/]*\).*#\1#p')"
 log "src app=$APP_NAME bundle=$BUNDLE_ID host=${HOST:-none} img=$IMG"
 
-# Auto-context rules: user-editable in Settings ▸ Templates ▸ Auto-Context Rules
+# Context rules: user-editable in Settings ▸ Templates ▸ Context
 # (~/.claude/state/enrichment-rules.json). If that file doesn't exist, fall back
 # to the built-in defaults below unchanged — editing Templates is opt-in.
 ENRICH_RULES_PATH="${HOME}/.claude/state/enrichment-rules.json"
 ENRICH=""
+DISPLAY_NAME=""
 if [ -f "$ENRICH_RULES_PATH" ]; then
-  ENRICH="$(/usr/bin/python3 - "$ENRICH_RULES_PATH" "$BUNDLE_ID" "$HOST" "$APP_NAME" "$URL" <<'PY'
+  IFS=$'\x1e' read -r ENRICH DISPLAY_NAME <<< "$(/usr/bin/python3 - "$ENRICH_RULES_PATH" "$BUNDLE_ID" "$HOST" "$APP_NAME" "$URL" <<'PY'
 import json, sys, fnmatch
 path, bundle, host, app, url = sys.argv[1:6]
 try:
@@ -250,31 +251,43 @@ for r in rules:
     hit = (m == "bundle" and pat == bundle) or (m == "app" and pat == app) \
         or (m == "host" and host and fnmatch.fnmatch(host, pat))
     if hit:
-        sys.stdout.write(text.replace("{url}", url))
+        sys.stdout.write(text.replace("{url}", url) + "\x1e" + r.get("displayName", ""))
         break
 PY
 )"
 else
+  # App-name matching throughout (not bundle ID) — same as the Swift defaults, so
+  # editing "Slack" in Templates and seeing this fallback behave identically.
+  case "$APP_NAME" in
+    Slack) ENRICH="From Slack. Use the Slack MCP to find this exact message (search by the text), then pull the channel, thread permalink, author and surrounding thread." DISPLAY_NAME="Slack" ;;
+    Granola) ENRICH="From Granola — treat the meeting transcript as context via the Granola MCP." DISPLAY_NAME="Granola" ;;
+  esac
   case "$BUNDLE_ID" in
-    com.tinyspeck.slackmacgap) ENRICH="This is from Slack. Use the Slack MCP to find this exact message (search by the text), then pull the channel, thread permalink, author and surrounding thread." ;;
+    com.mimestream.Mimestream) ENRICH="From Mimestream (a Gmail client) — use the Gmail MCP to find the source thread for full context." DISPLAY_NAME="Mimestream" ;;
   esac
   case "$HOST" in
-    mail.google.com) ENRICH="From Gmail — use the Gmail MCP to find the source thread for full context." ;;
-    *.atlassian.net) ENRICH="From Jira/Confluence — use the Atlassian MCP to pull the referenced issue/page." ;;
-    docs.google.com) ENRICH="From a Google Doc (${URL}) — read it via gws if useful; obey the editable-doc rule before any write." ;;
-    drive.google.com) ENRICH="From Google Drive (${URL}) — use gws drive to inspect or download the file before acting." ;;
-    app.gong.io)     ENRICH="From Gong — use the Gong MCP to pull the related call/transcript." ;;
-    *.lightning.force.com|*.salesforce.com) ENRICH="From Salesforce — use the Salesforce MCP to pull the related record." ;;
+    mail.google.com) ENRICH="From Gmail — use the Gmail MCP to find the source thread for full context." DISPLAY_NAME="Gmail" ;;
+    *.atlassian.net) ENRICH="From Jira/Confluence — use the Atlassian MCP to pull the referenced issue/page." DISPLAY_NAME="Jira/Confluence" ;;
+    # Docs/Sheets/Slides all live under docs.google.com, split only by URL path —
+    # can't tell them apart by host, so they get the same Drive-branded rule as
+    # drive.google.com itself.
+    docs.google.com) ENRICH="From a Google Drive file (${URL}) — Docs, Sheets, or Slides; read it via gws if useful, obey the editable-doc rule before any write." DISPLAY_NAME="Google Drive" ;;
+    drive.google.com) ENRICH="From Google Drive (${URL}) — use gws drive to inspect or download the file before acting." DISPLAY_NAME="Google Drive" ;;
+    app.gong.io)     ENRICH="From Gong — use the Gong MCP to pull the related call/transcript." DISPLAY_NAME="Gong" ;;
+    *.lightning.force.com|*.salesforce.com) ENRICH="From Salesforce — use the Salesforce MCP to pull the related record." DISPLAY_NAME="Salesforce" ;;
   esac
-  [ "$APP_NAME" = "Granola" ] && ENRICH="From Granola — treat the meeting transcript as context via the Granola MCP."
 fi
-# {context} in any pre/post template below expands to this — the auto-context
-# rule text (if one matched) wrapped in an instruction to actually go use it.
+# {context} in any pre/post template below expands to this — the context rule
+# text (if one matched) wrapped in an instruction to actually go use it.
 CONTEXT_LINE="Before acting, research for context to be maximally useful: ${ENRICH:-identify the source and pull any related thread, doc, message or record via the matching MCP connector.}"
 
 CONTEXT=""
 if [ "$INCLUDE_CONTEXT" = "1" ]; then
-  SRC="$APP_NAME"; [ -n "$URL" ] && SRC="${APP_NAME} — ${URL}"
+  # A matched rule's display name replaces "AppName — URL" — for a browser match
+  # that's just "Google Chrome — https://mail.google.com/..." once the URL has
+  # already said "this is Gmail"; the browser itself is noise at that point.
+  SRC="${DISPLAY_NAME:-$APP_NAME}"
+  [ -z "$DISPLAY_NAME" ] && [ -n "$URL" ] && SRC="${APP_NAME} — ${URL}"
   [ -n "$SRC" ] && CONTEXT="[from: ${SRC}]"$'\n'
   [ -n "$ENRICH" ] && CONTEXT="${CONTEXT}${ENRICH}"$'\n'
   [ -n "$CONTEXT" ] && CONTEXT="${CONTEXT}"$'\n'

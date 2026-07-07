@@ -20,6 +20,22 @@ enum SettingsTab: Equatable {
 let settingsModel = SettingsModel()
 let settingsWindow = SettingsWindowController()
 
+// One card style for every list row across Settings (Shortcuts bindings/custom
+// actions, Templates rules, Dictation history/corrections/vocabulary) — was three
+// different ad hoc patterns (bare Dividers with no background, a manually-drawn
+// card in Setup, a plain GroupBox everywhere else), which is what made the whole
+// window feel visually inconsistent. Spacing between cards, not divider lines
+// inside one continuous block — reads as separate items, not one tight list.
+extension View {
+    func settingsCard() -> some View {
+        self
+            .padding(10)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+            .cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.15), lineWidth: 1))
+    }
+}
+
 // ---- model ------------------------------------------------------------------
 final class SettingsModel: ObservableObject {
     @Published var tab: SettingsTab = .setup
@@ -224,7 +240,7 @@ struct SettingsRootView: View {
             tabButton(.dictHistory,     "History",     "clock")
             tabButton(.dictCorrections, "Corrections", "text.badge.checkmark")
             tabButton(.dictVocabulary,  "Vocabulary",  "character.book.closed")
-            tabButton(.dictSettings,    "Settings",    "gear")
+            tabButton(.dictSettings,    "Dictation Settings", "gear")
 
             Divider().padding(.vertical, 4)
 
@@ -538,7 +554,7 @@ struct ShortcutsView: View {
                     .cornerRadius(8)
                 }
 
-                VStack(spacing: 0) {
+                VStack(spacing: 8) {
                     ForEach(model.bindings) { b in
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -549,8 +565,7 @@ struct ShortcutsView: View {
                             Spacer()
                             KeyBindingField(action: b.action, binding: b, model: model)
                         }
-                        .padding(.vertical, 8)
-                        Divider()
+                        .settingsCard()
                     }
                 }
 
@@ -564,17 +579,16 @@ struct ShortcutsView: View {
                 }
                 .padding(.top, 8)
 
-                Text("Prompt templates that wrap selected text or a screenshot. Use {selection} to place selected text inline — otherwise it's appended below the prompt. Source app + research hint go before all of it, unless \"Include source app\" is off.")
+                Text("Prompt templates that wrap selected text or a screenshot. Use {selection} to place selected text inline — otherwise it's appended below the prompt. Source app + context hint go before all of it, unless \"Include source app\" is off.")
                     .font(.caption).foregroundColor(.secondary)
 
                 if model.customActions.isEmpty {
                     Text("No custom actions yet — click Add to create one.")
                         .font(.caption).foregroundColor(.secondary).padding(.vertical, 4)
                 } else {
-                    VStack(spacing: 0) {
+                    VStack(spacing: 8) {
                         ForEach(model.customActions) { ca in
                             CustomActionRow(ca: ca, model: model)
-                            Divider()
                         }
                     }
                 }
@@ -599,10 +613,6 @@ struct CustomActionRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(ca.name).font(.callout)
-                    Text(ca.sessionMode == "add" ? "add" : "new")
-                        .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(Color.accentColor.opacity(0.15))
-                        .cornerRadius(4)
                     if !ca.includeSource {
                         Text("no src").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
                             .background(Color.secondary.opacity(0.12)).cornerRadius(4)
@@ -623,7 +633,7 @@ struct CustomActionRow: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 8)
+        .settingsCard()
         .sheet(isPresented: $showingEdit) {
             CustomActionSheet(isPresented: $showingEdit, model: model, editing: ca)
         }
@@ -685,7 +695,7 @@ struct CustomActionSheet: View {
             .help("New session opens a fresh Claude Code window. Add pastes into the currently open chat.")
 
             Toggle("Include source app", isOn: $includeSource)
-                .help("Prepend \"from: AppName — URL\" (plus an app-specific research hint, e.g. \"use the Slack MCP…\") before the prompt")
+                .help("Prepend \"from: AppName — URL\" (plus a matching Context rule, e.g. \"use the Slack MCP…\") before the prompt")
 
             Toggle("Auto-submit", isOn: $isAutoSubmit)
                 .help("Press Return automatically after pasting the prompt into Claude")
@@ -694,7 +704,7 @@ struct CustomActionSheet: View {
                 Text("Prompt template").font(.caption).bold()
                 Text(isShot
                      ? "Sent to Claude with the screenshot attached, source context first (if enabled above)."
-                     : "Final message Claude sees, top to bottom: 1) source context + research hint (if enabled above) 2) this template, with {selection} replaced by the selected text 3) if you didn't use {selection}, the selected text is appended after, on its own line.")
+                     : "Final message Claude sees, top to bottom: 1) source context + context hint (if enabled above) 2) this template, with {selection} replaced by the selected text 3) if you didn't use {selection}, the selected text is appended after, on its own line.")
                     .font(.caption).foregroundColor(.secondary)
                 TextEditor(text: $prompt)
                     .font(.system(.body, design: .monospaced))
@@ -745,7 +755,7 @@ struct TemplatesView: View {
     @StateObject private var model = TemplatesModel()
     // Defaults to the first action in display order (Add) — same list Shortcuts uses.
     @State private var previewAction: String = DEFAULT_COMMAND_TEMPLATES.first?.action ?? "add"
-    @State private var previewSource: PreviewSource = PreviewSource(label: "Generic (no match)", appName: "Chrome", url: "", enrich: "")
+    @State private var previewSource: PreviewSource = PreviewSource(label: "Generic (no match)", appName: "Chrome", url: "", enrich: "", displayName: "")
 
     private let sampleSelection = "the exact text you'd have selected"
 
@@ -760,12 +770,19 @@ struct TemplatesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Templates").font(.title2).bold()
+                HStack {
+                    Text("Templates").font(.title2).bold()
+                    Spacer()
+                    Button("Export…") { exportTemplates() }
+                    Button("Import…") { importTemplates(model: model) }
+                }
                 Text("Text auto-inserted around the selection for Add / New / Go. Use {context} in any of them to insert the matching rule below — Go's default uses it, but it works the same in all three.")
                     .foregroundColor(.secondary)
 
-                // ---- one shared preview, up top ----
-                GroupBox(label: Text("Preview").bold()) {
+                // ---- one shared preview, up top — visually its own thing, not
+                // part of the Add/New/Go boxes below it. ----
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Preview").font(.title3).bold()
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
                             Text("Action").font(.caption).foregroundColor(.secondary)
@@ -792,8 +809,10 @@ struct TemplatesView: View {
                             .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
                             .cornerRadius(6)
                     }
-                    .padding(.vertical, 6)
+                    .settingsCard()
                 }
+
+                Divider()
 
                 // ---- Add, New, Go — same order as Settings ▸ Shortcuts ----
                 ForEach(model.templates) { t in
@@ -803,7 +822,7 @@ struct TemplatesView: View {
                 Divider().padding(.vertical, 4)
 
                 HStack {
-                    Text("Context Rules").font(.headline)
+                    Text("Context").font(.headline)
                     Spacer()
                     Button("Reset All to Default") { model.resetRulesToDefault() }
                         .buttonStyle(.plain).font(.caption).foregroundColor(.secondary)
@@ -811,13 +830,12 @@ struct TemplatesView: View {
                         Label("Add", systemImage: "plus.circle")
                     }
                 }
-                Text("Feeds {context} above and the [from: App] line every action includes — e.g. \"this is from Slack, use the Slack MCP.\" Matched by app bundle ID, app name, or URL host (supports leading \"*.\" glob). Use {url} in the text to insert the source URL.")
+                Text("Feeds {context} above and the [from: App] line every action includes — e.g. \"this is from Slack, use the Slack MCP.\" Matched by app bundle ID, app name, or URL host (supports leading \"*.\" glob). Use {url} in the text to insert the source URL, and Display name to replace the [from: …] line (handy for a browser match — no need to show \"Chrome\" once the URL already says Gmail).")
                     .font(.caption).foregroundColor(.secondary)
 
-                VStack(spacing: 0) {
+                VStack(spacing: 8) {
                     ForEach(model.rules) { rule in
                         EnrichRuleRow(rule: rule, model: model)
-                        Divider()
                     }
                 }
             }
@@ -874,6 +892,7 @@ struct EnrichRuleRow: View {
     @State private var pattern: String = ""
     @State private var text: String = ""
     @State private var match: EnrichMatchType = .host
+    @State private var displayName: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -886,11 +905,26 @@ struct EnrichRuleRow: View {
                 .onChange(of: match) { _, v in
                     var r = rule; r.match = v; model.updateRule(r)
                 }
-                TextField("pattern (e.g. *.atlassian.net)", text: $pattern)
+                VStack(alignment: .leading, spacing: 1) {
+                    TextField("pattern (e.g. *.atlassian.net)", text: $pattern)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 12, design: .monospaced))
+                        .onChange(of: pattern) { _, v in
+                            var r = rule; r.pattern = v; model.updateRule(r)
+                        }
+                    // A raw host glob is ugly on its own ("*.atlassian.net") — the
+                    // display name underneath it (if set) is the friendly label
+                    // this rule actually shows in the [from: …] line.
+                    if match == .host && !displayName.isEmpty {
+                        Text(displayName).font(.caption2).foregroundColor(.secondary)
+                    }
+                }
+                TextField("Display name (e.g. Gmail)", text: $displayName)
                     .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12, design: .monospaced))
-                    .onChange(of: pattern) { _, v in
-                        var r = rule; r.pattern = v; model.updateRule(r)
+                    .font(.system(size: 12))
+                    .frame(width: 130)
+                    .onChange(of: displayName) { _, v in
+                        var r = rule; r.displayName = v; model.updateRule(r)
                     }
                 Button { model.removeRule(id: rule.id) } label: {
                     Image(systemName: "minus.circle").foregroundColor(.red)
@@ -903,8 +937,8 @@ struct EnrichRuleRow: View {
                     var r = rule; r.text = v; model.updateRule(r)
                 }
         }
-        .padding(.vertical, 6)
-        .onAppear { pattern = rule.pattern; text = rule.text; match = rule.match }
+        .settingsCard()
+        .onAppear { pattern = rule.pattern; text = rule.text; match = rule.match; displayName = rule.displayName }
     }
 }
 
@@ -940,6 +974,40 @@ private func importSettings(model: SettingsModel) {
     }
     reregisterHotkeys()
     model.refresh()
+}
+
+@MainActor
+private func exportTemplates() {
+    let templates = (try? Data(contentsOf: URL(fileURLWithPath: COMMAND_TEMPLATES_PATH))) ?? Data()
+    let rules = (try? Data(contentsOf: URL(fileURLWithPath: ENRICHMENT_RULES_PATH))) ?? Data()
+    let tObj = (try? JSONSerialization.jsonObject(with: templates)) ?? [:]
+    let rObj = (try? JSONSerialization.jsonObject(with: rules)) ?? []
+    let bundle: [String: Any] = ["commandTemplates": tObj, "enrichRules": rObj, "version": 1]
+    guard let data = try? JSONSerialization.data(withJSONObject: bundle, options: [.prettyPrinted]) else { return }
+    let panel = NSSavePanel()
+    panel.allowedContentTypes = [.json]
+    panel.nameFieldStringValue = "claude-command-templates.json"
+    if panel.runModal() == .OK, let url = panel.url {
+        try? data.write(to: url)
+    }
+}
+
+@MainActor
+private func importTemplates(model: TemplatesModel) {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.json]
+    panel.message = "Select a claude-command-templates.json export file"
+    guard panel.runModal() == .OK, let url = panel.url,
+          let data = try? Data(contentsOf: url),
+          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+    if let t = obj["commandTemplates"], let tData = try? JSONSerialization.data(withJSONObject: t) {
+        try? tData.write(to: URL(fileURLWithPath: COMMAND_TEMPLATES_PATH))
+    }
+    if let r = obj["enrichRules"], let rData = try? JSONSerialization.data(withJSONObject: r) {
+        try? rData.write(to: URL(fileURLWithPath: ENRICHMENT_RULES_PATH))
+    }
+    model.templates = loadCommandTemplates()
+    model.rules = loadEnrichRules()
 }
 
 struct KeyBindingField: View {
@@ -1446,25 +1514,23 @@ struct DictHistoryView: View {
                     }
                 }
 
-                GroupBox(label: HStack {
-                    Text("All Entries (\(hist.records.count))").font(.subheadline).bold()
+                HStack {
+                    Text("All Entries (\(hist.records.count))").font(.headline)
                     Spacer()
                     if !hist.records.isEmpty {
                         Button("Clear All") { hist.clearAll() }
                             .foregroundColor(.red).buttonStyle(.plain).font(.caption)
                     }
-                }) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        if hist.records.isEmpty {
-                            Text("No dictations yet. Use the Dictate hotkey to record your first one.")
-                                .font(.caption).foregroundColor(.secondary).padding(.vertical, 12)
-                        } else {
-                            ForEach(hist.records) { e in
-                                HistoryEntryRow(entry: e)
-                                Divider()
-                            }
+                }
+                if hist.records.isEmpty {
+                    Text("No dictations yet. Use the Dictate hotkey to record your first one.")
+                        .font(.caption).foregroundColor(.secondary).padding(.vertical, 12)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(hist.records) { e in
+                            HistoryEntryRow(entry: e)
                         }
-                    }.padding(.vertical, 4)
+                    }
                 }
             }.padding(24)
         }
@@ -1570,7 +1636,7 @@ struct HistoryEntryRow: View {
                 Text("Raw: \(entry.raw)").font(.caption2).foregroundColor(.secondary)
             }
         }
-        .padding(.vertical, 6)
+        .settingsCard()
         .sheet(item: $correctionRequest) { req in
             DictCorrectionSheet(fullText: req.fullText,
                                 preselected: req.preselected,
@@ -1660,7 +1726,12 @@ struct DictCorrectionsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Word Corrections").font(.title2).bold()
+                HStack {
+                    Text("Word Corrections").font(.title2).bold()
+                    Spacer()
+                    Button("Export…") { exportVocabulary() }
+                    Button("Import…") { importVocabulary(vocab: vocab) }
+                }
                 Text("Misheard → Correct. Applied before any other processing.")
                     .foregroundColor(.secondary)
 
@@ -1670,17 +1741,19 @@ struct DictCorrectionsView: View {
                             Text("No corrections yet.")
                                 .font(.caption).foregroundColor(.secondary)
                         } else {
-                            ForEach(vocab.replacements) { r in
-                                HStack {
-                                    Text(r.wrong).foregroundColor(.secondary)
-                                    Image(systemName: "arrow.right").font(.caption)
-                                    Text(r.correct)
-                                    Spacer()
-                                    Button { vocab.removeReplacement(id: r.id) } label: {
-                                        Image(systemName: "trash").foregroundColor(.red)
-                                    }.buttonStyle(.plain)
-                                }.font(.system(size: 13))
-                                Divider()
+                            VStack(spacing: 6) {
+                                ForEach(vocab.replacements) { r in
+                                    HStack {
+                                        Text(r.wrong).foregroundColor(.secondary)
+                                        Image(systemName: "arrow.right").font(.caption)
+                                        Text(r.correct)
+                                        Spacer()
+                                        Button { vocab.removeReplacement(id: r.id) } label: {
+                                            Image(systemName: "trash").foregroundColor(.red)
+                                        }.buttonStyle(.plain)
+                                    }.font(.system(size: 13))
+                                    .settingsCard()
+                                }
                             }
                         }
                         HStack(spacing: 6) {
@@ -1733,7 +1806,12 @@ struct DictVocabularyView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Vocabulary").font(.title2).bold()
+                HStack {
+                    Text("Vocabulary").font(.title2).bold()
+                    Spacer()
+                    Button("Export…") { exportVocabulary() }
+                    Button("Import…") { importVocabulary(vocab: vocab) }
+                }
 
                 GroupBox(label: Text("Vocabulary Hints").font(.subheadline).bold()) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -1742,15 +1820,17 @@ struct DictVocabularyView: View {
                         if vocab.vocab.isEmpty {
                             Text("No terms yet.").font(.caption).foregroundColor(.secondary)
                         } else {
-                            ForEach(Array(vocab.vocab.enumerated()), id: \.offset) { i, term in
-                                HStack {
-                                    Text(term)
-                                    Spacer()
-                                    Button { vocab.removeVocab(at: IndexSet([i])) } label: {
-                                        Image(systemName: "trash").foregroundColor(.red)
-                                    }.buttonStyle(.plain)
-                                }.font(.system(size: 13))
-                                Divider()
+                            VStack(spacing: 6) {
+                                ForEach(Array(vocab.vocab.enumerated()), id: \.offset) { i, term in
+                                    HStack {
+                                        Text(term)
+                                        Spacer()
+                                        Button { vocab.removeVocab(at: IndexSet([i])) } label: {
+                                            Image(systemName: "trash").foregroundColor(.red)
+                                        }.buttonStyle(.plain)
+                                    }.font(.system(size: 13))
+                                    .settingsCard()
+                                }
                             }
                         }
                         HStack(spacing: 6) {
@@ -1765,24 +1845,26 @@ struct DictVocabularyView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Words stripped from transcripts when filler removal is on. Toggle per entry.")
                             .font(.caption).foregroundColor(.secondary)
-                        ForEach(vocab.fillers) { f in
-                            HStack {
-                                Toggle("", isOn: Binding(
-                                    get: { f.enabled },
-                                    set: { _ in vocab.toggleFiller(id: f.id) }
-                                )).labelsHidden().toggleStyle(.checkbox)
-                                Text(f.phrase).foregroundColor(f.enabled ? .primary : .secondary)
-                                if f.customPattern != nil {
-                                    Text("regex").font(.caption2)
-                                        .padding(.horizontal, 4).padding(.vertical, 1)
-                                        .background(Color.secondary.opacity(0.2)).cornerRadius(3)
-                                }
-                                Spacer()
-                                Button { vocab.removeFiller(id: f.id) } label: {
-                                    Image(systemName: "trash").foregroundColor(.red)
-                                }.buttonStyle(.plain)
-                            }.font(.system(size: 13))
-                            Divider()
+                        VStack(spacing: 6) {
+                            ForEach(vocab.fillers) { f in
+                                HStack {
+                                    Toggle("", isOn: Binding(
+                                        get: { f.enabled },
+                                        set: { _ in vocab.toggleFiller(id: f.id) }
+                                    )).labelsHidden().toggleStyle(.checkbox)
+                                    Text(f.phrase).foregroundColor(f.enabled ? .primary : .secondary)
+                                    if f.customPattern != nil {
+                                        Text("regex").font(.caption2)
+                                            .padding(.horizontal, 4).padding(.vertical, 1)
+                                            .background(Color.secondary.opacity(0.2)).cornerRadius(3)
+                                    }
+                                    Spacer()
+                                    Button { vocab.removeFiller(id: f.id) } label: {
+                                        Image(systemName: "trash").foregroundColor(.red)
+                                    }.buttonStyle(.plain)
+                                }.font(.system(size: 13))
+                                .settingsCard()
+                            }
                         }
                         HStack(spacing: 6) {
                             TextField("Phrase", text: $newFiller).textFieldStyle(.roundedBorder)
@@ -1794,6 +1876,30 @@ struct DictVocabularyView: View {
             }.padding(24)
         }
     }
+}
+
+// Both tabs (Corrections + Vocabulary) surface the same export/import — they're
+// separate UI over the one vocabulary.json (replacements + terms + fillers).
+@MainActor
+private func exportVocabulary() {
+    let data = (try? Data(contentsOf: VocabularyStore.diskURL())) ?? Data()
+    let panel = NSSavePanel()
+    panel.allowedContentTypes = [.json]
+    panel.nameFieldStringValue = "claude-command-vocabulary.json"
+    if panel.runModal() == .OK, let url = panel.url {
+        try? data.write(to: url)
+    }
+}
+
+@MainActor
+private func importVocabulary(vocab: VocabularyStore) {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.json]
+    panel.message = "Select a claude-command-vocabulary.json export file"
+    guard panel.runModal() == .OK, let url = panel.url,
+          let data = try? Data(contentsOf: url) else { return }
+    try? data.write(to: VocabularyStore.diskURL(), options: .atomic)
+    vocab.load()
 }
 
 // ---- Sound browser -----------------------------------------------------------

@@ -90,28 +90,41 @@ struct EnrichRule: Identifiable {
     var match: EnrichMatchType
     var pattern: String     // supports * glob for host; exact match otherwise
     var text: String        // {url} expands to the source URL when present
+    // Friendly name for the "[from: …]" line every action includes, e.g. "Gmail" or
+    // "Slack" — replaces the raw "AppName — URL" (which for a browser match is just
+    // "Google Chrome — https://mail.google.com/..." — the app is noise once the URL
+    // has already told you it's Gmail). Empty means fall back to "AppName — URL".
+    var displayName: String = ""
 }
 
 // Mirrors the hardcoded case statements in send-to-claude.sh at time of writing.
+// App-name matching (not bundle ID) throughout — Slack and Granola should be found
+// and edited the same way, and app names are what you'd actually recognize/type.
 let DEFAULT_ENRICH_RULES: [EnrichRule] = [
-    EnrichRule(match: .bundle, pattern: "com.tinyspeck.slackmacgap",
-               text: "This is from Slack. Use the Slack MCP to find this exact message (search by the text), then pull the channel, thread permalink, author and surrounding thread."),
-    EnrichRule(match: .host, pattern: "mail.google.com",
-               text: "From Gmail — use the Gmail MCP to find the source thread for full context."),
-    EnrichRule(match: .host, pattern: "*.atlassian.net",
-               text: "From Jira/Confluence — use the Atlassian MCP to pull the referenced issue/page."),
-    EnrichRule(match: .host, pattern: "docs.google.com",
-               text: "From a Google Doc ({url}) — read it via gws if useful; obey the editable-doc rule before any write."),
-    EnrichRule(match: .host, pattern: "drive.google.com",
-               text: "From Google Drive ({url}) — use gws drive to inspect or download the file before acting."),
-    EnrichRule(match: .host, pattern: "app.gong.io",
-               text: "From Gong — use the Gong MCP to pull the related call/transcript."),
-    EnrichRule(match: .host, pattern: "*.lightning.force.com",
-               text: "From Salesforce — use the Salesforce MCP to pull the related record."),
-    EnrichRule(match: .host, pattern: "*.salesforce.com",
-               text: "From Salesforce — use the Salesforce MCP to pull the related record."),
-    EnrichRule(match: .app, pattern: "Granola",
-               text: "From Granola — treat the meeting transcript as context via the Granola MCP."),
+    EnrichRule(match: .app, pattern: "Slack", text: "From Slack. Use the Slack MCP to find this exact message (search by the text), then pull the channel, thread permalink, author and surrounding thread.",
+               displayName: "Slack"),
+    EnrichRule(match: .host, pattern: "mail.google.com", text: "From Gmail — use the Gmail MCP to find the source thread for full context.",
+               displayName: "Gmail"),
+    EnrichRule(match: .host, pattern: "*.atlassian.net", text: "From Jira/Confluence — use the Atlassian MCP to pull the referenced issue/page.",
+               displayName: "Jira/Confluence"),
+    // Docs, Sheets, and Slides all live under docs.google.com, split only by URL
+    // *path* (/document/, /spreadsheets/, /presentation/) — the rule matcher only
+    // does host/bundle/app, so they can't be told apart here. One Drive-branded
+    // rule covers all of them, same as drive.google.com itself.
+    EnrichRule(match: .host, pattern: "docs.google.com", text: "From a Google Drive file ({url}) — Docs, Sheets, or Slides; read it via gws if useful, obey the editable-doc rule before any write.",
+               displayName: "Google Drive"),
+    EnrichRule(match: .host, pattern: "drive.google.com", text: "From Google Drive ({url}) — use gws drive to inspect or download the file before acting.",
+               displayName: "Google Drive"),
+    EnrichRule(match: .host, pattern: "app.gong.io", text: "From Gong — use the Gong MCP to pull the related call/transcript.",
+               displayName: "Gong"),
+    EnrichRule(match: .host, pattern: "*.lightning.force.com", text: "From Salesforce — use the Salesforce MCP to pull the related record.",
+               displayName: "Salesforce"),
+    EnrichRule(match: .host, pattern: "*.salesforce.com", text: "From Salesforce — use the Salesforce MCP to pull the related record.",
+               displayName: "Salesforce"),
+    EnrichRule(match: .app, pattern: "Granola", text: "From Granola — treat the meeting transcript as context via the Granola MCP.",
+               displayName: "Granola"),
+    EnrichRule(match: .bundle, pattern: "com.mimestream.Mimestream", text: "From Mimestream (a Gmail client) — use the Gmail MCP to find the source thread for full context.",
+               displayName: "Mimestream"),
 ]
 
 func loadEnrichRules() -> [EnrichRule] {
@@ -121,12 +134,12 @@ func loadEnrichRules() -> [EnrichRule] {
     return arr.compactMap { d in
         guard let matchRaw = d["match"], let match = EnrichMatchType(rawValue: matchRaw),
               let pattern = d["pattern"], let text = d["text"] else { return nil }
-        return EnrichRule(match: match, pattern: pattern, text: text)
+        return EnrichRule(match: match, pattern: pattern, text: text, displayName: d["displayName"] ?? "")
     }
 }
 
 func saveEnrichRules(_ rules: [EnrichRule]) {
-    let arr = rules.map { ["match": $0.match.rawValue, "pattern": $0.pattern, "text": $0.text] }
+    let arr = rules.map { ["match": $0.match.rawValue, "pattern": $0.pattern, "text": $0.text, "displayName": $0.displayName] }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
         try? data.write(to: URL(fileURLWithPath: ENRICHMENT_RULES_PATH))
     }
@@ -139,15 +152,16 @@ func saveEnrichRules(_ rules: [EnrichRule]) {
 
 struct PreviewSource: Identifiable, Hashable {
     let id = UUID()
-    let label: String    // shown in the picker, e.g. "Slack" or "Generic (no match)"
+    let label: String        // shown in the picker, e.g. "Slack" or "Generic (no match)"
     let appName: String
-    let url: String       // "" if the sample source has no URL (Slack, Granola, generic)
-    let enrich: String    // "" for the no-match generic case
+    let url: String           // "" if the sample source has no URL (Slack, Granola, generic)
+    let enrich: String        // "" for the no-match generic case
+    let displayName: String   // "" falls back to "appName — url" in the [from: …] line
 }
 
 func previewSources(from rules: [EnrichRule]) -> [PreviewSource] {
     var seen = Set<String>()
-    var out: [PreviewSource] = [PreviewSource(label: "Generic (no match)", appName: "Chrome", url: "", enrich: "")]
+    var out: [PreviewSource] = [PreviewSource(label: "Generic (no match)", appName: "Chrome", url: "", enrich: "", displayName: "")]
     for r in rules where !r.pattern.isEmpty {
         let label: String
         switch r.match {
@@ -159,7 +173,8 @@ func previewSources(from rules: [EnrichRule]) -> [PreviewSource] {
         let sampleURL = r.match == .host ? "https://\(r.pattern.replacingOccurrences(of: "*.", with: "example."))/doc/123" : ""
         let app = r.match == .app ? r.pattern : (r.match == .host ? "Chrome" : label)
         out.append(PreviewSource(label: label, appName: app, url: sampleURL,
-                                  enrich: r.text.replacingOccurrences(of: "{url}", with: sampleURL)))
+                                  enrich: r.text.replacingOccurrences(of: "{url}", with: sampleURL),
+                                  displayName: r.displayName))
     }
     return out
 }
@@ -172,7 +187,8 @@ func composePreview(action: String, pre: String, post: String,
                      includeContext: Bool = true) -> String {
     var context = ""
     if includeContext {
-        let src = source.url.isEmpty ? source.appName : "\(source.appName) — \(source.url)"
+        let src = !source.displayName.isEmpty ? source.displayName
+            : (source.url.isEmpty ? source.appName : "\(source.appName) — \(source.url)")
         context = "[from: \(src)]\n"
         if !source.enrich.isEmpty { context += "\(source.enrich)\n" }
         context += "\n"
