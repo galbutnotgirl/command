@@ -221,6 +221,12 @@ struct SettingsRootView: View {
             content.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(minWidth: 720, minHeight: 520)
+        // Without this, every control that follows the system accent color — Pickers,
+        // segmented controls, Toggles, text-field cursors, .accentColor(...) usages
+        // sprinkled through this file — renders macOS's default blue, since the app
+        // has no Xcode asset-catalog AccentColor to override it. One tint here fixes
+        // all of them at once instead of patching each Color.accentColor reference.
+        .tint(Color(nsColor: purpleAccent))
     }
 
     private var sidebar: some View {
@@ -779,10 +785,9 @@ struct TemplatesView: View {
                 Text("One template per action — place {selection}, {context}, {source}, {url} wherever you want them. See Variables below for what each one does.")
                     .foregroundColor(.secondary)
 
-                TemplateVariablesLegend()
-
-                // ---- one shared preview, up top — visually its own thing, not
-                // part of the Add/New/Go boxes below it. ----
+                // ---- preview first, then the variables it's built from, then the
+                // boxes themselves — visually its own thing, not part of the Add/New/Go
+                // boxes below it. ----
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Preview").font(.title3).bold()
                     VStack(alignment: .leading, spacing: 8) {
@@ -813,6 +818,11 @@ struct TemplatesView: View {
                     }
                     .settingsCard()
                 }
+
+                // Variables for Add/New/Go specifically — {url} also works inside a
+                // Context rule's hint text below, but {selection}/{context}/{source}
+                // are only meaningful up here, so the legend lives with what it's for.
+                TemplateVariablesLegend()
 
                 Divider()
 
@@ -862,14 +872,91 @@ struct CommandTemplateBox: View {
             }
             .buttonStyle(.plain).font(.caption).foregroundColor(.secondary)
         }) {
-            TextEditor(text: $text)
-                .font(.system(size: 12, design: .monospaced))
+            PlaceholderHighlightingEditor(text: $text)
                 .frame(minHeight: 70)
                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
                 .onChange(of: text) { _, v in model.setTemplate(action: template.action, template: v) }
                 .padding(.vertical, 6)
         }
         .onAppear { text = template.template }
+    }
+}
+
+// Colors {selection}/{prompt}/{text}/{context}/{source}/{url} in the app's purple
+// wherever they appear while you type — so a template reads the way the app will
+// actually build it (plain text vs. the parts that get substituted), not as one
+// undifferentiated block. Plain-String in/out for the model; AttributedString only
+// as the editor's own display representation.
+private let TEMPLATE_PLACEHOLDER_TOKENS = ["{selection}", "{prompt}", "{text}", "{context}", "{source}", "{url}"]
+
+// SwiftUI's AttributedString-backed TextEditor needs macOS 26 — way past this app's
+// deployment target (13.0) — so this is a plain NSTextView wrapped directly (same
+// approach as FittingTextView/SelectableText elsewhere in this file), recoloring
+// placeholder-token ranges after every edit via textStorage, the standard AppKit
+// syntax-highlighting pattern. Attribute-only changes (no character count change)
+// leave NSTextView's selectedRange alone, so the cursor doesn't jump while typing.
+private func applyPlaceholderColors(_ storage: NSTextStorage) {
+    let full = storage.string as NSString
+    storage.addAttribute(.foregroundColor, value: NSColor.labelColor, range: NSRange(location: 0, length: full.length))
+    let purple = purpleAccent
+    for token in TEMPLATE_PLACEHOLDER_TOKENS {
+        var searchRange = NSRange(location: 0, length: full.length)
+        while searchRange.location < full.length {
+            let found = full.range(of: token, options: [], range: searchRange)
+            if found.location == NSNotFound { break }
+            storage.addAttribute(.foregroundColor, value: purple, range: found)
+            let boldFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)
+            storage.addAttribute(.font, value: boldFont, range: found)
+            let nextStart = found.location + found.length
+            searchRange = NSRange(location: nextStart, length: full.length - nextStart)
+        }
+    }
+}
+
+final class HighlightingTextView: NSTextView {
+    override func didChangeText() {
+        super.didChangeText()
+        applyPlaceholderColors(textStorage!)
+    }
+}
+
+struct PlaceholderHighlightingEditor: NSViewRepresentable {
+    @Binding var text: String
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let tv = HighlightingTextView()
+        tv.isEditable = true
+        tv.isSelectable = true
+        tv.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        tv.textContainerInset = NSSize(width: 4, height: 4)
+        tv.delegate = context.coordinator
+        tv.string = text
+        applyPlaceholderColors(tv.textStorage!)
+
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.documentView = tv
+        scroll.drawsBackground = false
+        context.coordinator.textView = tv
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        guard let tv = context.coordinator.textView, tv.string != text else { return }
+        tv.string = text
+        applyPlaceholderColors(tv.textStorage!)
+    }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        @Binding var text: String
+        weak var textView: NSTextView?
+        init(text: Binding<String>) { _text = text }
+        func textDidChange(_ notification: Notification) {
+            guard let tv = notification.object as? NSTextView else { return }
+            text = tv.string
+        }
     }
 }
 
