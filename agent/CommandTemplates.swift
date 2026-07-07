@@ -116,6 +116,10 @@ struct EnrichRule: Identifiable {
     // "Google Chrome — https://mail.google.com/..." — the app is noise once the URL
     // has already told you it's Gmail). Empty means fall back to "AppName — URL".
     var displayName: String = ""
+    // Host-only refinement: require the URL's path to start with this too, e.g.
+    // "/document/" to mean Google Docs specifically rather than any docs.google.com
+    // URL. Empty (the common case) matches on host alone. Ignored for bundle/app rules.
+    var pathPrefix: String = ""
 }
 
 // Mirrors the hardcoded case statements in send-to-claude.sh at time of writing.
@@ -129,10 +133,19 @@ let DEFAULT_ENRICH_RULES: [EnrichRule] = [
     EnrichRule(match: .host, pattern: "*.atlassian.net", text: "From Jira/Confluence — use the Atlassian MCP to pull the referenced issue/page.",
                displayName: "Jira/Confluence"),
     // Docs, Sheets, and Slides all live under docs.google.com, split only by URL
-    // *path* (/document/, /spreadsheets/, /presentation/) — the rule matcher only
-    // does host/bundle/app, so they can't be told apart here. One Drive-branded
-    // rule covers all of them, same as drive.google.com itself.
-    EnrichRule(match: .host, pattern: "docs.google.com", text: "From a Google Drive file ({url}) — Docs, Sheets, or Slides; read it via gws if useful, obey the editable-doc rule before any write.",
+    // *path* (/document/, /spreadsheets/, /presentation/) — pathPrefix tells them
+    // apart now that the matcher supports it (host alone can't).
+    EnrichRule(match: .host, pattern: "docs.google.com", text: "From a Google Doc ({url}) — read it via gws if useful, obey the editable-doc rule before any write.",
+               displayName: "Google Docs", pathPrefix: "/document/"),
+    EnrichRule(match: .host, pattern: "docs.google.com", text: "From a Google Sheet ({url}) — read it via gws if useful, obey the editable-doc rule before any write.",
+               displayName: "Google Sheets", pathPrefix: "/spreadsheets/"),
+    EnrichRule(match: .host, pattern: "docs.google.com", text: "From a Google Slides deck ({url}) — read it via gws if useful, obey the editable-doc rule before any write.",
+               displayName: "Google Slides", pathPrefix: "/presentation/"),
+    // Fallback for anything else under docs.google.com (rare — most traffic hits
+    // one of the three paths above) or drive.google.com itself, where a file's
+    // Docs/Sheets/Slides-ness isn't in the URL at all.
+    EnrichRule(match: .host, pattern: "docs.google.com",
+               text: "From a Google Drive file ({url}) — Docs, Sheets, or Slides; read it via gws if useful, obey the editable-doc rule before any write.",
                displayName: "Google Drive"),
     EnrichRule(match: .host, pattern: "drive.google.com", text: "From Google Drive ({url}) — use gws drive to inspect or download the file before acting.",
                displayName: "Google Drive"),
@@ -155,12 +168,14 @@ func loadEnrichRules() -> [EnrichRule] {
     return arr.compactMap { d in
         guard let matchRaw = d["match"], let match = EnrichMatchType(rawValue: matchRaw),
               let pattern = d["pattern"], let text = d["text"] else { return nil }
-        return EnrichRule(match: match, pattern: pattern, text: text, displayName: d["displayName"] ?? "")
+        return EnrichRule(match: match, pattern: pattern, text: text,
+                           displayName: d["displayName"] ?? "", pathPrefix: d["pathPrefix"] ?? "")
     }
 }
 
 func saveEnrichRules(_ rules: [EnrichRule]) {
-    let arr = rules.map { ["match": $0.match.rawValue, "pattern": $0.pattern, "text": $0.text, "displayName": $0.displayName] }
+    let arr = rules.map { ["match": $0.match.rawValue, "pattern": $0.pattern, "text": $0.text,
+                            "displayName": $0.displayName, "pathPrefix": $0.pathPrefix] }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
         try? data.write(to: URL(fileURLWithPath: ENRICHMENT_RULES_PATH))
     }
@@ -184,14 +199,20 @@ func previewSources(from rules: [EnrichRule]) -> [PreviewSource] {
     var seen = Set<String>()
     var out: [PreviewSource] = [PreviewSource(label: "Generic (no match)", appName: "Chrome", url: "", enrich: "", displayName: "")]
     for r in rules where !r.pattern.isEmpty {
-        let label: String
+        // Multiple rules can share the same host pattern, split only by pathPrefix
+        // (Docs/Sheets/Slides all sit on docs.google.com) — fall back to the rule's
+        // own displayName/text to keep each one its own distinct picker entry
+        // instead of deduping them down to one.
+        var label: String
         switch r.match {
         case .app:    label = r.pattern
         case .bundle: label = r.pattern
         case .host:   label = r.pattern.replacingOccurrences(of: "*.", with: "")
         }
+        if !r.pathPrefix.isEmpty { label = !r.displayName.isEmpty ? r.displayName : "\(label)\(r.pathPrefix)" }
         guard seen.insert(label).inserted else { continue }
-        let sampleURL = r.match == .host ? "https://\(r.pattern.replacingOccurrences(of: "*.", with: "example."))/doc/123" : ""
+        let samplePath = r.pathPrefix.isEmpty ? "/doc/123" : "\(r.pathPrefix)abc123"
+        let sampleURL = r.match == .host ? "https://\(r.pattern.replacingOccurrences(of: "*.", with: "example."))\(samplePath)" : ""
         let app = r.match == .app ? r.pattern : (r.match == .host ? "Chrome" : label)
         out.append(PreviewSource(label: label, appName: app, url: sampleURL,
                                   enrich: r.text.replacingOccurrences(of: "{url}", with: sampleURL),

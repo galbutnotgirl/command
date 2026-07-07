@@ -242,15 +242,18 @@ DISPLAY_NAME=""
 if [ -f "$ENRICH_RULES_PATH" ]; then
   IFS=$'\x1e' read -r ENRICH DISPLAY_NAME <<< "$(/usr/bin/python3 - "$ENRICH_RULES_PATH" "$BUNDLE_ID" "$HOST" "$APP_NAME" "$URL" <<'PY'
 import json, sys, fnmatch
-path, bundle, host, app, url = sys.argv[1:6]
+from urllib.parse import urlparse
+path_arg, bundle, host, app, url = sys.argv[1:6]
+url_path = urlparse(url).path
 try:
-    rules = json.load(open(path))
+    rules = json.load(open(path_arg))
 except Exception:
     rules = []
 for r in rules:
     m, pat, text = r.get("match"), r.get("pattern", ""), r.get("text", "")
+    prefix = r.get("pathPrefix", "")
     hit = (m == "bundle" and pat == bundle) or (m == "app" and pat == app) \
-        or (m == "host" and host and fnmatch.fnmatch(host, pat))
+        or (m == "host" and host and fnmatch.fnmatch(host, pat) and (not prefix or url_path.startswith(prefix)))
     if hit:
         sys.stdout.write(text.replace("{url}", url) + "\x1e" + r.get("displayName", ""))
         break
@@ -266,13 +269,19 @@ else
   case "$BUNDLE_ID" in
     com.mimestream.Mimestream) ENRICH="From Mimestream (a Gmail client) — use the Gmail MCP to find the source thread for full context." DISPLAY_NAME="Mimestream" ;;
   esac
+  URL_PATH="$(printf '%s' "$URL" | sed -n 's#^[a-z][a-z]*://[^/]*\(/[^?#]*\).*#\1#p')"
   case "$HOST" in
     mail.google.com) ENRICH="From Gmail — use the Gmail MCP to find the source thread for full context." DISPLAY_NAME="Gmail" ;;
     *.atlassian.net) ENRICH="From Jira/Confluence — use the Atlassian MCP to pull the referenced issue/page." DISPLAY_NAME="Jira/Confluence" ;;
-    # Docs/Sheets/Slides all live under docs.google.com, split only by URL path —
-    # can't tell them apart by host, so they get the same Drive-branded rule as
-    # drive.google.com itself.
-    docs.google.com) ENRICH="From a Google Drive file (${URL}) — Docs, Sheets, or Slides; read it via gws if useful, obey the editable-doc rule before any write." DISPLAY_NAME="Google Drive" ;;
+    # Docs/Sheets/Slides all live under docs.google.com, split by URL path.
+    docs.google.com)
+      case "$URL_PATH" in
+        /document/*)     ENRICH="From a Google Doc (${URL}) — read it via gws if useful, obey the editable-doc rule before any write." DISPLAY_NAME="Google Docs" ;;
+        /spreadsheets/*) ENRICH="From a Google Sheet (${URL}) — read it via gws if useful, obey the editable-doc rule before any write." DISPLAY_NAME="Google Sheets" ;;
+        /presentation/*) ENRICH="From a Google Slides deck (${URL}) — read it via gws if useful, obey the editable-doc rule before any write." DISPLAY_NAME="Google Slides" ;;
+        *) ENRICH="From a Google Drive file (${URL}) — Docs, Sheets, or Slides; read it via gws if useful, obey the editable-doc rule before any write." DISPLAY_NAME="Google Drive" ;;
+      esac
+      ;;
     drive.google.com) ENRICH="From Google Drive (${URL}) — use gws drive to inspect or download the file before acting." DISPLAY_NAME="Google Drive" ;;
     app.gong.io)     ENRICH="From Gong — use the Gong MCP to pull the related call/transcript." DISPLAY_NAME="Gong" ;;
     *.lightning.force.com|*.salesforce.com) ENRICH="From Salesforce — use the Salesforce MCP to pull the related record." DISPLAY_NAME="Salesforce" ;;

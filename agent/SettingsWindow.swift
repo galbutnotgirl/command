@@ -852,7 +852,7 @@ struct TemplatesView: View {
                         Label("Add", systemImage: "plus.circle")
                     }
                 }
-                Text("Feeds {context} above and the [from: App] line every action includes — e.g. \"this is from Slack, use the Slack MCP.\" Matched by app bundle ID, app name, or URL host (supports leading \"*.\" glob). Use {url} in the text to insert the source URL, and Display name to replace the [from: …] line (handy for a browser match — no need to show \"Chrome\" once the URL already says Gmail).")
+                Text("Feeds {context} above and the [from: App] line every action includes — e.g. \"this is from Slack, use the Slack MCP.\" Matched by app bundle ID, app name, or URL host (supports leading \"*.\" glob) — a host rule can also add a Path prefix to split rules that share a host, like docs.google.com/document/ vs. /spreadsheets/. Use {url} in the text to insert the source URL, and Display name to replace the [from: …] line (handy for a browser match — no need to show \"Chrome\" once the URL already says Gmail).")
                     .font(.caption).foregroundColor(.secondary)
 
                 VStack(spacing: 8) {
@@ -1000,6 +1000,7 @@ struct EnrichRuleRow: View {
     @State private var text: String = ""
     @State private var match: EnrichMatchType = .host
     @State private var displayName: String = ""
+    @State private var pathPrefix: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1037,6 +1038,17 @@ struct EnrichRuleRow: View {
                     Image(systemName: "minus.circle").foregroundColor(.red)
                 }.buttonStyle(.plain)
             }
+            if match == .host {
+                HStack(spacing: 8) {
+                    Text("Path prefix").font(.caption2).foregroundColor(.secondary)
+                    TextField("optional — e.g. /document/ to mean Docs, not all of docs.google.com", text: $pathPrefix)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11, design: .monospaced))
+                        .onChange(of: pathPrefix) { _, v in
+                            var r = rule; r.pathPrefix = v; model.updateRule(r)
+                        }
+                }
+            }
             TextField("Context hint sent to Claude", text: $text)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 12))
@@ -1045,7 +1057,10 @@ struct EnrichRuleRow: View {
                 }
         }
         .settingsCard()
-        .onAppear { pattern = rule.pattern; text = rule.text; match = rule.match; displayName = rule.displayName }
+        .onAppear {
+            pattern = rule.pattern; text = rule.text; match = rule.match
+            displayName = rule.displayName; pathPrefix = rule.pathPrefix
+        }
     }
 }
 
