@@ -292,7 +292,7 @@ struct SettingsRootView: View {
         case .shortcuts:       ShortcutsView(model: model)
         case .templates:       TemplatesView()
         case .history:         HistoryView()
-        case .handoffs:        HandoffsView(model: model)
+        case .handoffs:        HandoffsView()
         case .dictHistory:     DictHistoryView()
         case .dictCorrections: DictCorrectionsView()
         case .dictVocabulary:  DictVocabularyView()
@@ -521,6 +521,7 @@ struct CompRow: View {
 // ---- Shortcuts --------------------------------------------------------------
 struct ShortcutsView: View {
     @ObservedObject var model: SettingsModel
+    @State private var showingAddCustom = false
 
     private var destBinding: Binding<String> {
         Binding(
@@ -583,8 +584,35 @@ struct ShortcutsView: View {
                         .settingsCard()
                     }
                 }
+
+                // ---- Custom Actions ----
+                HStack {
+                    Text("Custom Actions").font(.headline)
+                    Spacer()
+                    Button(action: { showingAddCustom = true }) {
+                        Label("Add", systemImage: "plus.circle")
+                    }
+                }
+                .padding(.top, 8)
+
+                Text("Prompt templates that wrap selected text or a screenshot. Use {selection} to place selected text inline — otherwise it's appended below the prompt. Source app + context hint go before all of it, unless \"Include source app\" is off.")
+                    .font(.caption).foregroundColor(.secondary)
+
+                if model.customActions.isEmpty {
+                    Text("No custom actions yet — click Add to create one.")
+                        .font(.caption).foregroundColor(.secondary).padding(.vertical, 4)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(model.customActions) { ca in
+                            CustomActionRow(ca: ca, model: model)
+                        }
+                    }
+                }
             }
             .padding(24)
+        }
+        .sheet(isPresented: $showingAddCustom) {
+            CustomActionSheet(isPresented: $showingAddCustom, model: model)
         }
     }
 }
@@ -1421,13 +1449,11 @@ struct HistoryView: View {
 // just the menu bar's last-8 quick view.
 
 struct HandoffsView: View {
-    @ObservedObject var model: SettingsModel
     @State private var submissions: [HandoffSubmission] = loadHandoffSubmissions(limit: nil)
     @State private var query = ""
     @State private var statusFilter: String = "all"   // all | running | succeeded | failed
     @State private var pendingDelete: HandoffSubmission? = nil
     @State private var retentionText = String(readHandoffRetentionDays())
-    @State private var showingAddCustom = false
 
     private var filtered: [HandoffSubmission] {
         var out = submissions
@@ -1498,37 +1524,10 @@ struct HandoffsView: View {
                         }
                     }
                 }
-
-                // ---- Custom Actions ----
-                HStack {
-                    Text("Custom Actions").font(.headline)
-                    Spacer()
-                    Button(action: { showingAddCustom = true }) {
-                        Label("Add", systemImage: "plus.circle")
-                    }
-                }
-                .padding(.top, 8)
-
-                Text("Prompt templates that wrap selected text or a screenshot. Use {selection} to place selected text inline — otherwise it's appended below the prompt. Source app + context hint go before all of it, unless \"Include source app\" is off.")
-                    .font(.caption).foregroundColor(.secondary)
-
-                if model.customActions.isEmpty {
-                    Text("No custom actions yet — click Add to create one.")
-                        .font(.caption).foregroundColor(.secondary).padding(.vertical, 4)
-                } else {
-                    VStack(spacing: 8) {
-                        ForEach(model.customActions) { ca in
-                            CustomActionRow(ca: ca, model: model)
-                        }
-                    }
-                }
             }
             .padding(24)
         }
         .onAppear { refresh() }
-        .sheet(isPresented: $showingAddCustom) {
-            CustomActionSheet(isPresented: $showingAddCustom, model: model)
-        }
         .alert("Delete this handoff record?",
                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
                presenting: pendingDelete) { s in
