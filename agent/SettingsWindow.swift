@@ -26,6 +26,14 @@ let settingsWindow = SettingsWindowController()
 // card in Setup, a plain GroupBox everywhere else), which is what made the whole
 // window feel visually inconsistent. Spacing between cards, not divider lines
 // inside one continuous block — reads as separate items, not one tight list.
+// .tint() (set on SettingsRootView below) covers real controls — Picker,
+// Toggle, segmented styles — but raw Color.accentColor/.accentColor references
+// used as a plain foregroundColor/background (badges, icons, selected-row
+// highlights) don't reliably re-resolve from it in practice. Use this directly
+// wherever purple is the actual intent instead of routing through the ambient
+// accent color.
+let appPurple = Color(nsColor: purpleAccent)
+
 extension View {
     func settingsCard() -> some View {
         self
@@ -270,7 +278,7 @@ struct SettingsRootView: View {
                 Text(label); Spacer()
             }
             .padding(.vertical, 6).padding(.horizontal, 8)
-            .background(model.tab == t ? Color.accentColor.opacity(0.18) : Color.clear)
+            .background(model.tab == t ? appPurple.opacity(0.18) : Color.clear)
             .cornerRadius(7)
             .contentShape(Rectangle())
         }
@@ -526,8 +534,8 @@ struct ShortcutsView: View {
                 HStack {
                     Text("Shortcuts").font(.title2).bold()
                     Spacer()
-                    Button("Export…") { exportSettings() }
-                    Button("Import…") { importSettings(model: model) }
+                    Button("Export…") { exportSettings() }.buttonStyle(.bordered)
+                    Button("Import…") { importSettings(model: model) }.buttonStyle(.bordered)
                 }
                 Text("Click a key field and press a combo to set it. Press Delete to clear. Esc cancels. Changes apply instantly.")
                     .foregroundColor(.secondary)
@@ -615,7 +623,7 @@ struct CustomActionRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: ca.isShot ? "camera.viewfinder" : "text.cursor")
-                .foregroundColor(.accentColor).frame(width: 20)
+                .foregroundColor(appPurple).frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(ca.name).font(.callout)
@@ -654,12 +662,12 @@ struct CustomKeyBindingField: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 7)
-                .fill(isRecording ? Color.accentColor.opacity(0.12) : Color(nsColor: .controlBackgroundColor))
+                .fill(isRecording ? appPurple.opacity(0.12) : Color(nsColor: .controlBackgroundColor))
                 .overlay(RoundedRectangle(cornerRadius: 7)
-                    .stroke(isRecording ? Color.accentColor : Color.gray.opacity(0.35), lineWidth: 1))
+                    .stroke(isRecording ? appPurple : Color.gray.opacity(0.35), lineWidth: 1))
             Text(isRecording ? "Press keys…" : (ca.keycode == 0 ? "—" : ca.human))
                 .font(.system(.body, design: .rounded).bold())
-                .foregroundColor(isRecording ? .accentColor : (ca.keycode == 0 ? .secondary : .primary))
+                .foregroundColor(isRecording ? appPurple : (ca.keycode == 0 ? .secondary : .primary))
                 .lineLimit(1).padding(.horizontal, 10)
         }
         .frame(width: 120, height: 30)
@@ -779,8 +787,8 @@ struct TemplatesView: View {
                 HStack {
                     Text("Templates").font(.title2).bold()
                     Spacer()
-                    Button("Export…") { exportTemplates() }
-                    Button("Import…") { importTemplates(model: model) }
+                    Button("Export…") { exportTemplates() }.buttonStyle(.bordered)
+                    Button("Import…") { importTemplates(model: model) }.buttonStyle(.bordered)
                 }
                 Text("One template per action — place {selection}, {context}, {source}, {url} wherever you want them. See Variables below for what each one does.")
                     .foregroundColor(.secondary)
@@ -970,7 +978,7 @@ struct TemplateVariablesLegend: View {
                     HStack(alignment: .top, spacing: 8) {
                         Text(v.token)
                             .font(.system(size: 12, design: .monospaced)).bold()
-                            .foregroundColor(.accentColor)
+                            .foregroundColor(appPurple)
                             .frame(width: 90, alignment: .leading)
                         Text(v.detail)
                             .font(.caption).foregroundColor(.secondary)
@@ -1118,15 +1126,15 @@ struct KeyBindingField: View {
         ZStack {
             RoundedRectangle(cornerRadius: 7)
                 .fill(isRecording
-                    ? Color.accentColor.opacity(0.12)
+                    ? appPurple.opacity(0.12)
                     : Color(nsColor: .controlBackgroundColor))
                 .overlay(
                     RoundedRectangle(cornerRadius: 7)
-                        .stroke(isRecording ? Color.accentColor : Color.gray.opacity(0.35), lineWidth: 1)
+                        .stroke(isRecording ? appPurple : Color.gray.opacity(0.35), lineWidth: 1)
                 )
             Text(isRecording ? "Press keys…" : (binding.keycode == 0 ? "—" : binding.human))
                 .font(.system(.body, design: .rounded).bold())
-                .foregroundColor(isRecording ? .accentColor : (binding.keycode == 0 ? .secondary : .primary))
+                .foregroundColor(isRecording ? appPurple : (binding.keycode == 0 ? .secondary : .primary))
                 .lineLimit(1)
                 .padding(.horizontal, 10)
         }
@@ -1435,7 +1443,7 @@ struct ChannelPicker: View {
                         .font(.system(size: 12, weight: selected ? .semibold : .regular))
                         .frame(width: 62)
                         .padding(.vertical, 4)
-                        .background(selected ? Color.accentColor : Color.clear)
+                        .background(selected ? appPurple : Color.clear)
                         .foregroundColor(disabled ? Color.secondary.opacity(0.45)
                                                   : (selected ? .white : .primary))
                         .contentShape(Rectangle())
@@ -1513,7 +1521,7 @@ struct AboutView: View {
 
                 if let info = available {
                     HStack(spacing: 10) {
-                        Image(systemName: "arrow.down.circle.fill").foregroundColor(.accentColor)
+                        Image(systemName: "arrow.down.circle.fill").foregroundColor(appPurple)
                         Text("v\(info.latestVersion) available")
                             .font(.caption).bold()
                         Button(installing ? "Installing…" : "Update Now") { runInstall(info) }
@@ -1708,7 +1716,7 @@ struct HistoryEntryRow: View {
                 Text(entry.mode == "insert" ? "Insert" : "→ Claude")
                     .font(.caption2)
                     .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Color.accentColor.opacity(0.15)).cornerRadius(4)
+                    .background(appPurple.opacity(0.15)).cornerRadius(4)
                 Text(RelativeDateTimeFormatter().localizedString(for: entry.timestamp, relativeTo: Date()))
                     .font(.caption2).foregroundColor(.secondary)
                 Spacer()
@@ -1826,8 +1834,8 @@ struct DictCorrectionsView: View {
                 HStack {
                     Text("Word Corrections").font(.title2).bold()
                     Spacer()
-                    Button("Export…") { exportVocabulary() }
-                    Button("Import…") { importVocabulary(vocab: vocab) }
+                    Button("Export…") { exportVocabulary() }.buttonStyle(.bordered)
+                    Button("Import…") { importVocabulary(vocab: vocab) }.buttonStyle(.bordered)
                 }
                 Text("Misheard → Correct. Applied before any other processing.")
                     .foregroundColor(.secondary)
@@ -1906,8 +1914,8 @@ struct DictVocabularyView: View {
                 HStack {
                     Text("Vocabulary").font(.title2).bold()
                     Spacer()
-                    Button("Export…") { exportVocabulary() }
-                    Button("Import…") { importVocabulary(vocab: vocab) }
+                    Button("Export…") { exportVocabulary() }.buttonStyle(.bordered)
+                    Button("Import…") { importVocabulary(vocab: vocab) }.buttonStyle(.bordered)
                 }
 
                 GroupBox(label: Text("Vocabulary Hints").font(.subheadline).bold()) {
@@ -2038,7 +2046,7 @@ struct SoundRow: View {
             } label: {
                 Image(systemName: playing ? "speaker.wave.2.fill" : "play.circle")
                     .font(.system(size: 15))
-                    .foregroundColor(playing ? .accentColor : .secondary)
+                    .foregroundColor(playing ? appPurple : .secondary)
                     .frame(width: 24)
             }
             .buttonStyle(.plain)
