@@ -28,6 +28,16 @@ A menu-bar agent (SwiftUI/AppKit). One Accessibility grant powers everything.
 | **Screenshot Add** | ⌥F7 | Same capture → pastes into the already-open Claude chat. |
 | **Clipboard History** | F6 | Floating picker — type to search, ↑/↓ select, ⏎ paste, ⌘⏎ paste + stay open, Esc. |
 
+**Skill handoff (background trigger)** — unbound by default; bind in Settings → Shortcuts. No Claude window: the capture is rendered into a prompt addressed to your configured Claude Code skill and piped to `claude -p` in the background, leaving durable submission records for downstream apps ([contract](vendor/claude-command-capture/docs/HANDOFF.md), [integration notes](docs/BACKGROUND_TRIGGER_INTEGRATION.md)):
+
+| Action | What it does |
+|--------|--------------|
+| **Skill Handoff** | Selection (or fresh clipboard) → background `claude -p /<skill>` run. |
+| **Screenshot Handoff** | Region capture → PNG on disk → background run; the prompt names the file. |
+| **Text Handoff** | Floating entry window (⌘⏎ submits, Esc closes) → background run. |
+
+Configure the skill, CLI command/working directory, and prompt templates in **menu bar ▸ Handoffs ▸ Handoff Settings…** (stored at `~/Library/Application Support/claude-command/settings.json`). The **Handoffs** menu also shows recent runs (✓/✗/…) — click one to open its log. Requires Node.js 20+ on PATH.
+
 **Dictation** — unbound by default; bind in Settings → Shortcuts:
 
 | Action | What it does |
@@ -125,6 +135,7 @@ Tag with `-alpha`/`-beta` (and `--prerelease`) for those channels; a plain `vX.Y
 |-------|------|
 | `ClaudeCommand.app` (`agent/*.swift`, `build-agent.sh`) | The always-on core: global hotkeys, keystroke socket, clipboard picker, dictation, settings window, updater. |
 | `send-to-claude.sh` | The worker — one script, dispatched by `ACTION`. |
+| `capture-handoff.sh` + `vendor/claude-command-capture/` | Background skill handoff: native glue + the vendored Electron-free capture→`claude -p` pipeline. |
 | `SendHelper.app` (`helper/SendHelper.swift`, `build-helper.sh`) | Signed helper for ⌘C / ⌘V / Return via CGEvent — one Accessibility grant, no per-app prompts. |
 | `clipwatch.py` + `install-clipwatch.sh` | Background daemon: timestamps copies, blocks secrets, keeps the capped history. |
 | `install-quick-action.sh` / `uninstall-quick-action.sh` | Generate / remove the right-click Quick Actions. |

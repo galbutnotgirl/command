@@ -152,9 +152,10 @@ fi
 # the go/comment dispatch reopens Claude (or we restore it on cancel).
 SHOT=0
 case "$ACTION" in
-  shotgo|shotcomment|shotadd|shotfullgo|customshot)
+  shotgo|shotcomment|shotadd|shotfullgo|customshot|shothandoff)
     SHOT=1
-    if [ "$DRY_RUN" != "1" ]; then
+    # shothandoff never touches the Claude window — skip the hide/restore dance.
+    if [ "$DRY_RUN" != "1" ] && [ "$ACTION" != "shothandoff" ]; then
       agent_cmd "hide $CLAUDE_BUNDLE" >/dev/null 2>&1 && sleep 0.15   # let the window clear
     fi
     CC0="$(pb_cc)"
@@ -167,7 +168,7 @@ case "$ACTION" in
     CC1="$(pb_cc)"
     if [ "$DRY_RUN" != "1" ] && { [ "$CC1" = "$CC0" ] || ! clipboard_has_image; }; then
       log "screenshot cancelled / no image"
-      agent_cmd "activate $CLAUDE_BUNDLE" >/dev/null 2>&1   # bring Claude back
+      [ "$ACTION" = "shothandoff" ] || agent_cmd "activate $CLAUDE_BUNDLE" >/dev/null 2>&1   # bring Claude back
       exit 0
     fi
     IMG=1
@@ -232,18 +233,42 @@ esac
 HOST="$(printf '%s' "$URL" | sed -n 's#^[a-z][a-z]*://\([^/]*\).*#\1#p')"
 log "src app=$APP_NAME bundle=$BUNDLE_ID host=${HOST:-none} img=$IMG"
 
+# Auto-context rules: user-editable in Settings ▸ Templates ▸ Auto-Context Rules
+# (~/.claude/state/enrichment-rules.json). If that file doesn't exist, fall back
+# to the built-in defaults below unchanged — editing Templates is opt-in.
+ENRICH_RULES_PATH="${HOME}/.claude/state/enrichment-rules.json"
 ENRICH=""
-case "$BUNDLE_ID" in
-  com.tinyspeck.slackmacgap) ENRICH="This is from Slack. Use the Slack MCP to find this exact message (search by the text), then pull the channel, thread permalink, author and surrounding thread." ;;
-esac
-case "$HOST" in
-  mail.google.com) ENRICH="From Gmail — use the Gmail MCP to find the source thread for full context." ;;
-  *.atlassian.net) ENRICH="From Jira/Confluence — use the Atlassian MCP to pull the referenced issue/page." ;;
-  docs.google.com) ENRICH="From a Google Doc (${URL}) — read it via gws if useful; obey the editable-doc rule before any write." ;;
-  app.gong.io)     ENRICH="From Gong — use the Gong MCP to pull the related call/transcript." ;;
-  *.lightning.force.com|*.salesforce.com) ENRICH="From Salesforce — use the Salesforce MCP to pull the related record." ;;
-esac
-[ "$APP_NAME" = "Granola" ] && ENRICH="From Granola — treat the meeting transcript as context via the Granola MCP."
+if [ -f "$ENRICH_RULES_PATH" ]; then
+  ENRICH="$(/usr/bin/python3 - "$ENRICH_RULES_PATH" "$BUNDLE_ID" "$HOST" "$APP_NAME" "$URL" <<'PY'
+import json, sys, fnmatch
+path, bundle, host, app, url = sys.argv[1:6]
+try:
+    rules = json.load(open(path))
+except Exception:
+    rules = []
+for r in rules:
+    m, pat, text = r.get("match"), r.get("pattern", ""), r.get("text", "")
+    hit = (m == "bundle" and pat == bundle) or (m == "app" and pat == app) \
+        or (m == "host" and host and fnmatch.fnmatch(host, pat))
+    if hit:
+        sys.stdout.write(text.replace("{url}", url))
+        break
+PY
+)"
+else
+  case "$BUNDLE_ID" in
+    com.tinyspeck.slackmacgap) ENRICH="This is from Slack. Use the Slack MCP to find this exact message (search by the text), then pull the channel, thread permalink, author and surrounding thread." ;;
+  esac
+  case "$HOST" in
+    mail.google.com) ENRICH="From Gmail — use the Gmail MCP to find the source thread for full context." ;;
+    *.atlassian.net) ENRICH="From Jira/Confluence — use the Atlassian MCP to pull the referenced issue/page." ;;
+    docs.google.com) ENRICH="From a Google Doc (${URL}) — read it via gws if useful; obey the editable-doc rule before any write." ;;
+    drive.google.com) ENRICH="From Google Drive (${URL}) — use gws drive to inspect or download the file before acting." ;;
+    app.gong.io)     ENRICH="From Gong — use the Gong MCP to pull the related call/transcript." ;;
+    *.lightning.force.com|*.salesforce.com) ENRICH="From Salesforce — use the Salesforce MCP to pull the related record." ;;
+  esac
+  [ "$APP_NAME" = "Granola" ] && ENRICH="From Granola — treat the meeting transcript as context via the Granola MCP."
+fi
 RESEARCH="Before acting, research for context to be maximally useful: ${ENRICH:-identify the source and pull any related thread, doc, message or record via the matching MCP connector.}"
 
 CONTEXT=""
@@ -253,6 +278,30 @@ if [ "$INCLUDE_CONTEXT" = "1" ]; then
   [ -n "$ENRICH" ] && CONTEXT="${CONTEXT}${ENRICH}"$'\n'
   [ -n "$CONTEXT" ] && CONTEXT="${CONTEXT}"$'\n'
 fi
+
+# Pre/post wrap templates for the built-in go/comment/add commands: user-editable
+# in Settings ▸ Templates (~/.claude/state/command-templates.json). Empty pre/post
+# (the default — file usually doesn't exist) means zero behavior change.
+TEMPLATES_PATH="${HOME}/.claude/state/command-templates.json"
+read_template() {  # $1 = action, $2 = pre|post
+  [ -f "$TEMPLATES_PATH" ] || { printf ''; return; }
+  /usr/bin/python3 -c "
+import json
+try:
+    d = json.load(open('$TEMPLATES_PATH'))
+    print(d.get('$1', {}).get('$2', ''), end='')
+except Exception:
+    pass
+" 2>/dev/null
+}
+GO_PRE="$(read_template go pre)"
+GO_POST="$(read_template go post)"
+[ -z "$GO_POST" ] && GO_POST='(Right-click "Go": {research} Then do what'"'"'s most useful and report.)'
+GO_POST="${GO_POST//\{research\}/$RESEARCH}"
+COMMENT_PRE="$(read_template comment pre)"
+COMMENT_POST="$(read_template comment post)"
+ADD_PRE="$(read_template add pre)"
+ADD_POST="$(read_template add post)"
 
 open_new() {  # $1 = q text (may be empty)
   local q="$1"
@@ -272,8 +321,8 @@ open_new() {  # $1 = q text (may be empty)
 case "$ACTION" in
   go)
     PRIOR="$BUNDLE_ID"
-    GO_Q="${CONTEXT}${SEL}"$'\n\n'"(Right-click \"Go\": ${RESEARCH} Then do what's most useful and report.)"
-    if [ "$IMG" = "1" ]; then GO_Q="${CONTEXT}(image attached below)"$'\n\n'"(Right-click \"Go\": ${RESEARCH} Then do what's most useful and report.)"; fi
+    GO_Q="${CONTEXT}${GO_PRE}${SEL}"$'\n\n'"${GO_POST}"
+    if [ "$IMG" = "1" ]; then GO_Q="${CONTEXT}${GO_PRE}(image attached below)"$'\n\n'"${GO_POST}"; fi
     open_new "$GO_Q" || { notify "Could not open Claude."; exit 1; }
     if [ "$DRY_RUN" = "1" ]; then [ "$IMG" = "1" ] && print -r -- "DRY_RUN would paste image"; print -r -- "DRY_RUN would submit + restore focus to $PRIOR"; exit 0; fi
     wait_for_claude || log "WARN Claude not frontmost"
@@ -289,11 +338,11 @@ case "$ACTION" in
 
   comment)
     if [ "$IMG" = "1" ]; then
-      open_new "${CONTEXT}" || { notify "Could not open Claude."; exit 1; }
+      open_new "${CONTEXT}${COMMENT_PRE}${COMMENT_POST}" || { notify "Could not open Claude."; exit 1; }
       [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste image into new session"; exit 0; }
       wait_for_claude || log "WARN not frontmost"; sleep 0.3; helper_paste
     else
-      open_new "${CONTEXT}${SEL}"$'\n\n'
+      open_new "${CONTEXT}${COMMENT_PRE}${SEL}${COMMENT_POST}"$'\n\n'
     fi
     ;;
 
@@ -302,7 +351,7 @@ case "$ACTION" in
       [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would activate Claude + paste image into open chat"; exit 0; }
       helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
     else
-      PAYLOAD="${CONTEXT}${SEL}"
+      PAYLOAD="${CONTEXT}${ADD_PRE}${SEL}${ADD_POST}"
       if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN would copy payload + paste into open Claude chat"; exit 0; fi
       copy_for_send "$PAYLOAD" "$COPY_SOURCE"
       helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
@@ -360,6 +409,23 @@ case "$ACTION" in
           wait_for_claude || log "WARN not frontmost"; sleep 0.3; agent_cmd return >/dev/null 2>&1 || true
         fi
       fi
+    fi
+    ;;
+
+  handoff)
+    # Background skill handoff — no Claude window. The vendored Electron-free
+    # pipeline renders the settings template and pipes it to `claude -p` in the
+    # background; contract: vendor/claude-command-capture/docs/HANDOFF.md.
+    HANDOFF_SH="${SCRIPT_DIR}/capture-handoff.sh"
+    [ -f "$HANDOFF_SH" ] || { log "capture-handoff.sh missing at $HANDOFF_SH"; notify "Handoff worker missing — rebuild the agent."; exit 1; }
+    [ "$SHOT" = "1" ] && SRC="screenshot" || SRC="selection"
+    if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN handoff src=$SRC img=$IMG sel_bytes=${#SEL}"; exit 0; fi
+    export HANDOFF_IMG="$IMG" HANDOFF_SOURCE="$SRC" HANDOFF_CONTEXT="$CONTEXT"
+    if [ "$IMG" = "1" ]; then
+      exec /bin/zsh "$HANDOFF_SH" </dev/null
+    else
+      print -rn -- "$SEL" | /bin/zsh "$HANDOFF_SH"
+      exit $?
     fi
     ;;
 

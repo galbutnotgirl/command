@@ -9,6 +9,7 @@ let menuBar = MenuBarController()
 
 final class MenuBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
+    private var handoffItem: NSMenuItem?
 
     func install() { if !UserDefaults.standard.bool(forKey: "hideMenuBarIcon") { showIcon() } }
 
@@ -84,6 +85,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     // Injects Stop/Cancel at top when dictation is active.
     func menuWillOpen(_ menu: NSMenu) {
         updateActionItems(in: menu)
+        updateHandoffSubmenu()
         if DictationOverlay.shared.isVisible {
             let stopIt = NSMenuItem(title: "Stop Dictation", action: #selector(stopFromMenu), keyEquivalent: "")
             stopIt.target = self
@@ -99,9 +101,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     @objc private func cancelFromMenu() { Task { @MainActor in DictationOverlay.shared.stopRecording() } }
 
     private func updateActionItems(in menu: NSMenu) {
-        // Structure: [0..N-1]=actions  [N]=separator  [N+1]=Settings  [N+2]=Quit
-        // Remove all action items (everything before the last 3 items).
-        while menu.numberOfItems > 3 {
+        // Structure: [0..N-1]=actions | sep | Handoffs | Settings | Quit
+        // Remove all action items (everything before the last 4 items).
+        while menu.numberOfItems > 4 {
             menu.removeItem(at: 0)
         }
         let bindings = loadBindings()
@@ -127,6 +129,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         if action == "cliphistory" {
             DispatchQueue.main.async { picker.show(prev: front) }
+        } else if action == "handofftext" {
+            DispatchQueue.main.async { HandoffTextEntryPanel.shared.show() }
         } else {
             DispatchQueue.global().async { runWorker(action, source: front) }
         }
@@ -170,6 +174,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         m.showsStateColumn = false
         // Action items inserted at top by menuWillOpen.
         m.addItem(.separator())
+        // Background skill handoffs: recent runs + text entry + config.
+        let ho = NSMenuItem(title: "Handoffs", action: nil, keyEquivalent: "")
+        ho.submenu = NSMenu(title: "Handoffs")
+        m.addItem(ho)
+        handoffItem = ho
         // Empty title + attributedTitle breaks the string-based auto-gear check.
         // Blank 1×1 NSImage (not nil) prevents macOS from filling the image slot.
         let settingsItem = NSMenuItem(title: "", action: #selector(openSettings), keyEquivalent: "")
@@ -191,6 +200,36 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         it.target = self
         return it
     }
+
+    // Rebuild the Handoffs submenu on each menu open: last runs (✓/✗/… like the
+    // imported tray), quick text entry, and the config window.
+    private func updateHandoffSubmenu() {
+        guard let sub = handoffItem?.submenu else { return }
+        sub.removeAllItems()
+        let recent = loadHandoffSubmissions()
+        if recent.isEmpty {
+            let none = sub.addItem(withTitle: "No handoffs yet", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+        } else {
+            for r in recent {
+                let it = sub.addItem(withTitle: r.menuTitle, action: #selector(openHandoffLog(_:)), keyEquivalent: "")
+                it.target = self
+                it.representedObject = r.logFile
+                it.isEnabled = r.logFile != nil
+            }
+        }
+        sub.addItem(.separator())
+        add(sub, "Text Entry…", #selector(showHandoffEntry))
+        add(sub, "Handoff Settings…", #selector(showHandoffSettings))
+    }
+
+    @objc private func openHandoffLog(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String,
+              FileManager.default.fileExists(atPath: path) else { NSSound.beep(); return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+    @objc private func showHandoffEntry() { HandoffTextEntryPanel.shared.show() }
+    @objc private func showHandoffSettings() { HandoffSettingsWindowController.shared.show() }
 
     @objc private func openSettings() { settingsWindow.show(tab: .shortcuts) }
     @objc private func quit() { NSApp.terminate(nil) }

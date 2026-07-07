@@ -61,6 +61,21 @@ if [ -f "$CLIPWATCH" ]; then
   print -- "[agent] bundled clipwatch.py"
 fi
 
+# Background skill handoff: capture-handoff.sh + the vendored Electron-free
+# core it drives (src/ + bin/ only — no tests, renderer, or node_modules).
+HANDOFF="${DIR}/capture-handoff.sh"
+if [ -f "$HANDOFF" ]; then
+  cp "$HANDOFF" "${APP}/Contents/Resources/capture-handoff.sh"
+  chmod +x "${APP}/Contents/Resources/capture-handoff.sh"
+  CORE_SRC="${DIR}/vendor/claude-command-capture"
+  CORE_DST="${APP}/Contents/Resources/claude-command-capture"
+  rm -rf "$CORE_DST"
+  mkdir -p "$CORE_DST/src" "$CORE_DST/bin"
+  cp "$CORE_SRC"/src/*.js "$CORE_DST/src/"
+  cp "$CORE_SRC"/bin/*.js "$CORE_DST/bin/"
+  print -- "[agent] bundled capture-handoff.sh + vendor core"
+fi
+
 # App icon (orbital-ring star). Build AppIcon.icns from agent/icon.png if present.
 ICON_SRC="${DIR}/agent/icon.png"
 if [ -f "$ICON_SRC" ] && command -v iconutil >/dev/null 2>&1; then

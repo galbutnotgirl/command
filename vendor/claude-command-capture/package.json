@@ -1,0 +1,16 @@
+{
+  "name": "claude-command",
+  "productName": "ClaudeCommand",
+  "version": "0.1.0",
+  "description": "Background capture (text, clipboard, selection, screenshot) handed off to a Claude Code CLI skill",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "gen-icons": "node scripts/gen-tray-icon.js"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

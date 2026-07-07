@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'"
+    />
+    <title>ClaudeCommand</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #1e1e22;
+        --fg: #eaeaea;
+        --muted: #9a9aa2;
+        --accent: #d97757;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f6f6f4;
+          --fg: #1c1c1e;
+          --muted: #6e6e74;
+        }
+      }
+      * { box-sizing: border-box; margin: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        padding: 12px;
+        gap: 8px;
+        -webkit-app-region: drag;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      header strong { color: var(--fg); font-size: 13px; }
+      textarea {
+        -webkit-app-region: no-drag;
+        flex: 1;
+        resize: none;
+        border: 1px solid rgba(128, 128, 128, 0.35);
+        border-radius: 8px;
+        padding: 10px;
+        font: inherit;
+        font-size: 14px;
+        background: transparent;
+        color: inherit;
+        outline: none;
+      }
+      textarea:focus { border-color: var(--accent); }
+      footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+        align-items: center;
+      }
+      button {
+        -webkit-app-region: no-drag;
+        font: inherit;
+        font-size: 13px;
+        padding: 5px 14px;
+        border-radius: 6px;
+        border: 1px solid rgba(128, 128, 128, 0.35);
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Submit to Claude</strong>
+      <span>Enter to submit &middot; Shift+Enter for newline &middot; Esc to cancel</span>
+    </header>
+    <textarea id="input" autofocus placeholder="Type what you want handed to your skill…"></textarea>
+    <footer>
+      <button id="cancel">Cancel</button>
+      <button id="submit" class="primary">Submit</button>
+    </footer>
+    <script src="text-entry.js"></script>
+  </body>
+</html>

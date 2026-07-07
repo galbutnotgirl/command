@@ -987,6 +987,8 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             DispatchQueue.main.async { if picker.isVisible { picker.hide() } else { picker.show(prev: front) } }
         } else if action == "settings" {
             DispatchQueue.main.async { settingsWindow.show(tab: .setup) }
+        } else if action == "handofftext" {
+            DispatchQueue.main.async { HandoffTextEntryPanel.shared.show() }
         } else if action == "dictate" || action == "dictateadd" {
             // Suppress Carbon key-repeat: kEventHotKeyPressed fires on every repeat.
             // Only act on the first press; kEventHotKeyReleased clears the held state.
@@ -1159,6 +1161,8 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
             if picker.isVisible { picker.hide() } else { picker.show(prev: front) }
         } else if hk.action == "settings" {
             settingsWindow.show(tab: .setup)
+        } else if hk.action == "handofftext" {
+            HandoffTextEntryPanel.shared.show()
         } else if hk.action == "dictate" {
             Task { @MainActor in triggerDictation(mode: .insert, keycode: CGKeyCode(carbon)) }
         } else if hk.action == "dictateadd" {
