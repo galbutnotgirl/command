@@ -15,6 +15,7 @@
 
 import Foundation
 import AppKit
+import ClaudeCommandCore
 
 // ── Single source of truth for the public repo this app lives in / updates from.
 // Fill OWNER/REPO once the public repo exists; an empty owner disables updates
@@ -25,31 +26,6 @@ var GITHUB_REPO_URL: String { GH_OWNER.isEmpty ? "" : "https://github.com/\(GH_O
 
 // Where install-agent.sh puts the running app. The swapper replaces this path.
 let INSTALL_PATH = (NSHomeDirectory() as NSString).appendingPathComponent("Applications/ClaudeCommand.app")
-
-// ── Release channels ────────────────────────────────────────────────────────
-// Mapped onto GitHub release tags: prod = plain "vX.Y.Z", beta = "vX.Y.Z-beta.N",
-// alpha = "vX.Y.Z-alpha.N". A channel sees its own builds AND everything more
-// stable (alpha → alpha+beta+prod, beta → beta+prod, prod → prod only), so a
-// tester always lands on the newest build they've opted into.
-enum UpdateChannel: String, CaseIterable {
-    case alpha, beta, prod
-    var label: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
-    // Channels this selection is allowed to receive (self + more stable).
-    var accepts: Set<UpdateChannel> {
-        switch self {
-        case .alpha: return [.alpha, .beta, .prod]
-        case .beta:  return [.beta, .prod]
-        case .prod:  return [.prod]
-        }
-    }
-    // Which channel a release tag belongs to.
-    static func of(tag: String) -> UpdateChannel {
-        let t = tag.lowercased()
-        if t.contains("alpha") { return .alpha }
-        if t.contains("beta")  { return .beta }
-        return .prod
-    }
-}
 
 // Prod has no public release yet → keep the Prod option disabled in the UI.
 // Flip to true once a stable vX.Y.Z release is cut.
@@ -114,22 +90,6 @@ enum UpdateCheckResult {
 
 func currentAppVersion() -> String {
     (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.0.0"
-}
-
-// semver-ish compare: true when `a` is strictly newer than `b`. Tolerant of
-// missing components and a leading "v" (1.2 vs 1.2.0 → equal).
-func versionGreater(_ a: String, _ b: String) -> Bool {
-    func parts(_ s: String) -> [Int] {
-        let trimmed = s.hasPrefix("v") ? String(s.dropFirst()) : s
-        return trimmed.split(separator: ".").map { Int($0.filter(\.isNumber)) ?? 0 }
-    }
-    let pa = parts(a), pb = parts(b)
-    for i in 0..<max(pa.count, pb.count) {
-        let x = i < pa.count ? pa[i] : 0
-        let y = i < pb.count ? pb[i] : 0
-        if x != y { return x > y }
-    }
-    return false
 }
 
 // ── Daily background check ──────────────────────────────────────────────────
@@ -214,8 +174,10 @@ final class Updater {
                 let info = UpdateInfo(
                     latestVersion: latest,
                     currentVersion: cur,
-                    // Newest build on the channel that isn't the one we're running.
-                    isNewer: latest != cur,
+                    // Strict newer-than, not just "different" — a locally-built dev
+                    // version ahead of the last tagged release must never be offered
+                    // as a "downgrade" back to that release.
+                    isNewer: versionGreater(latest, cur),
                     releaseURL: (rel["html_url"] as? String) ?? GITHUB_REPO_URL,
                     downloadURL: dl,
                     notes: (rel["body"] as? String) ?? "")

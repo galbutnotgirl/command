@@ -7,6 +7,7 @@
 
 import Cocoa
 import SwiftUI
+import ClaudeCommandCore
 
 // Base data dir — same path Electron's app.getPath('userData') would use, so
 // the downstream-app contract is identical (see integration doc).
@@ -72,41 +73,9 @@ struct HandoffConfig {
 }
 
 // ---- submission records ------------------------------------------------------
-
-struct HandoffSubmission: Identifiable {
-    let id: String
-    let createdAt: Date
-    let finishedAt: Date?
-    let source: String
-    let kind: String
-    let skill: String?
-    let status: String   // running | succeeded | failed
-    let exitCode: Int?
-    let error: String?
-    let prompt: String?
-    let contentFile: String?
-    let logFile: String?
-
-    // A record can stay "running" forever if the CLI (or the machine) died
-    // before the updater rewrote it — flag those instead of an eternal spinner.
-    var isStalled: Bool { status == "running" && createdAt.timeIntervalSinceNow < -1800 }
-    var statusGlyph: String {
-        if status == "succeeded" { return "✓" }
-        if status == "failed" { return "✗" }
-        return isStalled ? "⚠" : "…"
-    }
-    var age: String {
-        let s = Int(-createdAt.timeIntervalSinceNow)
-        if s < 60 { return "\(s)s ago" }
-        if s < 3600 { return "\(s / 60)m ago" }
-        if s < 86400 { return "\(s / 3600)h ago" }
-        return "\(s / 86400)d ago"
-    }
-    var menuTitle: String {
-        let target = (skill?.isEmpty == false) ? "/\(skill!)" : "claude -p"
-        return "\(statusGlyph) \(source) → \(target) — \(age)\(isStalled ? " (stalled?)" : "")"
-    }
-}
+// HandoffSubmission's model + staleness/age computed properties live in
+// ClaudeCommandCore/HandoffModels.swift (unit-tested there); this file only
+// does the disk I/O.
 
 private let handoffISO: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
@@ -197,7 +166,7 @@ func writeHandoffRetentionDays(_ days: Int) {
 func pruneHandoffSubmissions() -> Int {
     let cutoff = Date().addingTimeInterval(-Double(readHandoffRetentionDays()) * 86400)
     var removed = 0
-    for s in loadHandoffSubmissions(limit: nil) where s.status != "running" && s.createdAt < cutoff {
+    for s in loadHandoffSubmissions(limit: nil) where isHandoffPruneEligible(status: s.status, createdAt: s.createdAt, cutoff: cutoff) {
         deleteHandoffSubmission(s)
         removed += 1
     }
@@ -286,31 +255,7 @@ private func submitHandoffPrompt(_ prompt: String, source: String, kind: String,
 }
 
 // ---- custom actions run as background handoffs (isHandoff == true) ---------
-// Same {selection} convention as a regular custom action's prompt (see
-// CustomAction's doc comment): inline if present, otherwise appended below.
-// Screenshot mode has no window to paste an image into, so the file path is
-// inlined the same way — via {file}, or appended if the template omits it.
-
-func renderCustomActionHandoffPrompt(_ ca: CustomAction, content: String?, file: String?) -> String {
-    var body = ca.prompt
-    if let content {
-        if body.contains("{selection}") {
-            body = body.replacingOccurrences(of: "{selection}", with: content)
-        } else {
-            body = body.isEmpty ? content : "\(body)\n\n\(content)"
-        }
-    }
-    if let file {
-        if body.contains("{file}") {
-            body = body.replacingOccurrences(of: "{file}", with: file)
-        } else {
-            body += "\n\nA captured image was saved to: \(file)\nRead that file to view the capture."
-        }
-    }
-    let skill = ca.skill.trimmingCharacters(in: .whitespaces)
-    if !skill.isEmpty { body = "/\(skill)\n\n\(body)" }
-    return body
-}
+// renderCustomActionHandoffPrompt() lives in ClaudeCommandCore/HandoffModels.swift.
 
 // Writes the clipboard's image to a fresh file under captures/ and returns its
 // path — the native (AppKit-direct) equivalent of capture-handoff.sh's Python

@@ -65,7 +65,10 @@ SEND="${DIR}/send-to-claude.sh"
 if [ -f "$SEND" ]; then
   cp "$SEND" "${APP}/Contents/Resources/send-to-claude.sh"
   chmod +x "${APP}/Contents/Resources/send-to-claude.sh"
-  print -- "[agent] bundled send-to-claude.sh"
+  cp "${DIR}/send-to-claude-lib.sh" "${APP}/Contents/Resources/send-to-claude-lib.sh"
+  cp "${DIR}/match-enrich-rule.py" "${APP}/Contents/Resources/match-enrich-rule.py"
+  chmod +x "${APP}/Contents/Resources/match-enrich-rule.py"
+  print -- "[agent] bundled send-to-claude.sh + lib + match-enrich-rule.py"
 fi
 CLIPWATCH="${DIR}/clipwatch.py"
 if [ -f "$CLIPWATCH" ]; then

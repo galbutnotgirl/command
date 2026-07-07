@@ -6,6 +6,7 @@ import Cocoa
 import SwiftUI
 import Combine
 import AVFoundation
+import ClaudeCommandCore
 
 // Repo URL lives in Updater.swift (GITHUB_REPO_URL) as the single source of truth.
 

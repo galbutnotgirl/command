@@ -24,6 +24,7 @@ import Carbon.HIToolbox
 import CoreGraphics
 import ApplicationServices
 import Darwin
+import ClaudeCommandCore
 
 let HOME = NSHomeDirectory()
 let SOCK = "\(HOME)/.claude/state/command-agent.sock"

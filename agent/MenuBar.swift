@@ -4,6 +4,7 @@
 // Clicking an action item triggers it immediately, same as the hotkey.
 
 import Cocoa
+import ClaudeCommandCore
 
 let menuBar = MenuBarController()
 

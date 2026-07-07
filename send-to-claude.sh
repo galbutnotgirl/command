@@ -240,25 +240,7 @@ ENRICH_RULES_PATH="${HOME}/.claude/state/enrichment-rules.json"
 ENRICH=""
 DISPLAY_NAME=""
 if [ -f "$ENRICH_RULES_PATH" ]; then
-  IFS=$'\x1e' read -r ENRICH DISPLAY_NAME <<< "$(/usr/bin/python3 - "$ENRICH_RULES_PATH" "$BUNDLE_ID" "$HOST" "$APP_NAME" "$URL" <<'PY'
-import json, sys, fnmatch
-from urllib.parse import urlparse
-path_arg, bundle, host, app, url = sys.argv[1:6]
-url_path = urlparse(url).path
-try:
-    rules = json.load(open(path_arg))
-except Exception:
-    rules = []
-for r in rules:
-    m, pat, text = r.get("match"), r.get("pattern", ""), r.get("text", "")
-    prefix = r.get("pathPrefix", "")
-    hit = (m == "bundle" and pat == bundle) or (m == "app" and pat == app) \
-        or (m == "host" and host and fnmatch.fnmatch(host, pat) and (not prefix or url_path.startswith(prefix)))
-    if hit:
-        sys.stdout.write(text.replace("{url}", url) + "\x1e" + r.get("displayName", ""))
-        break
-PY
-)"
+  IFS=$'\x1e' read -r ENRICH DISPLAY_NAME <<< "$(/usr/bin/python3 "${SCRIPT_DIR}/match-enrich-rule.py" "$ENRICH_RULES_PATH" "$BUNDLE_ID" "$HOST" "$APP_NAME" "$URL")"
 else
   # App-name matching throughout (not bundle ID) — same as the Swift defaults, so
   # editing "Slack" in Templates and seeing this fallback behave identically.
@@ -309,34 +291,7 @@ fi
 # auto-appended model custom actions already use. Absent file (the default)
 # means zero behavior change. Mirrors CommandTemplates.swift's expandTemplate().
 TEMPLATES_PATH="${HOME}/.claude/state/command-templates.json"
-read_template() {  # $1 = action
-  [ -f "$TEMPLATES_PATH" ] || { printf ''; return; }
-  /usr/bin/python3 -c "
-import json
-try:
-    d = json.load(open('$TEMPLATES_PATH'))
-    print(d.get('$1', ''), end='')
-except Exception:
-    pass
-" 2>/dev/null
-}
-expand_template() {  # $1 = raw template string, $2 = selection text to substitute
-                      # ($2 lets the go+image case pass "(image attached below)" in
-                      # place of $SEL, same as the old hardcoded behavior there)
-  local raw="$1" t="$1" sel="$2"
-  t="${t//\{selection\}/$sel}"; t="${t//\{prompt\}/$sel}"; t="${t//\{text\}/$sel}"
-  t="${t//\{context\}/$CONTEXT_LINE}"
-  t="${t//\{url\}/$URL}"
-  if [[ "$raw" != *"{selection}"* && "$raw" != *"{prompt}"* && "$raw" != *"{text}"* ]]; then
-    if [ -z "$t" ]; then t="$sel"; else t="${t}"$'\n\n'"${sel}"; fi
-  fi
-  if [[ "$raw" == *"{source}"* ]]; then
-    t="${t//\{source\}/$SOURCE_LINE}"
-  elif [ -n "$SOURCE_LINE" ]; then
-    t="${SOURCE_LINE}"$'\n\n'"${t}"
-  fi
-  printf '%s' "$t"
-}
+source "${SCRIPT_DIR}/send-to-claude-lib.sh"
 GO_RAW="$(read_template go)"
 [ -z "$GO_RAW" ] && GO_RAW='{selection}
 
