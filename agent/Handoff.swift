@@ -154,6 +154,23 @@ func deleteHandoffSubmission(_ s: HandoffSubmission) {
     if let l = s.logFile { try? fm.removeItem(atPath: l) }
 }
 
+// Stalled-run recovery: a "running" record whose CLI process died (or the Mac
+// slept/crashed) before the updater could rewrite it stays "running" forever —
+// isStalled flags it, this lets the user actually clear it. Rewrites the
+// record in place (same schema updateSubmission() in the vendor core writes),
+// then the record is an ordinary "failed" one — the existing Retry button
+// picks it up from there.
+func markHandoffSubmissionFailed(_ s: HandoffSubmission, reason: String = "Marked failed (stalled run)") {
+    let path = "\(HANDOFF_BASE)/submissions/\(s.id).json"
+    guard let data = FileManager.default.contents(atPath: path),
+          var d = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+    d["status"] = "failed"
+    d["error"] = reason
+    d["finishedAt"] = handoffISO.string(from: Date())
+    guard let out = try? JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted]) else { return }
+    try? out.write(to: URL(fileURLWithPath: path))
+}
+
 // ---- retention (mirrors the clipboard-history retentionDays model) ----------
 // Own key in command-config.json — Handoffs accumulate skill-run history, not
 // sensitive clipboard content, so a longer default than clipboard's 7 days.
