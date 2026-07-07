@@ -62,6 +62,41 @@ func setUpdateChannel(_ c: UpdateChannel) {
     UserDefaults.standard.set(c.rawValue, forKey: "updateChannel")
 }
 
+// ── Bug reporting ───────────────────────────────────────────────────────────
+// GitHub's issue-form query params (title/body) pre-fill a new issue without
+// any API/auth — same trust model as the rest of the updater (no third-party
+// service, just the repo this app already lives in).
+func reportBugURL() -> URL? {
+    guard !GH_OWNER.isEmpty, !GH_REPO.isEmpty else { return nil }
+    let version = currentAppVersion()
+    let branch = (Bundle.main.infoDictionary?["ClaudeCommandGitBranch"] as? String) ?? ""
+    let os = ProcessInfo.processInfo.operatingSystemVersion
+    let osString = "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
+    var body = """
+    **Version:** \(version)\(branch.isEmpty ? "" : " (\(branch))")
+    **macOS:** \(osString)
+
+    **What happened:**
+
+
+    **What you expected:**
+
+
+    **Steps to reproduce:**
+    1.
+
+    """
+    body += "\n<!-- Logs, if relevant: ~/Library/Logs/claude-command.log (worker), "
+    body += "~/.claude/logs/command-agent.err (agent), ~/.claude/logs/attribution.log (clipboard) -->\n"
+
+    var comps = URLComponents(string: "https://github.com/\(GH_OWNER)/\(GH_REPO)/issues/new")!
+    comps.queryItems = [
+        URLQueryItem(name: "title", value: "Bug: "),
+        URLQueryItem(name: "body", value: body),
+    ]
+    return comps.url
+}
+
 struct UpdateInfo {
     let latestVersion: String
     let currentVersion: String

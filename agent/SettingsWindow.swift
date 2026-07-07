@@ -1612,6 +1612,7 @@ struct AboutView: View {
     @State private var installing = false
     @State private var available: UpdateInfo? = nil
     @State private var channel = currentChannel()
+    @State private var diagCopied = false
 
     private var version: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
@@ -1694,6 +1695,26 @@ struct AboutView: View {
                     Label("View on GitHub", systemImage: "link")
                 }
                 Text(GITHUB_REPO_URL).font(.caption).foregroundColor(.secondary).textSelection(.enabled)
+
+                Divider()
+
+                HStack(spacing: 10) {
+                    Button {
+                        if let u = reportBugURL() { NSWorkspace.shared.open(u) }
+                    } label: {
+                        Label("Report a Bug", systemImage: "ladybug")
+                    }
+                    Button("Copy Diagnostic Info") {
+                        copyDiagnosticInfo()
+                        diagCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { diagCopied = false }
+                    }
+                    .buttonStyle(.bordered)
+                    if diagCopied { Text("Copied").font(.caption).foregroundColor(.secondary) }
+                }
+                Text("Report a Bug opens a pre-filled GitHub issue (version, macOS, repro steps). Log file paths are already in the template — Copy Diagnostic Info if you want to paste them somewhere else instead.")
+                    .font(.caption2).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(24)
         }
@@ -1719,6 +1740,30 @@ struct AboutView: View {
                 installing = false
                 updateStatus = msg
             })
+    }
+
+    // Tail of each log, not the whole file — enough to actually see what just
+    // happened without dumping megabytes of history into the clipboard.
+    private func copyDiagnosticInfo() {
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        var out = "ClaudeCommand \(version)\(gitBranch.isEmpty ? "" : " (\(gitBranch))")\n"
+        out += "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)\n\n"
+        let logs = [
+            "\(HOME)/Library/Logs/claude-command.log",
+            "\(HOME)/.claude/logs/command-agent.err",
+            "\(HOME)/.claude/logs/attribution.log",
+        ]
+        for path in logs {
+            out += "--- \(path) ---\n"
+            if let data = FileManager.default.contents(atPath: path), let text = String(data: data, encoding: .utf8) {
+                out += text.split(separator: "\n").suffix(40).joined(separator: "\n")
+            } else {
+                out += "(not found)"
+            }
+            out += "\n\n"
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(out, forType: .string)
     }
 }
 
