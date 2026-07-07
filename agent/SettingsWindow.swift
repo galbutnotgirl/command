@@ -33,6 +33,10 @@ let settingsWindow = SettingsWindowController()
 // wherever purple is the actual intent instead of routing through the ambient
 // accent color.
 let appPurple = Color(nsColor: purpleAccent)
+// Fixed (not appearance-dependent) — for the few spots that paint a solid
+// purple fill behind *white* text; that pairing needs the deep purple in
+// both light and dark mode, unlike appPurple's dark-mode lightening.
+let appPurpleSolid = Color(red: 112/255, green: 40/255, blue: 215/255)
 
 extension View {
     func settingsCard() -> some View {
@@ -571,7 +575,7 @@ struct ShortcutsView: View {
                 }
 
                 VStack(spacing: 8) {
-                    ForEach(model.bindings) { b in
+                    ForEach(model.bindings.filter { !HANDOFF_ACTION_IDS.contains($0.action) }) { b in
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(b.name)
@@ -586,6 +590,9 @@ struct ShortcutsView: View {
                 }
 
                 // ---- Custom Actions ----
+                // Skill/Screenshot/Text Handoff are built-in, but functionally they're
+                // just prompt-triggering shortcuts like any custom action — grouped
+                // here rather than in the plain hotkey list above.
                 HStack {
                     Text("Custom Actions").font(.headline)
                     Spacer()
@@ -598,14 +605,26 @@ struct ShortcutsView: View {
                 Text("Prompt templates that wrap selected text or a screenshot. Use {selection} to place selected text inline — otherwise it's appended below the prompt. Source app + context hint go before all of it, unless \"Include source app\" is off.")
                     .font(.caption).foregroundColor(.secondary)
 
-                if model.customActions.isEmpty {
-                    Text("No custom actions yet — click Add to create one.")
-                        .font(.caption).foregroundColor(.secondary).padding(.vertical, 4)
-                } else {
-                    VStack(spacing: 8) {
-                        ForEach(model.customActions) { ca in
-                            CustomActionRow(ca: ca, model: model)
+                VStack(spacing: 8) {
+                    ForEach(model.bindings.filter { HANDOFF_ACTION_IDS.contains($0.action) }) { b in
+                        HStack(spacing: 12) {
+                            Image(systemName: "paperplane.circle").foregroundColor(appPurple).frame(width: 20)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(b.name)
+                                Text(b.detail).font(.caption).foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            KeyBindingField(action: b.action, binding: b, model: model)
                         }
+                        .settingsCard()
+                    }
+                    ForEach(model.customActions) { ca in
+                        CustomActionRow(ca: ca, model: model)
+                    }
+                    if model.customActions.isEmpty {
+                        Text("No user-defined custom actions yet — click Add to create one.")
+                            .font(.caption).foregroundColor(.secondary).padding(.vertical, 4)
                     }
                 }
             }
@@ -1636,7 +1655,7 @@ struct ChannelPicker: View {
                         .font(.system(size: 12, weight: selected ? .semibold : .regular))
                         .frame(width: 62)
                         .padding(.vertical, 4)
-                        .background(selected ? appPurple : Color.clear)
+                        .background(selected ? appPurpleSolid : Color.clear)
                         .foregroundColor(disabled ? Color.secondary.opacity(0.45)
                                                   : (selected ? .white : .primary))
                         .contentShape(Rectangle())

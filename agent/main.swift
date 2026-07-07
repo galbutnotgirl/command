@@ -182,8 +182,16 @@ enum PasteTarget { case prev, claude, claudeNew }
 
 var iconCache: [String: NSImage] = [:]
 
-// True purple — not systemPurple which renders burgundy in some themes
-let purpleAccent = NSColor(red: 112/255, green: 40/255, blue: 215/255, alpha: 1.0)
+// True purple — not systemPurple which renders burgundy in some themes.
+// Dynamic: the deep purple reads fine on light/white controls, but as button
+// text on macOS's dark-mode gray .bordered fill it's low-contrast and hard to
+// read — dark mode gets a lighter lavender instead.
+let purpleAccent = NSColor(name: nil) { appearance in
+    let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    return isDark
+        ? NSColor(red: 191/255, green: 156/255, blue: 255/255, alpha: 1.0)
+        : NSColor(red: 112/255, green: 40/255, blue: 215/255, alpha: 1.0)
+}
 
 func pickerTheme() -> PickerTheme {
     PickerTheme(rawValue: UserDefaults.standard.string(forKey: "pickerTheme") ?? "light") ?? .light

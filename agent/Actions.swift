@@ -25,6 +25,10 @@ let COMMAND_ACTIONS: [CommandAction] = [
     CommandAction(id: "dictateadd",  name: "Dictate → Claude",   detail: "Speak → on-device Parakeet transcription → send to Claude."),
 ]
 
+// Built-in but prompt-triggering like a user custom action — grouped with
+// Custom Actions in the Shortcuts tab instead of the plain hotkey list.
+let HANDOFF_ACTION_IDS: Set<String> = ["handoff", "shothandoff", "handofftext"]
+
 func actionName(_ id: String) -> String { COMMAND_ACTIONS.first { $0.id == id }?.name ?? id }
 func actionDetail(_ id: String) -> String { COMMAND_ACTIONS.first { $0.id == id }?.detail ?? "" }
 
