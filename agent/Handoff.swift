@@ -154,6 +154,40 @@ func deleteHandoffSubmission(_ s: HandoffSubmission) {
     if let l = s.logFile { try? fm.removeItem(atPath: l) }
 }
 
+// ---- retention (mirrors the clipboard-history retentionDays model) ----------
+// Own key in command-config.json — Handoffs accumulate skill-run history, not
+// sensitive clipboard content, so a longer default than clipboard's 7 days.
+let DEFAULT_HANDOFF_RETENTION_DAYS = 30
+
+func readHandoffRetentionDays() -> Int {
+    if let v = readCommandConfig()["handoffRetentionDays"] as? Int, v >= 1 { return v }
+    if let d = readCommandConfig()["handoffRetentionDays"] as? Double, d >= 1 { return Int(d) }
+    return DEFAULT_HANDOFF_RETENTION_DAYS
+}
+
+func writeHandoffRetentionDays(_ days: Int) {
+    var cfg = readCommandConfig()
+    cfg["handoffRetentionDays"] = max(1, days)
+    if let data = try? JSONSerialization.data(withJSONObject: cfg, options: [.prettyPrinted]) {
+        try? data.write(to: URL(fileURLWithPath: COMMAND_CONFIG))
+    }
+}
+
+// Deletes finished (succeeded/failed) submissions older than the retention
+// window, plus their capture/log files. Running submissions are never pruned,
+// however old — a stalled run is handled by the separate stalled-run recovery
+// path, not silently deleted out from under it. Returns the count removed.
+@discardableResult
+func pruneHandoffSubmissions() -> Int {
+    let cutoff = Date().addingTimeInterval(-Double(readHandoffRetentionDays()) * 86400)
+    var removed = 0
+    for s in loadHandoffSubmissions(limit: nil) where s.status != "running" && s.createdAt < cutoff {
+        deleteHandoffSubmission(s)
+        removed += 1
+    }
+    return removed
+}
+
 // ---- run a text handoff through capture-handoff.sh ---------------------------
 
 func runTextHandoff(_ text: String, source: String = "text") {

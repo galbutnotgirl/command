@@ -1453,6 +1453,7 @@ struct HandoffsView: View {
     @State private var query = ""
     @State private var statusFilter: String = "all"   // all | running | succeeded | failed
     @State private var pendingDelete: HandoffSubmission? = nil
+    @State private var retentionText = String(readHandoffRetentionDays())
 
     private var filtered: [HandoffSubmission] {
         var out = submissions
@@ -1495,6 +1496,18 @@ struct HandoffsView: View {
                         .textFieldStyle(.roundedBorder)
                 }
 
+                HStack(spacing: 10) {
+                    Text("Auto-delete finished handoffs after")
+                    Stepper(value: Binding(
+                        get: { Int(retentionText) ?? readHandoffRetentionDays() },
+                        set: { retentionText = String($0); writeHandoffRetentionDays($0); refresh() }
+                    ), in: 1...365) {
+                        Text("\(retentionText) days").frame(minWidth: 70, alignment: .leading)
+                    }
+                    Spacer()
+                }
+                .font(.caption)
+
                 if filtered.isEmpty {
                     Text(submissions.isEmpty ? "No handoffs yet — bind Skill Handoff, Screenshot Handoff, or Text Handoff in Shortcuts." : "No matches.")
                         .font(.caption).foregroundColor(.secondary).padding(.vertical, 12)
@@ -1523,7 +1536,10 @@ struct HandoffsView: View {
         }
     }
 
-    private func refresh() { submissions = loadHandoffSubmissions(limit: nil) }
+    private func refresh() {
+        pruneHandoffSubmissions()
+        submissions = loadHandoffSubmissions(limit: nil)
+    }
 }
 
 struct HandoffSubmissionRow: View {
