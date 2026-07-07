@@ -10,7 +10,7 @@ import AVFoundation
 // Repo URL lives in Updater.swift (GITHUB_REPO_URL) as the single source of truth.
 
 enum SettingsTab: Equatable {
-    case setup, shortcuts, history, templates
+    case setup, shortcuts, history, templates, handoffs
     case dictHistory, dictCorrections, dictVocabulary, dictSettings
     case about
 }
@@ -213,6 +213,7 @@ struct SettingsRootView: View {
             tabButton(.shortcuts, "Shortcuts", "keyboard")
             tabButton(.templates, "Templates", "doc.text.below.ecg")
             tabButton(.history, "Clipboard History", "clock.arrow.circlepath")
+            tabButton(.handoffs, "Handoffs", "paperplane.circle")
 
             Divider().padding(.vertical, 4)
 
@@ -261,6 +262,7 @@ struct SettingsRootView: View {
         case .shortcuts:       ShortcutsView(model: model)
         case .templates:       TemplatesView()
         case .history:         HistoryView()
+        case .handoffs:        HandoffsView()
         case .dictHistory:     DictHistoryView()
         case .dictCorrections: DictCorrectionsView()
         case .dictVocabulary:  DictVocabularyView()
@@ -1205,6 +1207,144 @@ struct HistoryView: View {
         writeRetentionDays(n)
         retentionText = String(n)
         status = "History kept for \(n) day\(n == 1 ? "" : "s")."
+    }
+}
+
+// ---- Handoffs -----------------------------------------------------------------
+// The downstream consumer for background skill handoffs: every submission
+// capture-handoff.sh produces (see docs/HANDOFF.md) as a real list instead of
+// just the menu bar's last-8 quick view.
+
+struct HandoffsView: View {
+    @State private var submissions: [HandoffSubmission] = loadHandoffSubmissions(limit: nil)
+    @State private var query = ""
+    @State private var statusFilter: String = "all"   // all | running | succeeded | failed
+    @State private var pendingDelete: HandoffSubmission? = nil
+
+    private var filtered: [HandoffSubmission] {
+        var out = submissions
+        if statusFilter != "all" { out = out.filter { $0.status == statusFilter } }
+        guard !query.isEmpty else { return out }
+        let q = query.lowercased()
+        return out.filter {
+            ($0.skill ?? "").lowercased().contains(q) ||
+            $0.source.lowercased().contains(q) ||
+            ($0.prompt ?? "").lowercased().contains(q)
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text("Handoffs").font(.title2).bold()
+                    Spacer()
+                    Button("Reveal in Finder") {
+                        NSWorkspace.shared.open(URL(fileURLWithPath: HANDOFF_BASE))
+                    }
+                    Button("Handoff Settings…") { HandoffSettingsWindowController.shared.show() }
+                    Button(action: refresh) { Image(systemName: "arrow.clockwise") }
+                        .help("Reload from disk")
+                }
+                Text("Every capture routed through Skill Handoff / Screenshot Handoff / Text Handoff — rendered into a prompt and piped to \(HandoffConfig.load().cliCommand) in the background. Records live in \(HANDOFF_BASE).")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 10) {
+                    Picker("", selection: $statusFilter) {
+                        Text("All").tag("all")
+                        Text("Running").tag("running")
+                        Text("Succeeded").tag("succeeded")
+                        Text("Failed").tag("failed")
+                    }
+                    .pickerStyle(.segmented).frame(width: 320)
+                    TextField("Search skill, source, or prompt", text: $query)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                if filtered.isEmpty {
+                    Text(submissions.isEmpty ? "No handoffs yet — bind Skill Handoff, Screenshot Handoff, or Text Handoff in Shortcuts." : "No matches.")
+                        .font(.caption).foregroundColor(.secondary).padding(.vertical, 12)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(filtered) { s in
+                            HandoffSubmissionRow(submission: s, onDelete: { pendingDelete = s })
+                            Divider()
+                        }
+                    }
+                }
+            }
+            .padding(24)
+        }
+        .onAppear { refresh() }
+        .alert("Delete this handoff record?",
+               isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+               presenting: pendingDelete) { s in
+            Button("Delete", role: .destructive) {
+                deleteHandoffSubmission(s)
+                refresh()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: { _ in
+            Text("Removes the submission record, its captured content, and its log. This can't be undone.")
+        }
+    }
+
+    private func refresh() { submissions = loadHandoffSubmissions(limit: nil) }
+}
+
+struct HandoffSubmissionRow: View {
+    let submission: HandoffSubmission
+    let onDelete: () -> Void
+    @State private var expanded = false
+
+    private var statusColor: Color {
+        switch submission.status {
+        case "succeeded": return .green
+        case "failed": return .red
+        default: return submission.isStalled ? .orange : .secondary
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Text(submission.statusGlyph).foregroundColor(statusColor).bold().frame(width: 16)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(submission.skill?.isEmpty == false ? "/\(submission.skill!)" : "claude -p").bold()
+                        Text(submission.kind == "image" ? "image" : "text")
+                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+                        Text("from \(submission.source)").font(.caption).foregroundColor(.secondary)
+                    }
+                    Text(submission.age + (submission.isStalled ? " — stalled?" : "") + (submission.error.map { " — \($0)" } ?? ""))
+                        .font(.caption2).foregroundColor(.secondary)
+                }
+                Spacer()
+                Button(expanded ? "Hide" : "Details") { expanded.toggle() }
+                    .buttonStyle(.plain).font(.caption)
+                if let log = submission.logFile, FileManager.default.fileExists(atPath: log) {
+                    Button { NSWorkspace.shared.open(URL(fileURLWithPath: log)) } label: {
+                        Image(systemName: "doc.text.magnifyingglass")
+                    }.buttonStyle(.plain).help("Open log")
+                }
+                Button { onDelete() } label: {
+                    Image(systemName: "trash").foregroundColor(.red)
+                }.buttonStyle(.plain)
+            }
+            if expanded, let prompt = submission.prompt {
+                Text(prompt)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .textSelection(.enabled)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.secondary.opacity(0.07))
+                    .cornerRadius(6)
+            }
+        }
+        .padding(.vertical, 8)
     }
 }
 

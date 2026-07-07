@@ -76,10 +76,15 @@ struct HandoffConfig {
 struct HandoffSubmission: Identifiable {
     let id: String
     let createdAt: Date
+    let finishedAt: Date?
     let source: String
     let kind: String
     let skill: String?
     let status: String   // running | succeeded | failed
+    let exitCode: Int?
+    let error: String?
+    let prompt: String?
+    let contentFile: String?
     let logFile: String?
 
     // A record can stay "running" forever if the CLI (or the machine) died
@@ -103,11 +108,17 @@ struct HandoffSubmission: Identifiable {
     }
 }
 
-func loadHandoffSubmissions(limit: Int = 8) -> [HandoffSubmission] {
+private let handoffISO: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+}()
+
+// limit: nil = every record (Settings ▸ Handoffs); the menu bar passes a small
+// limit since it only ever shows the last few.
+func loadHandoffSubmissions(limit: Int? = 8) -> [HandoffSubmission] {
     let dir = "\(HANDOFF_BASE)/submissions"
     guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return [] }
-    let iso = ISO8601DateFormatter()
-    iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     var records: [HandoffSubmission] = []
     for f in files where f.hasSuffix(".json") {
         guard let data = FileManager.default.contents(atPath: "\(dir)/\(f)"),
@@ -115,15 +126,32 @@ func loadHandoffSubmissions(limit: Int = 8) -> [HandoffSubmission] {
               let id = d["id"] as? String else { continue }
         records.append(HandoffSubmission(
             id: id,
-            createdAt: iso.date(from: d["createdAt"] as? String ?? "") ?? .distantPast,
+            createdAt: handoffISO.date(from: d["createdAt"] as? String ?? "") ?? .distantPast,
+            finishedAt: (d["finishedAt"] as? String).flatMap { handoffISO.date(from: $0) },
             source: d["source"] as? String ?? "?",
             kind: d["kind"] as? String ?? "text",
             skill: d["skill"] as? String,
             status: d["status"] as? String ?? "?",
+            exitCode: d["exitCode"] as? Int,
+            error: d["error"] as? String,
+            prompt: d["prompt"] as? String,
+            contentFile: d["contentFile"] as? String,
             logFile: d["logFile"] as? String
         ))
     }
-    return Array(records.sorted { $0.createdAt > $1.createdAt }.prefix(limit))
+    let sorted = records.sorted { $0.createdAt > $1.createdAt }
+    guard let limit = limit else { return sorted }
+    return Array(sorted.prefix(limit))
+}
+
+// Removes the submission record plus its capture + log files — the three
+// artifacts a run produces (see docs/HANDOFF.md). Best-effort: a missing file
+// on any of the three is not an error, just skipped.
+func deleteHandoffSubmission(_ s: HandoffSubmission) {
+    let fm = FileManager.default
+    try? fm.removeItem(atPath: "\(HANDOFF_BASE)/submissions/\(s.id).json")
+    if let c = s.contentFile { try? fm.removeItem(atPath: c) }
+    if let l = s.logFile { try? fm.removeItem(atPath: l) }
 }
 
 // ---- run a text handoff through capture-handoff.sh ---------------------------
