@@ -1039,24 +1039,19 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             let kc = CGKeyCode(hotkeyKeycodes[hkID.id] ?? 0)
             let m: DictMode = action == "dictate" ? .insert : .claude
             Task { @MainActor in triggerDictation(mode: m, keycode: kc) }
-        } else if action.hasPrefix("custom:") || action.hasPrefix("customshot:") {
-            let cas = loadCustomActions()
-            let ca = cas.first(where: { $0.actionID == action })
-            let prompt = ca?.prompt ?? ""
-            let autoSubmit = ca?.isAutoSubmit ?? false
-            let session = ca?.sessionMode ?? "new"
-            let inclSrc = ca?.includeSource ?? true
-            let isShot = action.hasPrefix("customshot:")
-            let sel = isShot ? "" : captureOrClipboard()
-            DispatchQueue.global().async {
-                runWorker(isShot ? "customshot" : "custom", source: front, captured: sel,
-                          customPrompt: prompt, customSubmit: autoSubmit,
-                          customSession: session, customIncludeSource: inclSrc)
+        } else if action.hasPrefix("custom:") || action.hasPrefix("customshot:")
+                  || action.hasPrefix("customhandoff:") || action.hasPrefix("customshothandoff:") {
+            guard let ca = loadCustomActions().first(where: { $0.actionID == action }) else { return noErr }
+            let sel = ca.isShot ? "" : captureOrClipboard()
+            if ca.isHandoff {
+                DispatchQueue.global().async { runCustomHandoff(ca, capturedText: sel) }
+            } else {
+                DispatchQueue.global().async {
+                    runWorker(ca.isShot ? "customshot" : "custom", source: front, captured: sel,
+                              customPrompt: ca.prompt, customSubmit: ca.isAutoSubmit,
+                              customSession: ca.sessionMode, customIncludeSource: ca.includeSource)
+                }
             }
-        } else if action.hasPrefix("handoffcustom:") {
-            guard let h = loadCustomHandoffs().first(where: { $0.actionID == action }) else { return noErr }
-            let sel = h.kind == "screenshot" ? "" : captureOrClipboard()
-            DispatchQueue.global().async { runCustomHandoff(h, capturedText: sel) }
         } else {
             // Capture selection NOW (main thread, source app still focused)
             // before async dispatch; worker uses CAPTURED_TEXT, skips socket roundtrip.
@@ -1104,18 +1099,6 @@ func registerFromConfig() {
         hotkeyKeycodes[hkID] = ca.keycode
         var ref: EventHotKeyRef?
         RegisterEventHotKey(ca.keycode, ca.mods, id, GetApplicationEventTarget(), 0, &ref)
-        hotkeyRefs.append(ref)
-    }
-    // Custom handoff hotkeys (custom-handoffs.json). IDs start at 1000 — far past
-    // custom actions' 100+ range, so the two lists can never collide.
-    for (k, h) in loadCustomHandoffs().enumerated() {
-        guard h.enabled, h.keycode != 0 else { continue }
-        let hkID = UInt32(1000 + k)
-        let id = EventHotKeyID(signature: sig, id: hkID)
-        hotkeyActions[hkID] = h.actionID
-        hotkeyKeycodes[hkID] = h.keycode
-        var ref: EventHotKeyRef?
-        RegisterEventHotKey(h.keycode, h.mods, id, GetApplicationEventTarget(), 0, &ref)
         hotkeyRefs.append(ref)
     }
 }
@@ -1234,18 +1217,16 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
             let pg = runShell("/usr/bin/pgrep", ["-x", "screencapture"])
             if pg.code == 0 { _ = runShell("/usr/bin/pkill", ["-x", "screencapture"]); return }
         }
-        let prompt = ca.prompt
         let sel = ca.isShot ? "" : captureOrClipboard()
-        let session = ca.sessionMode
-        let inclSrc = ca.includeSource
-        DispatchQueue.global().async {
-            runWorker(ca.isShot ? "customshot" : "custom", source: front, captured: sel,
-                      customPrompt: prompt, customSubmit: ca.isAutoSubmit,
-                      customSession: session, customIncludeSource: inclSrc)
+        if ca.isHandoff {
+            DispatchQueue.global().async { runCustomHandoff(ca, capturedText: sel) }
+        } else {
+            DispatchQueue.global().async {
+                runWorker(ca.isShot ? "customshot" : "custom", source: front, captured: sel,
+                          customPrompt: ca.prompt, customSubmit: ca.isAutoSubmit,
+                          customSession: ca.sessionMode, customIncludeSource: ca.includeSource)
+            }
         }
-    } else if let h = loadCustomHandoffs().first(where: { $0.enabled && $0.keycode == carbon && $0.mods == mods }) {
-        let sel = h.kind == "screenshot" ? "" : captureOrClipboard()
-        DispatchQueue.global().async { runCustomHandoff(h, capturedText: sel) }
     }
 }
 

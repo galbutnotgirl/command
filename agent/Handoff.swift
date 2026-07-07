@@ -285,20 +285,31 @@ private func submitHandoffPrompt(_ prompt: String, source: String, kind: String,
     }
 }
 
-// ---- user-configurable custom handoffs --------------------------------------
-// Each CustomHandoff carries its own skill + prompt template (same placeholder
-// scheme as HandoffConfig), so it doesn't touch the global settings.json at all.
+// ---- custom actions run as background handoffs (isHandoff == true) ---------
+// Same {selection} convention as a regular custom action's prompt (see
+// CustomAction's doc comment): inline if present, otherwise appended below.
+// Screenshot mode has no window to paste an image into, so the file path is
+// inlined the same way — via {file}, or appended if the template omits it.
 
-func renderCustomHandoffPrompt(_ h: CustomHandoff, content: String?, file: String?) -> String {
-    let skill = h.skill.trimmingCharacters(in: .whitespaces)
-    var s = h.promptTemplate
-    s = s.replacingOccurrences(of: "{skillInvocation}", with: skill.isEmpty ? "" : "/\(skill)")
-    s = s.replacingOccurrences(of: "{skill}", with: skill)
-    s = s.replacingOccurrences(of: "{source}", with: h.kind == "screenshot" ? "screenshot" : "selection")
-    s = s.replacingOccurrences(of: "{timestamp}", with: handoffISO.string(from: Date()))
-    if let content { s = s.replacingOccurrences(of: "{content}", with: content) }
-    if let file { s = s.replacingOccurrences(of: "{file}", with: file) }
-    return s
+func renderCustomActionHandoffPrompt(_ ca: CustomAction, content: String?, file: String?) -> String {
+    var body = ca.prompt
+    if let content {
+        if body.contains("{selection}") {
+            body = body.replacingOccurrences(of: "{selection}", with: content)
+        } else {
+            body = body.isEmpty ? content : "\(body)\n\n\(content)"
+        }
+    }
+    if let file {
+        if body.contains("{file}") {
+            body = body.replacingOccurrences(of: "{file}", with: file)
+        } else {
+            body += "\n\nA captured image was saved to: \(file)\nRead that file to view the capture."
+        }
+    }
+    let skill = ca.skill.trimmingCharacters(in: .whitespaces)
+    if !skill.isEmpty { body = "/\(skill)\n\n\(body)" }
+    return body
 }
 
 // Writes the clipboard's image to a fresh file under captures/ and returns its
@@ -317,15 +328,15 @@ private func writeClipboardImageFile() -> String? {
     do { try pngData.write(to: URL(fileURLWithPath: path)); return path } catch { return nil }
 }
 
-func runCustomHandoff(_ h: CustomHandoff, capturedText: String = "") {
-    guard h.enabled else { return }
-    let skill = h.skill.isEmpty ? nil : h.skill
-    if h.kind == "screenshot" {
+func runCustomHandoff(_ ca: CustomAction, capturedText: String = "") {
+    guard ca.enabled else { return }
+    let skill = ca.skill.isEmpty ? nil : ca.skill
+    if ca.isShot {
         guard let file = writeClipboardImageFile() else {
             notify("Handoff failed", "No image on the clipboard.")
             return
         }
-        let prompt = renderCustomHandoffPrompt(h, content: nil, file: file)
+        let prompt = renderCustomActionHandoffPrompt(ca, content: nil, file: file)
         submitHandoffPrompt(prompt, source: "screenshot", kind: "image", skill: skill, failureTitle: "Handoff failed")
     } else {
         let text = capturedText.isEmpty ? (NSPasteboard.general.string(forType: .string) ?? "") : capturedText
@@ -333,7 +344,7 @@ func runCustomHandoff(_ h: CustomHandoff, capturedText: String = "") {
             notify("Handoff failed", "Nothing selected or on the clipboard.")
             return
         }
-        let prompt = renderCustomHandoffPrompt(h, content: text, file: nil)
+        let prompt = renderCustomActionHandoffPrompt(ca, content: text, file: nil)
         submitHandoffPrompt(prompt, source: "selection", kind: "text", skill: skill, failureTitle: "Handoff failed")
     }
 }

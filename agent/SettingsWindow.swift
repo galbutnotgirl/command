@@ -55,7 +55,6 @@ final class SettingsModel: ObservableObject {
     @Published var comps: [StatusCheck] = []
     @Published var bindings: [HotkeyBinding] = []
     @Published var customActions: [CustomAction] = []
-    @Published var customHandoffs: [CustomHandoff] = []
     @Published var recordingAction: String? = nil
     @Published var bindingConflict: String? = nil
     @Published var claudeDestination: String = UserDefaults.standard.string(forKey: "claudeDestination") ?? "code"
@@ -69,7 +68,6 @@ final class SettingsModel: ObservableObject {
         comps = componentChecks()
         bindings = loadBindings()
         customActions = loadCustomActions()
-        customHandoffs = loadCustomHandoffs()
     }
 
     func setBinding(action: String, keycode: UInt32, mods: UInt32) {
@@ -107,12 +105,9 @@ final class SettingsModel: ObservableObject {
         guard let action = recordingAction else { return false }
         if ev.keyCode == 53 { cancelRecording(); return true }              // esc cancels
         let isCustom = customActions.contains { $0.id == action }
-        let isCustomHandoff = customHandoffs.contains { $0.id == action }
         if ev.keyCode == 51 || ev.keyCode == 117 {                         // delete / fwd-delete = clear
             recordingAction = nil
-            if isCustomHandoff { clearCustomHandoffBinding(id: action) }
-            else if isCustom { clearCustomBinding(id: action) }
-            else { clearBinding(action) }
+            if isCustom { clearCustomBinding(id: action) } else { clearBinding(action) }
             reregisterHotkeys()
             return true
         }
@@ -120,9 +115,7 @@ final class SettingsModel: ObservableObject {
         guard KEYCODE_NAMES[key] != nil else { return true }                // ignore keys we can't name
         let carbonM = carbonMods(from: ev.modifierFlags)
         recordingAction = nil
-        if isCustomHandoff {
-            setCustomHandoffBinding(id: action, keycode: key, mods: carbonM)
-        } else if isCustom {
+        if isCustom {
             setCustomBinding(id: action, keycode: key, mods: carbonM)
         } else {
             setBinding(action: action, keycode: key, mods: carbonM)
@@ -153,27 +146,6 @@ final class SettingsModel: ObservableObject {
     }
     func clearCustomBinding(id: String) { setCustomBinding(id: id, keycode: 0, mods: 0) }
 
-    // ---- custom handoff CRUD ----
-    func addCustomHandoff(_ h: CustomHandoff) {
-        customHandoffs.append(h)
-        saveCustomHandoffs(customHandoffs)
-    }
-    func deleteCustomHandoff(id: String) {
-        customHandoffs.removeAll { $0.id == id }
-        saveCustomHandoffs(customHandoffs)
-    }
-    func updateCustomHandoff(_ h: CustomHandoff) {
-        if let i = customHandoffs.firstIndex(where: { $0.id == h.id }) { customHandoffs[i] = h }
-        saveCustomHandoffs(customHandoffs)
-    }
-    func setCustomHandoffBinding(id: String, keycode: UInt32, mods: UInt32) {
-        if let i = customHandoffs.firstIndex(where: { $0.id == id }) {
-            customHandoffs[i].keycode = keycode; customHandoffs[i].mods = mods
-        }
-        saveCustomHandoffs(customHandoffs)
-    }
-    func clearCustomHandoffBinding(id: String) { setCustomHandoffBinding(id: id, keycode: 0, mods: 0) }
-
     // Check whether keycode+mods collides with any other binding (different action/id).
     // Sets bindingConflict to a human-readable message, or nil if clear.
     func checkConflict(forAction action: String, keycode: UInt32, mods: UInt32) {
@@ -184,10 +156,6 @@ final class SettingsModel: ObservableObject {
         }
         if let other = customActions.first(where: { $0.keycode == keycode && $0.mods == mods && $0.id != action }) {
             bindingConflict = "Conflicts with custom action \"\(other.name)\""
-            return
-        }
-        if let other = customHandoffs.first(where: { $0.keycode == keycode && $0.mods == mods && $0.id != action }) {
-            bindingConflict = "Conflicts with custom handoff \"\(other.name)\""
             return
         }
         bindingConflict = nil
@@ -277,7 +245,7 @@ struct SettingsRootView: View {
             tabButton(.setup, "Set Up", "checklist")
             tabButton(.shortcuts, "Shortcuts", "keyboard")
             tabButton(.templates, "Templates", "doc.text.below.ecg")
-            tabButton(.handoffs, "Handoffs", "paperplane.circle")
+            tabButton(.handoffs, "Handoff History", "paperplane.circle")
             tabButton(.history, "Clipboard History", "clock.arrow.circlepath")
 
             Divider().padding(.vertical, 4)
@@ -557,7 +525,6 @@ struct CompRow: View {
 struct ShortcutsView: View {
     @ObservedObject var model: SettingsModel
     @State private var showingAddCustom = false
-    @State private var showingAddHandoff = false
 
     private var destBinding: Binding<String> {
         Binding(
@@ -634,7 +601,7 @@ struct ShortcutsView: View {
                 }
                 .padding(.top, 8)
 
-                Text("Prompt templates that wrap selected text or a screenshot. Use {selection} to place selected text inline — otherwise it's appended below the prompt. Source app + context hint go before all of it, unless \"Include source app\" is off.")
+                Text("Prompt templates that wrap selected text or a screenshot — paste into Claude, or run as a background handoff (no window, just \(HandoffConfig.load().cliCommand) -p addressed to a skill). Use {selection} (and {file} for screenshot handoffs) to place captured content inline — otherwise it's appended below the prompt.")
                     .font(.caption).foregroundColor(.secondary)
 
                 VStack(spacing: 8) {
@@ -659,38 +626,11 @@ struct ShortcutsView: View {
                             .font(.caption).foregroundColor(.secondary).padding(.vertical, 4)
                     }
                 }
-
-                // ---- Custom Handoffs ----
-                HStack {
-                    Text("Custom Handoffs").font(.headline)
-                    Spacer()
-                    Button(action: { showingAddHandoff = true }) {
-                        Label("Add", systemImage: "plus.circle")
-                    }
-                }
-                .padding(.top, 8)
-
-                Text("Background skill runs — no Claude window, just \(HandoffConfig.load().cliCommand) -p in the background. Pick text (selection/clipboard) or screenshot, the target skill, and a prompt template using {skillInvocation} {skill} {source} {timestamp} {content} {file}.")
-                    .font(.caption).foregroundColor(.secondary)
-
-                if model.customHandoffs.isEmpty {
-                    Text("No custom handoffs yet — click Add to create one.")
-                        .font(.caption).foregroundColor(.secondary).padding(.vertical, 4)
-                } else {
-                    VStack(spacing: 8) {
-                        ForEach(model.customHandoffs) { h in
-                            CustomHandoffRow(handoff: h, model: model)
-                        }
-                    }
-                }
             }
             .padding(24)
         }
         .sheet(isPresented: $showingAddCustom) {
             CustomActionSheet(isPresented: $showingAddCustom, model: model)
-        }
-        .sheet(isPresented: $showingAddHandoff) {
-            CustomHandoffSheet(isPresented: $showingAddHandoff, model: model)
         }
     }
 }
@@ -702,12 +642,17 @@ struct CustomActionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: ca.isShot ? "camera.viewfinder" : "text.cursor")
+            Image(systemName: ca.isHandoff ? "paperplane.circle" : (ca.isShot ? "camera.viewfinder" : "text.cursor"))
                 .foregroundColor(appPurple).frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(ca.name).font(.callout)
-                    if !ca.includeSource {
+                    if ca.isHandoff {
+                        Text(ca.skill.isEmpty ? "handoff" : "/\(ca.skill)")
+                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+                    }
+                    if !ca.includeSource && !ca.isHandoff {
                         Text("no src").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
                             .background(Color.secondary.opacity(0.12)).cornerRadius(4)
                     }
@@ -770,6 +715,8 @@ struct CustomActionSheet: View {
     @State private var isAutoSubmit: Bool = false
     @State private var sessionMode: String = "new"
     @State private var includeSource: Bool = true
+    @State private var isHandoff: Bool = false
+    @State private var skill: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -779,169 +726,34 @@ struct CustomActionSheet: View {
                 .textFieldStyle(.roundedBorder)
 
             Toggle("Screenshot mode", isOn: $isShot)
-                .help("Takes a screenshot and attaches it to the prompt")
+                .help("Takes a screenshot and attaches it to the prompt (or, for a handoff, saves it to a file the prompt can reference)")
 
-            Picker("Session", selection: $sessionMode) {
-                Text("New session").tag("new")
-                Text("Add to existing chat").tag("add")
+            Toggle("Run as background handoff", isOn: $isHandoff)
+                .help("No Claude window — pipes the rendered prompt to `claude -p` in the background, addressed to a skill. See it in Handoff History.")
+
+            if isHandoff {
+                TextField("Skill name (e.g. triage-capture — empty = no skill line)", text: $skill)
+                    .textFieldStyle(.roundedBorder)
+            } else {
+                Picker("Session", selection: $sessionMode) {
+                    Text("New session").tag("new")
+                    Text("Add to existing chat").tag("add")
+                }
+                .pickerStyle(.segmented)
+                .help("New session opens a fresh Claude Code window. Add pastes into the currently open chat.")
+
+                Toggle("Include source app", isOn: $includeSource)
+                    .help("Prepend \"from: AppName — URL\" (plus a matching Context rule, e.g. \"use the Slack MCP…\") before the prompt")
+
+                Toggle("Auto-submit", isOn: $isAutoSubmit)
+                    .help("Press Return automatically after pasting the prompt into Claude")
             }
-            .pickerStyle(.segmented)
-            .help("New session opens a fresh Claude Code window. Add pastes into the currently open chat.")
-
-            Toggle("Include source app", isOn: $includeSource)
-                .help("Prepend \"from: AppName — URL\" (plus a matching Context rule, e.g. \"use the Slack MCP…\") before the prompt")
-
-            Toggle("Auto-submit", isOn: $isAutoSubmit)
-                .help("Press Return automatically after pasting the prompt into Claude")
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Prompt template").font(.caption).bold()
-                Text(isShot
-                     ? "Sent to Claude with the screenshot attached, source context first (if enabled above)."
-                     : "Final message Claude sees, top to bottom: 1) source context + context hint (if enabled above) 2) this template, with {selection} replaced by the selected text 3) if you didn't use {selection}, the selected text is appended after, on its own line.")
+                Text(promptHelpText)
                     .font(.caption).foregroundColor(.secondary)
                 TextEditor(text: $prompt)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(minHeight: 90)
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
-            }
-
-            HStack {
-                Button("Cancel") { isPresented = false }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button(editing == nil ? "Add" : "Save") {
-                    let trimName = name.trimmingCharacters(in: .whitespaces)
-                    guard !trimName.isEmpty else { return }
-                    if let existing = editing {
-                        var updated = existing
-                        updated.name = trimName; updated.prompt = prompt
-                        updated.isShot = isShot; updated.isAutoSubmit = isAutoSubmit
-                        updated.sessionMode = sessionMode; updated.includeSource = includeSource
-                        model.updateCustomAction(updated)
-                    } else {
-                        var ca = CustomAction.makeNew(name: trimName, prompt: prompt, isShot: isShot)
-                        ca.isAutoSubmit = isAutoSubmit
-                        ca.sessionMode = sessionMode; ca.includeSource = includeSource
-                        model.addCustomAction(ca)
-                    }
-                    isPresented = false
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .padding(24)
-        .frame(minWidth: 420, minHeight: 320)
-        .onAppear {
-            if let e = editing {
-                name = e.name; prompt = e.prompt
-                isShot = e.isShot; isAutoSubmit = e.isAutoSubmit
-                sessionMode = e.sessionMode; includeSource = e.includeSource
-            }
-        }
-    }
-}
-
-struct CustomHandoffRow: View {
-    let handoff: CustomHandoff
-    @ObservedObject var model: SettingsModel
-    @State private var showingEdit = false
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: handoff.kind == "screenshot" ? "camera.viewfinder" : "paperplane.circle")
-                .foregroundColor(appPurple).frame(width: 20)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(handoff.name).font(.callout)
-                    if !handoff.skill.isEmpty {
-                        Text("/\(handoff.skill)").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
-                    }
-                }
-                Text(handoff.kind == "screenshot" ? "Screenshot → background handoff" : "Text → background handoff")
-                    .font(.caption).foregroundColor(.secondary)
-            }
-            Spacer()
-            CustomHandoffKeyBindingField(handoff: handoff, model: model)
-            Button(action: { showingEdit = true }) {
-                Image(systemName: "pencil").foregroundColor(.secondary)
-            }
-            .buttonStyle(.plain)
-            Button(action: { model.deleteCustomHandoff(id: handoff.id) }) {
-                Image(systemName: "trash").foregroundColor(.red)
-            }
-            .buttonStyle(.plain)
-        }
-        .settingsCard()
-        .sheet(isPresented: $showingEdit) {
-            CustomHandoffSheet(isPresented: $showingEdit, model: model, editing: handoff)
-        }
-    }
-}
-
-struct CustomHandoffKeyBindingField: View {
-    let handoff: CustomHandoff
-    @ObservedObject var model: SettingsModel
-    private var isRecording: Bool { model.recordingAction == handoff.id }
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 7)
-                .fill(isRecording ? appPurple.opacity(0.12) : Color(nsColor: .controlBackgroundColor))
-                .overlay(RoundedRectangle(cornerRadius: 7)
-                    .stroke(isRecording ? appPurple : Color.gray.opacity(0.35), lineWidth: 1))
-            Text(isRecording ? "Press keys…" : (handoff.keycode == 0 ? "—" : handoff.human))
-                .font(.system(.body, design: .rounded).bold())
-                .foregroundColor(isRecording ? appPurple : (handoff.keycode == 0 ? .secondary : .primary))
-                .lineLimit(1).padding(.horizontal, 10)
-        }
-        .frame(width: 120, height: 30)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if isRecording { model.cancelRecording() } else { model.startRecording(handoff.id) }
-        }
-        .help(isRecording ? "Press a key combo · Delete to clear · Esc to cancel" : "Click to set shortcut")
-    }
-}
-
-struct CustomHandoffSheet: View {
-    @Binding var isPresented: Bool
-    @ObservedObject var model: SettingsModel
-    var editing: CustomHandoff? = nil
-
-    @State private var name: String = ""
-    @State private var kind: String = "text"
-    @State private var skill: String = ""
-    @State private var promptTemplate: String = HandoffConfig.defaultTextTemplate
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(editing == nil ? "New Custom Handoff" : "Edit Custom Handoff").font(.headline)
-
-            TextField("Name (e.g. Triage ticket)", text: $name)
-                .textFieldStyle(.roundedBorder)
-
-            Picker("Type", selection: $kind) {
-                Text("Text (selection / clipboard)").tag("text")
-                Text("Screenshot (clipboard image)").tag("screenshot")
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: kind) { _, new in
-                if promptTemplate.isEmpty || promptTemplate == HandoffConfig.defaultTextTemplate || promptTemplate == HandoffConfig.defaultImageTemplate {
-                    promptTemplate = new == "screenshot" ? HandoffConfig.defaultImageTemplate : HandoffConfig.defaultTextTemplate
-                }
-            }
-
-            TextField("Skill name (e.g. triage-capture — empty = no skill line)", text: $skill)
-                .textFieldStyle(.roundedBorder)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Prompt template").font(.caption).bold()
-                Text("Runs \(HandoffConfig.load().cliCommand) -p in the background — no Claude window. Placeholders: {skillInvocation} {skill} {source} {timestamp} {content} (text) {file} (screenshot).")
-                    .font(.caption).foregroundColor(.secondary)
-                TextEditor(text: $promptTemplate)
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 90)
                     .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
@@ -957,12 +769,17 @@ struct CustomHandoffSheet: View {
                     guard !trimName.isEmpty else { return }
                     if let existing = editing {
                         var updated = existing
-                        updated.name = trimName; updated.kind = kind
-                        updated.skill = trimSkill; updated.promptTemplate = promptTemplate
-                        model.updateCustomHandoff(updated)
+                        updated.name = trimName; updated.prompt = prompt
+                        updated.isShot = isShot; updated.isAutoSubmit = isAutoSubmit
+                        updated.sessionMode = sessionMode; updated.includeSource = includeSource
+                        updated.isHandoff = isHandoff; updated.skill = trimSkill
+                        model.updateCustomAction(updated)
                     } else {
-                        let h = CustomHandoff.makeNew(name: trimName, kind: kind, skill: trimSkill, promptTemplate: promptTemplate)
-                        model.addCustomHandoff(h)
+                        var ca = CustomAction.makeNew(name: trimName, prompt: prompt, isShot: isShot,
+                                                       isHandoff: isHandoff, skill: trimSkill)
+                        ca.isAutoSubmit = isAutoSubmit
+                        ca.sessionMode = sessionMode; ca.includeSource = includeSource
+                        model.addCustomAction(ca)
                     }
                     isPresented = false
                 }
@@ -971,13 +788,26 @@ struct CustomHandoffSheet: View {
             }
         }
         .padding(24)
-        .frame(minWidth: 460, minHeight: 360)
+        .frame(minWidth: 420, minHeight: 360)
         .onAppear {
             if let e = editing {
-                name = e.name; kind = e.kind
-                skill = e.skill; promptTemplate = e.promptTemplate
+                name = e.name; prompt = e.prompt
+                isShot = e.isShot; isAutoSubmit = e.isAutoSubmit
+                sessionMode = e.sessionMode; includeSource = e.includeSource
+                isHandoff = e.isHandoff; skill = e.skill
             }
         }
+    }
+
+    private var promptHelpText: String {
+        if isHandoff {
+            return isShot
+                ? "Runs in the background, no Claude window. {file} is replaced with the saved screenshot's path — otherwise its path is appended below the prompt."
+                : "Runs in the background, no Claude window. {selection} is replaced with the captured text — otherwise it's appended below the prompt."
+        }
+        return isShot
+            ? "Sent to Claude with the screenshot attached, source context first (if enabled above)."
+            : "Final message Claude sees, top to bottom: 1) source context + context hint (if enabled above) 2) this template, with {selection} replaced by the selected text 3) if you didn't use {selection}, the selected text is appended after, on its own line."
     }
 }
 
@@ -1687,7 +1517,7 @@ struct HandoffsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    Text("Handoffs").font(.title2).bold()
+                    Text("Handoff History").font(.title2).bold()
                     Spacer()
                     Button("Reveal in Finder") {
                         NSWorkspace.shared.open(URL(fileURLWithPath: HANDOFF_BASE))
