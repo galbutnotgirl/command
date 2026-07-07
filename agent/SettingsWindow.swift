@@ -277,8 +277,8 @@ struct SettingsRootView: View {
             tabButton(.setup, "Set Up", "checklist")
             tabButton(.shortcuts, "Shortcuts", "keyboard")
             tabButton(.templates, "Templates", "doc.text.below.ecg")
-            tabButton(.history, "Clipboard History", "clock.arrow.circlepath")
             tabButton(.handoffs, "Handoffs", "paperplane.circle")
+            tabButton(.history, "Clipboard History", "clock.arrow.circlepath")
 
             Divider().padding(.vertical, 4)
 

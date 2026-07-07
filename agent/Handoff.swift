@@ -172,9 +172,8 @@ func markHandoffSubmissionFailed(_ s: HandoffSubmission, reason: String = "Marke
 }
 
 // ---- retention (mirrors the clipboard-history retentionDays model) ----------
-// Own key in command-config.json — Handoffs accumulate skill-run history, not
-// sensitive clipboard content, so a longer default than clipboard's 7 days.
-let DEFAULT_HANDOFF_RETENTION_DAYS = 30
+// Own key in command-config.json — same default as clipboard history's 7 days.
+let DEFAULT_HANDOFF_RETENTION_DAYS = 7
 
 func readHandoffRetentionDays() -> Int {
     if let v = readCommandConfig()["handoffRetentionDays"] as? Int, v >= 1 { return v }
