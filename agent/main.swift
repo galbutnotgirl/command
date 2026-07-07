@@ -1564,6 +1564,7 @@ stopClipwatch()   // kill any stale clipwatch from prior install before launchin
 startClipwatch()
 startServer()
 DispatchQueue.global(qos: .utility).async { pruneHandoffSubmissions() }
+scheduleAutoUpdateCheck()
 
 menuBar.install()                 // greyscale menu-bar icon + Set Up / Shortcuts / Help window
 Task { @MainActor in await recorder.initModels() }  // warm Parakeet from cache if available

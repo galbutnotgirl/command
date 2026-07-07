@@ -132,6 +132,38 @@ func versionGreater(_ a: String, _ b: String) -> Bool {
     return false
 }
 
+// ── Daily background check ──────────────────────────────────────────────────
+// Silent unless an update is actually available — then a system notification
+// points at Settings → About, same place the manual "Check for Updates"
+// button surfaces it. Doesn't auto-install: the user still clicks through.
+private let AUTO_UPDATE_CHECK_INTERVAL: TimeInterval = 86400
+private let AUTO_UPDATE_LAST_CHECK_KEY = "lastAutoUpdateCheckAt"
+private var _autoUpdateTimer: Timer?
+
+func scheduleAutoUpdateCheck() {
+    let last = UserDefaults.standard.double(forKey: AUTO_UPDATE_LAST_CHECK_KEY)
+    let elapsed = Date().timeIntervalSince1970 - last
+    // Never checked, or overdue: check soon after launch. Otherwise wait out
+    // the rest of today's window so a relaunch doesn't reset the clock.
+    let initialDelay = elapsed >= AUTO_UPDATE_CHECK_INTERVAL ? 20.0 : (AUTO_UPDATE_CHECK_INTERVAL - elapsed)
+    DispatchQueue.main.asyncAfter(deadline: .now() + initialDelay) {
+        runAutoUpdateCheck()
+        _autoUpdateTimer?.invalidate()
+        _autoUpdateTimer = Timer.scheduledTimer(withTimeInterval: AUTO_UPDATE_CHECK_INTERVAL, repeats: true) { _ in
+            runAutoUpdateCheck()
+        }
+    }
+}
+
+private func runAutoUpdateCheck() {
+    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: AUTO_UPDATE_LAST_CHECK_KEY)
+    Updater.shared.check { result in
+        if case .available(let info) = result {
+            notify("Update available", "ClaudeCommand v\(info.latestVersion) is ready — Settings → About to install.")
+        }
+    }
+}
+
 final class Updater {
     static let shared = Updater()
     private(set) var busy = false
