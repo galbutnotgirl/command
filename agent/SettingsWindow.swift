@@ -102,13 +102,16 @@ final class SettingsModel: ObservableObject {
     }
 
     // Called from the global key monitor. Returns true if it consumed the event.
+    // `recordingAction` holds a plain action string for fixed bindings, or a
+    // trigger's own id for a custom action's trigger (an action's triggers
+    // don't have one shared key to record against — each one does).
     func handleRecording(_ ev: NSEvent) -> Bool {
         guard let action = recordingAction else { return false }
         if ev.keyCode == 53 { cancelRecording(); return true }              // esc cancels
-        let isCustom = customActions.contains { $0.id == action }
+        let isCustomTrigger = customActions.contains { $0.triggers.contains { $0.id == action } }
         if ev.keyCode == 51 || ev.keyCode == 117 {                         // delete / fwd-delete = clear
             recordingAction = nil
-            if isCustom { clearCustomBinding(id: action) } else { clearBinding(action) }
+            if isCustomTrigger { clearTriggerBinding(triggerID: action) } else { clearBinding(action) }
             reregisterHotkeys()
             return true
         }
@@ -116,8 +119,8 @@ final class SettingsModel: ObservableObject {
         guard KEYCODE_NAMES[key] != nil else { return true }                // ignore keys we can't name
         let carbonM = carbonMods(from: ev.modifierFlags)
         recordingAction = nil
-        if isCustom {
-            setCustomBinding(id: action, keycode: key, mods: carbonM)
+        if isCustomTrigger {
+            setTriggerBinding(triggerID: action, keycode: key, mods: carbonM)
         } else {
             setBinding(action: action, keycode: key, mods: carbonM)
         }
@@ -136,16 +139,47 @@ final class SettingsModel: ObservableObject {
         saveCustomActions(customActions)
     }
     func updateCustomAction(_ ca: CustomAction) {
-        if let i = customActions.firstIndex(where: { $0.id == ca.id }) { customActions[i] = ca }
-        saveCustomActions(customActions)
-    }
-    func setCustomBinding(id: String, keycode: UInt32, mods: UInt32) {
-        if let i = customActions.firstIndex(where: { $0.id == id }) {
-            customActions[i].keycode = keycode; customActions[i].mods = mods
+        // Preserve the existing triggers — the edit sheet only touches the
+        // shared body (name/prompt/skill/delivery/defaults), not the trigger list.
+        if let i = customActions.firstIndex(where: { $0.id == ca.id }) {
+            var updated = ca
+            updated.triggers = customActions[i].triggers
+            customActions[i] = updated
         }
         saveCustomActions(customActions)
     }
-    func clearCustomBinding(id: String) { setCustomBinding(id: id, keycode: 0, mods: 0) }
+
+    // ---- trigger CRUD (one action, many ways to fire it) ----
+    func addTrigger(actionID: String, kind: ActionKind) {
+        guard let i = customActions.firstIndex(where: { $0.id == actionID }) else { return }
+        customActions[i].triggers.append(ActionTrigger(kind: kind))
+        saveCustomActions(customActions)
+    }
+    func removeTrigger(actionID: String, triggerID: String) {
+        guard let i = customActions.firstIndex(where: { $0.id == actionID }) else { return }
+        customActions[i].triggers.removeAll { $0.id == triggerID }
+        saveCustomActions(customActions)
+    }
+    func setTriggerBinding(triggerID: String, keycode: UInt32, mods: UInt32) {
+        for i in customActions.indices {
+            if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
+                customActions[i].triggers[j].keycode = keycode
+                customActions[i].triggers[j].mods = mods
+                break
+            }
+        }
+        saveCustomActions(customActions)
+    }
+    func clearTriggerBinding(triggerID: String) { setTriggerBinding(triggerID: triggerID, keycode: 0, mods: 0) }
+    func setTriggerKind(triggerID: String, kind: ActionKind) {
+        for i in customActions.indices {
+            if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
+                customActions[i].triggers[j].kind = kind
+                break
+            }
+        }
+        saveCustomActions(customActions)
+    }
 
     // Check whether keycode+mods collides with any other binding (different action/id).
     // Sets bindingConflict to a human-readable message, or nil if clear.
@@ -155,9 +189,11 @@ final class SettingsModel: ObservableObject {
             bindingConflict = "Conflicts with \"\(other.action)\" shortcut"
             return
         }
-        if let other = customActions.first(where: { $0.keycode == keycode && $0.mods == mods && $0.id != action }) {
-            bindingConflict = "Conflicts with custom action \"\(other.name)\""
-            return
+        for ca in customActions {
+            if let t = ca.triggers.first(where: { $0.keycode == keycode && $0.mods == mods && $0.id != action }) {
+                bindingConflict = "Conflicts with custom action \"\(ca.name)\" (\(t.kind.label))"
+                return
+            }
         }
         bindingConflict = nil
     }
@@ -620,57 +656,63 @@ struct ShortcutsView: View {
     }
 }
 
+// One shared prompt body (name/prompt/skill/delivery), any number of ways to
+// fire it. The header row is the body; each trigger gets its own sub-row
+// with its own kind + hotkey, so e.g. a popup binding and a voice binding of
+// the same action reuse one prompt instead of duplicating it.
 struct CustomActionRow: View {
     let ca: CustomAction
     @ObservedObject var model: SettingsModel
     @State private var showingEdit = false
 
-    private var kindIcon: String {
-        if ca.isHandoff { return "paperplane.circle" }
-        switch ca.kind {
-        case .text: return "text.cursor"
-        case .screenshot: return "camera.viewfinder"
-        case .popup: return "text.bubble"
-        case .voice: return "waveform"
-        }
-    }
-
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: kindIcon)
-                .foregroundColor(appPurple).frame(width: 20)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(ca.name).font(.callout)
-                    if ca.kind != .text {
-                        Text(ca.kind.label.components(separatedBy: " (").first ?? ca.kind.label)
-                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Image(systemName: ca.isHandoff ? "paperplane.circle" : "text.cursor")
+                    .foregroundColor(appPurple).frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(ca.name).font(.callout)
+                        if ca.isHandoff {
+                            Text(ca.skill.isEmpty ? "handoff" : "/\(ca.skill)")
+                                .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+                        }
+                        if !ca.includeSource && !ca.isHandoff {
+                            Text("no src").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+                        }
                     }
-                    if ca.isHandoff {
-                        Text(ca.skill.isEmpty ? "handoff" : "/\(ca.skill)")
-                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
-                    }
-                    if !ca.includeSource && !ca.isHandoff {
-                        Text("no src").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
-                    }
+                    let preview = String(ca.prompt.prefix(70))
+                    Text(preview + (ca.prompt.count > 70 ? "…" : ""))
+                        .font(.caption).foregroundColor(.secondary)
                 }
-                let preview = String(ca.prompt.prefix(70))
-                Text(preview + (ca.prompt.count > 70 ? "…" : ""))
-                    .font(.caption).foregroundColor(.secondary)
+                Spacer()
+                Button(action: { showingEdit = true }) {
+                    Image(systemName: "pencil").foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                Button(action: { model.deleteCustomAction(id: ca.id) }) {
+                    Image(systemName: "trash").foregroundColor(.red)
+                }
+                .buttonStyle(.plain)
             }
-            Spacer()
-            CustomKeyBindingField(ca: ca, model: model)
-            Button(action: { showingEdit = true }) {
-                Image(systemName: "pencil").foregroundColor(.secondary)
+
+            ForEach(ca.triggers) { trig in
+                TriggerRow(actionID: ca.id, trigger: trig, model: model, canRemove: ca.triggers.count > 1)
             }
-            .buttonStyle(.plain)
-            Button(action: { model.deleteCustomAction(id: ca.id) }) {
-                Image(systemName: "trash").foregroundColor(.red)
+
+            HStack {
+                Spacer()
+                Menu {
+                    ForEach(ActionKind.allCases, id: \.self) { k in
+                        Button(k.label) { model.addTrigger(actionID: ca.id, kind: k) }
+                    }
+                } label: {
+                    Label("Add Trigger", systemImage: "plus.circle").font(.caption)
+                }
+                .menuStyle(.borderlessButton).fixedSize()
             }
-            .buttonStyle(.plain)
         }
         .settingsCard()
         .sheet(isPresented: $showingEdit) {
@@ -679,10 +721,49 @@ struct CustomActionRow: View {
     }
 }
 
-struct CustomKeyBindingField: View {
-    let ca: CustomAction
+struct TriggerRow: View {
+    let actionID: String
+    let trigger: ActionTrigger
     @ObservedObject var model: SettingsModel
-    private var isRecording: Bool { model.recordingAction == ca.id }
+    let canRemove: Bool
+
+    private var kindIcon: String {
+        switch trigger.kind {
+        case .text: return "text.cursor"
+        case .screenshot: return "camera.viewfinder"
+        case .popup: return "text.bubble"
+        case .voice: return "waveform"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: kindIcon).foregroundColor(appPurple).frame(width: 16)
+            Picker("", selection: Binding(
+                get: { trigger.kind },
+                set: { model.setTriggerKind(triggerID: trigger.id, kind: $0) }
+            )) {
+                ForEach(ActionKind.allCases, id: \.self) { k in
+                    Text(k.label.components(separatedBy: " (").first ?? k.label).tag(k)
+                }
+            }
+            .labelsHidden().frame(width: 130)
+            Spacer()
+            TriggerKeyBindingField(trigger: trigger, model: model)
+            Button(action: { model.removeTrigger(actionID: actionID, triggerID: trigger.id) }) {
+                Image(systemName: "minus.circle").foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain).disabled(!canRemove)
+            .help(canRemove ? "Remove this trigger" : "An action needs at least one trigger")
+        }
+        .padding(.leading, 32)
+    }
+}
+
+struct TriggerKeyBindingField: View {
+    let trigger: ActionTrigger
+    @ObservedObject var model: SettingsModel
+    private var isRecording: Bool { model.recordingAction == trigger.id }
 
     var body: some View {
         ZStack {
@@ -690,20 +771,23 @@ struct CustomKeyBindingField: View {
                 .fill(isRecording ? appPurple.opacity(0.12) : Color(nsColor: .controlBackgroundColor))
                 .overlay(RoundedRectangle(cornerRadius: 7)
                     .stroke(isRecording ? appPurple : Color.gray.opacity(0.35), lineWidth: 1))
-            Text(isRecording ? "Press keys…" : (ca.keycode == 0 ? "—" : ca.human))
+            Text(isRecording ? "Press keys…" : trigger.human)
                 .font(.system(.body, design: .rounded).bold())
-                .foregroundColor(isRecording ? appPurple : (ca.keycode == 0 ? .secondary : .primary))
+                .foregroundColor(isRecording ? appPurple : (trigger.keycode == 0 ? .secondary : .primary))
                 .lineLimit(1).padding(.horizontal, 10)
         }
         .frame(width: 120, height: 30)
         .contentShape(Rectangle())
         .onTapGesture {
-            if isRecording { model.cancelRecording() } else { model.startRecording(ca.id) }
+            if isRecording { model.cancelRecording() } else { model.startRecording(trigger.id) }
         }
         .help(isRecording ? "Press a key combo · Delete to clear · Esc to cancel" : "Click to set shortcut")
     }
 }
 
+// The shared body only — name/prompt/skill/delivery/default overrides.
+// Trigger kind + hotkey editing lives inline in the row (TriggerRow above),
+// not here, since one action can have several triggers.
 struct CustomActionSheet: View {
     @Binding var isPresented: Bool
     @ObservedObject var model: SettingsModel
@@ -711,7 +795,6 @@ struct CustomActionSheet: View {
 
     @State private var name: String = ""
     @State private var prompt: String = ""
-    @State private var kind: ActionKind = .text
     @State private var isAutoSubmit: Bool = false
     @State private var sessionMode: String = "new"
     @State private var includeSource: Bool = true
@@ -725,17 +808,6 @@ struct CustomActionSheet: View {
             TextField("Name (e.g. Summarize)", text: $name)
                 .textFieldStyle(.roundedBorder)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Trigger").font(.caption).bold()
-                Picker("", selection: $kind) {
-                    ForEach(ActionKind.allCases, id: \.self) { k in
-                        Text(k.label.components(separatedBy: " (").first ?? k.label).tag(k)
-                    }
-                }
-                .pickerStyle(.segmented).labelsHidden()
-                Text(kindHelpText).font(.caption2).foregroundColor(.secondary)
-            }
-
             Toggle("Run as background handoff", isOn: $isHandoff)
                 .help("No Claude window — pipes the rendered prompt to `claude -p` in the background, addressed to a skill. See it in Handoff History.")
 
@@ -748,23 +820,28 @@ struct CustomActionSheet: View {
                     Text("Add to existing chat").tag("add")
                 }
                 .pickerStyle(.segmented)
-                .help("New session opens a fresh Claude Code window. Add pastes into the currently open chat.")
+                .help("New session opens a fresh Claude Code window. Add pastes into the currently open chat. Default for triggers that don't override it.")
 
                 Toggle("Include source app", isOn: $includeSource)
-                    .help("Prepend \"from: AppName — URL\" (plus a matching Context rule, e.g. \"use the Slack MCP…\") before the prompt")
+                    .help("Prepend \"from: AppName — URL\" before the prompt. Default for triggers that don't override it.")
 
                 Toggle("Auto-submit", isOn: $isAutoSubmit)
-                    .help("Press Return automatically after pasting the prompt into Claude")
+                    .help("Press Return automatically after pasting the prompt into Claude. Default for triggers that don't override it.")
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Prompt template").font(.caption).bold()
-                Text(promptHelpText)
+                Text("Shared across every trigger below. {selection} is replaced with the captured content (typed, spoken, screenshotted, or selected, depending on which trigger fired) — otherwise it's appended below the prompt. {file} for a screenshot trigger's saved image path, in handoff mode.")
                     .font(.caption).foregroundColor(.secondary)
                 TextEditor(text: $prompt)
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 90)
                     .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
+            }
+
+            if editing == nil {
+                Text("Add a trigger (text/screenshot/popup/voice) and its hotkey after creating — one action can have several.")
+                    .font(.caption2).foregroundColor(.secondary)
             }
 
             HStack {
@@ -778,12 +855,12 @@ struct CustomActionSheet: View {
                     if let existing = editing {
                         var updated = existing
                         updated.name = trimName; updated.prompt = prompt
-                        updated.kind = kind; updated.isAutoSubmit = isAutoSubmit
+                        updated.isAutoSubmit = isAutoSubmit
                         updated.sessionMode = sessionMode; updated.includeSource = includeSource
                         updated.isHandoff = isHandoff; updated.skill = trimSkill
                         model.updateCustomAction(updated)
                     } else {
-                        var ca = CustomAction.makeNew(name: trimName, prompt: prompt, kind: kind,
+                        var ca = CustomAction.makeNew(name: trimName, prompt: prompt, kind: .text,
                                                        isHandoff: isHandoff, skill: trimSkill)
                         ca.isAutoSubmit = isAutoSubmit
                         ca.sessionMode = sessionMode; ca.includeSource = includeSource
@@ -796,35 +873,15 @@ struct CustomActionSheet: View {
             }
         }
         .padding(24)
-        .frame(minWidth: 420, minHeight: 380)
+        .frame(minWidth: 460, minHeight: 340)
         .onAppear {
             if let e = editing {
                 name = e.name; prompt = e.prompt
-                kind = e.kind; isAutoSubmit = e.isAutoSubmit
+                isAutoSubmit = e.isAutoSubmit
                 sessionMode = e.sessionMode; includeSource = e.includeSource
                 isHandoff = e.isHandoff; skill = e.skill
             }
         }
-    }
-
-    private var kindHelpText: String {
-        switch kind {
-        case .text:       return "Captures the current selection, falling back to the clipboard."
-        case .screenshot: return "Takes a screenshot and attaches it to the prompt (or, for a handoff, saves it to a file the prompt can reference)."
-        case .popup:      return "Opens a small floating text box — type your input, ⌘⏎ runs it."
-        case .voice:      return "Hold the hotkey to talk (release to finish), or double-tap to lock hands-free — same as the built-in Dictate actions."
-        }
-    }
-
-    private var promptHelpText: String {
-        if isHandoff {
-            return kind == .screenshot
-                ? "Runs in the background, no Claude window. {file} is replaced with the saved screenshot's path — otherwise its path is appended below the prompt."
-                : "Runs in the background, no Claude window. {selection} is replaced with the captured text (typed, spoken, or selected, depending on the trigger above) — otherwise it's appended below the prompt."
-        }
-        return kind == .screenshot
-            ? "Sent to Claude with the screenshot attached, source context first (if enabled above)."
-            : "Final message Claude sees, top to bottom: 1) source context + context hint (if enabled above) 2) this template, with {selection} replaced by the captured text 3) if you didn't use {selection}, the captured text is appended after, on its own line."
     }
 }
 

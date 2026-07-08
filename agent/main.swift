@@ -1009,17 +1009,27 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
 
     let kind = GetEventKind(event)
 
+    // Looks up the (action, trigger) pair a "customtrigger:<actionID>:<triggerID>"
+    // string refers to — used on both press and release.
+    func resolveTrigger(_ action: String) -> (CustomAction, ActionTrigger)? {
+        guard let (aID, tID) = parseTriggerActionID(action) else { return nil }
+        guard let ca = loadCustomActions().first(where: { $0.id == aID }) else { return nil }
+        guard let trig = ca.triggers.first(where: { $0.id == tID }) else { return nil }
+        return (ca, trig)
+    }
+
     // kEventHotKeyReleased: clean PTT release via Carbon event (no polling needed).
     if kind == UInt32(kEventHotKeyReleased) {
         _carbonDictHeld.remove(hkID.id)
-        if let action = hotkeyActions[hkID.id],
-           action == "dictate" || action == "dictateadd"
-           || action.hasPrefix("customvoice:") || action.hasPrefix("customvoicehandoff:") {
-            Task { @MainActor in
-                if _dictTrigMode == .pushToTalk {
-                    _dictPTTimer?.invalidate(); _dictPTTimer = nil
-                    _dictTrigMode = .idle
-                    if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
+        if let action = hotkeyActions[hkID.id] {
+            let isVoice = action == "dictate" || action == "dictateadd" || resolveTrigger(action)?.1.kind == .voice
+            if isVoice {
+                Task { @MainActor in
+                    if _dictTrigMode == .pushToTalk {
+                        _dictPTTimer?.invalidate(); _dictPTTimer = nil
+                        _dictTrigMode = .idle
+                        if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
+                    }
                 }
             }
         }
@@ -1040,29 +1050,29 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             let kc = CGKeyCode(hotkeyKeycodes[hkID.id] ?? 0)
             let m: DictMode = action == "dictate" ? .insert : .claude
             Task { @MainActor in triggerDictation(mode: m, keycode: kc) }
-        } else if action.hasPrefix("customvoice:") || action.hasPrefix("customvoicehandoff:") {
-            // Same press/hold/double-tap trigger as the built-in Dictate actions,
-            // just feeding the transcript into this custom action instead of
-            // pasting/sending it directly (see DictationOverlay.dispatchCustomAction).
-            if _carbonDictHeld.contains(hkID.id) { return noErr }
-            _carbonDictHeld.insert(hkID.id)
-            let kc = CGKeyCode(hotkeyKeycodes[hkID.id] ?? 0)
-            guard let ca = loadCustomActions().first(where: { $0.actionID == action }) else { return noErr }
-            Task { @MainActor in triggerDictation(mode: .customAction(id: ca.id), keycode: kc) }
-        } else if action.hasPrefix("custom:") || action.hasPrefix("customhandoff:") {
-            guard let ca = loadCustomActions().first(where: { $0.actionID == action }) else { return noErr }
-            if ca.kind == .popup {
-                DispatchQueue.main.async { CustomActionTextEntryPanel.shared.show(for: ca) }
+        } else if let (ca, trig) = resolveTrigger(action) {
+            if trig.kind == .voice {
+                // Same press/hold/double-tap trigger as the built-in Dictate actions,
+                // just feeding the transcript into this custom action instead of
+                // pasting/sending it directly (see DictationOverlay.dispatchCustomAction).
+                if _carbonDictHeld.contains(hkID.id) { return noErr }
+                _carbonDictHeld.insert(hkID.id)
+                let kc = CGKeyCode(hotkeyKeycodes[hkID.id] ?? 0)
+                Task { @MainActor in triggerDictation(mode: .customAction(actionID: ca.id, triggerID: trig.id), keycode: kc) }
                 return noErr
             }
-            let sel = ca.kind == .screenshot ? "" : captureOrClipboard()
+            if trig.kind == .popup {
+                DispatchQueue.main.async { CustomActionTextEntryPanel.shared.show(for: ca, trigger: trig) }
+                return noErr
+            }
+            let sel = trig.kind == .screenshot ? "" : captureOrClipboard()
             if ca.isHandoff {
-                DispatchQueue.global().async { runCustomHandoff(ca, capturedText: sel) }
+                DispatchQueue.global().async { runCustomHandoff(ca, trigger: trig, capturedText: sel) }
             } else {
                 DispatchQueue.global().async {
-                    runWorker(ca.kind == .screenshot ? "customshot" : "custom", source: front, captured: sel,
-                              customPrompt: ca.prompt, customSubmit: ca.isAutoSubmit,
-                              customSession: ca.sessionMode, customIncludeSource: ca.includeSource)
+                    runWorker(trig.kind == .screenshot ? "customshot" : "custom", source: front, captured: sel,
+                              customPrompt: ca.prompt, customSubmit: ca.autoSubmit(for: trig),
+                              customSession: ca.effectiveSessionMode(for: trig), customIncludeSource: ca.shouldIncludeSource(for: trig))
                 }
             }
         } else {
@@ -1102,17 +1112,21 @@ func registerFromConfig() {
         RegisterEventHotKey(hk.keycode, hk.mods, id, GetApplicationEventTarget(), 0, &ref)
         hotkeyRefs.append(ref)
     }
-    // Custom action hotkeys (stored in custom-actions.json). IDs start at 100 to avoid
-    // collisions with the up-to-9 built-in slots above.
-    for (j, ca) in loadCustomActions().enumerated() {
-        guard ca.enabled, ca.keycode != 0 else { continue }
-        let hkID = UInt32(100 + j)
-        let id = EventHotKeyID(signature: sig, id: hkID)
-        hotkeyActions[hkID] = ca.actionID
-        hotkeyKeycodes[hkID] = ca.keycode
-        var ref: EventHotKeyRef?
-        RegisterEventHotKey(ca.keycode, ca.mods, id, GetApplicationEventTarget(), 0, &ref)
-        hotkeyRefs.append(ref)
+    // Custom action hotkeys (stored in custom-actions.json) — one registration
+    // per enabled trigger, not per action, since one action can have several.
+    // IDs start at 100 to avoid collisions with the up-to-9 built-in slots above.
+    var triggerSlot = 0
+    for ca in loadCustomActions() where ca.enabled {
+        for trig in ca.triggers where trig.enabled && trig.keycode != 0 {
+            let hkID = UInt32(100 + triggerSlot)
+            triggerSlot += 1
+            let id = EventHotKeyID(signature: sig, id: hkID)
+            hotkeyActions[hkID] = ca.actionID(for: trig)
+            hotkeyKeycodes[hkID] = trig.keycode
+            var ref: EventHotKeyRef?
+            RegisterEventHotKey(trig.keycode, trig.mods, id, GetApplicationEventTarget(), 0, &ref)
+            hotkeyRefs.append(ref)
+        }
     }
 }
 
@@ -1223,30 +1237,41 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
             let sel = hk.action.hasPrefix("shot") ? "" : captureSelectionSync()
             DispatchQueue.global().async { runWorker(hk.action, source: front, captured: sel) }
         }
-    } else if let ca = loadCustomActions().first(where: { $0.enabled && $0.keycode == carbon && $0.mods == mods }) {
-        if ca.kind == .screenshot {
+    } else if let (ca, trig) = triggerMatching(keycode: carbon, mods: mods) {
+        if trig.kind == .screenshot {
             let pg = runShell("/usr/bin/pgrep", ["-x", "screencapture"])
             if pg.code == 0 { _ = runShell("/usr/bin/pkill", ["-x", "screencapture"]); return }
         }
-        if ca.kind == .voice {
-            Task { @MainActor in triggerDictation(mode: .customAction(id: ca.id), keycode: CGKeyCode(carbon)) }
+        if trig.kind == .voice {
+            Task { @MainActor in triggerDictation(mode: .customAction(actionID: ca.id, triggerID: trig.id), keycode: CGKeyCode(carbon)) }
             return
         }
-        if ca.kind == .popup {
-            CustomActionTextEntryPanel.shared.show(for: ca)
+        if trig.kind == .popup {
+            CustomActionTextEntryPanel.shared.show(for: ca, trigger: trig)
             return
         }
-        let sel = ca.kind == .screenshot ? "" : captureOrClipboard()
+        let sel = trig.kind == .screenshot ? "" : captureOrClipboard()
         if ca.isHandoff {
-            DispatchQueue.global().async { runCustomHandoff(ca, capturedText: sel) }
+            DispatchQueue.global().async { runCustomHandoff(ca, trigger: trig, capturedText: sel) }
         } else {
             DispatchQueue.global().async {
-                runWorker(ca.kind == .screenshot ? "customshot" : "custom", source: front, captured: sel,
-                          customPrompt: ca.prompt, customSubmit: ca.isAutoSubmit,
-                          customSession: ca.sessionMode, customIncludeSource: ca.includeSource)
+                runWorker(trig.kind == .screenshot ? "customshot" : "custom", source: front, captured: sel,
+                          customPrompt: ca.prompt, customSubmit: ca.autoSubmit(for: trig),
+                          customSession: ca.effectiveSessionMode(for: trig), customIncludeSource: ca.shouldIncludeSource(for: trig))
             }
         }
     }
+}
+
+// Finds the (action, trigger) pair bound to a specific keycode/mods combo —
+// used by both the media-key path above and hotkey-conflict checks below.
+func triggerMatching(keycode: UInt32, mods: UInt32) -> (CustomAction, ActionTrigger)? {
+    for ca in loadCustomActions() where ca.enabled {
+        if let t = ca.triggers.first(where: { $0.enabled && $0.keycode == keycode && $0.mods == mods }) {
+            return (ca, t)
+        }
+    }
+    return nil
 }
 
 // Carbon keycodes that are also media keys — tap keyDown for these directly
@@ -1279,7 +1304,7 @@ func startMediaKeyHook() {
                 _nxHeld[keyCode] = true
                 guard let carbon = MEDIA_TO_CARBON[keyCode] else { return passthrough }
                 let bound = loadHotkeys().contains { $0.keycode == carbon && $0.mods == 0 }
-                    || loadCustomActions().contains { $0.enabled && $0.keycode == carbon && $0.mods == 0 }
+                    || triggerMatching(keycode: carbon, mods: 0) != nil
                 appendLog("[eventTap] NX bound=\(bound) carbon=\(carbon)")
                 guard bound else { return passthrough }
                 DispatchQueue.main.async { fireMediaAction(carbon) }
@@ -1322,7 +1347,7 @@ func startMediaKeyHook() {
                 if f.contains(.maskAlternate) { cm |= 2048 }
                 if f.contains(.maskControl)   { cm |= 4096 }
                 let bound = loadHotkeys().contains { $0.keycode == kc && $0.mods == cm }
-                    || loadCustomActions().contains { $0.enabled && $0.keycode == kc && $0.mods == cm }
+                    || triggerMatching(keycode: kc, mods: cm) != nil
                 appendLog("[eventTap] keyDown kc=\(kc) mods=\(cm) bound=\(bound)")
                 guard bound else { return passthrough }
                 DispatchQueue.main.async { fireMediaAction(kc, mods: cm) }

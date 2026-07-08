@@ -95,27 +95,28 @@ final class DictationOverlay: NSObject {
             usleep(300_000)
             postKey(kV, cmd: true)
 
-        case .customAction(let id):
-            dispatchCustomAction(id: id, text: text)
+        case .customAction(let actionID, let triggerID):
+            dispatchCustomAction(actionID: actionID, triggerID: triggerID, text: text)
         }
     }
 
-    // Voice-kind Custom Action: feed the transcript in as this action's
-    // captured content instead of pasting it — background handoff, or the
-    // same paste-into-Claude path a text/screenshot custom action uses.
-    private func dispatchCustomAction(id: String, text: String) {
-        guard let ca = loadCustomActions().first(where: { $0.id == id }), ca.enabled else {
+    // Voice-kind Custom Action trigger: feed the transcript in as this
+    // action's captured content instead of pasting it — background handoff,
+    // or the same paste-into-Claude path a text/screenshot trigger uses.
+    private func dispatchCustomAction(actionID: String, triggerID: String, text: String) {
+        guard let ca = loadCustomActions().first(where: { $0.id == actionID }), ca.enabled,
+              let trig = ca.triggers.first(where: { $0.id == triggerID }) else {
             notify("Dictation failed", "That custom action no longer exists.")
             return
         }
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         if ca.isHandoff {
-            DispatchQueue.global().async { runCustomHandoff(ca, capturedText: text) }
+            DispatchQueue.global().async { runCustomHandoff(ca, trigger: trig, capturedText: text) }
         } else {
             DispatchQueue.global().async {
                 runWorker("custom", source: front, captured: text,
-                          customPrompt: ca.prompt, customSubmit: ca.isAutoSubmit,
-                          customSession: ca.sessionMode, customIncludeSource: ca.includeSource)
+                          customPrompt: ca.prompt, customSubmit: ca.autoSubmit(for: trig),
+                          customSession: ca.effectiveSessionMode(for: trig), customIncludeSource: ca.shouldIncludeSource(for: trig))
             }
         }
     }

@@ -87,8 +87,11 @@ final class HandoffModelsTests: XCTestCase {
 
     // ---- renderCustomActionHandoffPrompt ---------------------------------------
 
-    private func makeAction(prompt: String, skill: String = "", kind: ActionKind = .text) -> CustomAction {
-        CustomAction.makeNew(name: "t", prompt: prompt, kind: kind, isHandoff: true, skill: skill)
+    // renderCustomActionHandoffPrompt only reads ca.prompt/ca.skill — the
+    // capture kind (text vs screenshot) is resolved by the caller (Handoff.swift's
+    // runCustomHandoff) before this function ever runs, so it's irrelevant here.
+    private func makeAction(prompt: String, skill: String = "") -> CustomAction {
+        CustomAction.makeNew(name: "t", prompt: prompt, kind: .text, isHandoff: true, skill: skill)
     }
 
     func testTextContentInlineViaSelectionToken() {
@@ -107,13 +110,13 @@ final class HandoffModelsTests: XCTestCase {
     }
 
     func testFileInlineViaFileToken() {
-        let ca = makeAction(prompt: "Read {file} and summarize", kind: .screenshot)
+        let ca = makeAction(prompt: "Read {file} and summarize")
         XCTAssertEqual(renderCustomActionHandoffPrompt(ca, content: nil, file: "/tmp/x.png"),
                         "Read /tmp/x.png and summarize")
     }
 
     func testFileAppendedWhenNoToken() {
-        let ca = makeAction(prompt: "Look at this screenshot", kind: .screenshot)
+        let ca = makeAction(prompt: "Look at this screenshot")
         let out = renderCustomActionHandoffPrompt(ca, content: nil, file: "/tmp/x.png")
         XCTAssertTrue(out.hasPrefix("Look at this screenshot"))
         XCTAssertTrue(out.contains("/tmp/x.png"))

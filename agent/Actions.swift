@@ -42,6 +42,19 @@ func saveBindings(_ bindings: [HotkeyBinding]) {
 let CUSTOM_ACTIONS_PATH = (NSHomeDirectory() as NSString)
     .appendingPathComponent(".claude/state/custom-actions.json")
 
+private func decodeTrigger(_ d: [String: Any]) -> ActionTrigger? {
+    guard let id = d["id"] as? String,
+          let rawKind = d["kind"] as? String, let kind = ActionKind(rawValue: rawKind) else { return nil }
+    return ActionTrigger(
+        id: id, kind: kind,
+        keycode: UInt32(d["keycode"] as? Int ?? 0), mods: UInt32(d["mods"] as? Int ?? 0),
+        enabled: d["enabled"] as? Bool ?? true,
+        isAutoSubmitOverride: d["isAutoSubmitOverride"] as? Bool,
+        sessionModeOverride: d["sessionModeOverride"] as? String,
+        includeSourceOverride: d["includeSourceOverride"] as? Bool
+    )
+}
+
 func loadCustomActions() -> [CustomAction] {
     guard let data = FileManager.default.contents(atPath: CUSTOM_ACTIONS_PATH),
           let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
@@ -49,36 +62,58 @@ func loadCustomActions() -> [CustomAction] {
         guard let id = d["id"] as? String,
               let name = d["name"] as? String,
               let prompt = d["prompt"] as? String else { return nil }
-        // "kind" is the current schema; "isShot" is a one-time read fallback
-        // for custom-actions.json files written before the kind enum existed.
-        let kind: ActionKind
-        if let raw = d["kind"] as? String, let k = ActionKind(rawValue: raw) {
-            kind = k
+
+        // "triggers" is the current schema. Two older shapes read as a
+        // one-time migration, both collapsing to a single trigger: "kind"
+        // (flat kind/keycode/mods, no multi-trigger support yet) and, before
+        // that, "isShot" (a plain screenshot/text bool, from before the kind
+        // enum existed at all).
+        let triggers: [ActionTrigger]
+        if let rawTriggers = d["triggers"] as? [[String: Any]], !rawTriggers.isEmpty {
+            triggers = rawTriggers.compactMap(decodeTrigger)
         } else {
-            kind = (d["isShot"] as? Bool ?? false) ? .screenshot : .text
+            let kind: ActionKind
+            if let raw = d["kind"] as? String, let k = ActionKind(rawValue: raw) {
+                kind = k
+            } else {
+                kind = (d["isShot"] as? Bool ?? false) ? .screenshot : .text
+            }
+            triggers = [ActionTrigger(kind: kind,
+                                       keycode: UInt32(d["keycode"] as? Int ?? 0),
+                                       mods: UInt32(d["mods"] as? Int ?? 0),
+                                       enabled: d["enabled"] as? Bool ?? true)]
         }
+        guard !triggers.isEmpty else { return nil }
+
         return CustomAction(
             id: id, name: name, prompt: prompt,
-            kind: kind,
             isAutoSubmit: d["isAutoSubmit"] as? Bool ?? false,
             sessionMode: d["sessionMode"] as? String ?? "new",
             includeSource: d["includeSource"] as? Bool ?? true,
-            keycode: UInt32(d["keycode"] as? Int ?? 0),
-            mods: UInt32(d["mods"] as? Int ?? 0),
             enabled: d["enabled"] as? Bool ?? true,
             isHandoff: d["isHandoff"] as? Bool ?? false,
-            skill: d["skill"] as? String ?? ""
+            skill: d["skill"] as? String ?? "",
+            triggers: triggers
         )
     }
 }
 
+private func encodeTrigger(_ t: ActionTrigger) -> [String: Any] {
+    var d: [String: Any] = ["id": t.id, "kind": t.kind.rawValue,
+                             "keycode": Int(t.keycode), "mods": Int(t.mods), "enabled": t.enabled]
+    if let v = t.isAutoSubmitOverride { d["isAutoSubmitOverride"] = v }
+    if let v = t.sessionModeOverride { d["sessionModeOverride"] = v }
+    if let v = t.includeSourceOverride { d["includeSourceOverride"] = v }
+    return d
+}
+
 func saveCustomActions(_ actions: [CustomAction]) {
     let arr = actions.map { ca -> [String: Any] in
-        ["id": ca.id, "name": ca.name, "prompt": ca.prompt, "kind": ca.kind.rawValue,
+        ["id": ca.id, "name": ca.name, "prompt": ca.prompt,
          "isAutoSubmit": ca.isAutoSubmit, "sessionMode": ca.sessionMode,
-         "includeSource": ca.includeSource, "keycode": Int(ca.keycode),
-         "mods": Int(ca.mods), "enabled": ca.enabled,
-         "isHandoff": ca.isHandoff, "skill": ca.skill]
+         "includeSource": ca.includeSource, "enabled": ca.enabled,
+         "isHandoff": ca.isHandoff, "skill": ca.skill,
+         "triggers": ca.triggers.map(encodeTrigger)]
     }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
         try? data.write(to: URL(fileURLWithPath: CUSTOM_ACTIONS_PATH))

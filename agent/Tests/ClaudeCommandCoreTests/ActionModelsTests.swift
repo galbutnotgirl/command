@@ -2,58 +2,70 @@ import XCTest
 @testable import ClaudeCommandCore
 
 final class ActionModelsTests: XCTestCase {
-    // ---- CustomAction.actionID ----------------------------------------------
-    // The hotkey dispatcher (main.swift) branches purely on this string prefix,
-    // so a wrong prefix here silently routes a custom action to the wrong path.
+    // ---- dual-ID trigger scheme -----------------------------------------------
+    // The hotkey dispatcher (main.swift) parses this string to find both the
+    // owning action and the exact trigger that fired — a wrong scheme here
+    // silently routes a hotkey to the wrong (or no) trigger.
 
-    func testPlainCustomActionID() {
+    func testActionIDEncodesBothActionAndTriggerID() {
         let ca = CustomAction.makeNew(name: "Summarize", prompt: "p", kind: .text)
-        XCTAssertEqual(ca.actionID, "custom:\(ca.id)")
+        let trig = ca.triggers[0]
+        XCTAssertEqual(ca.actionID(for: trig), "customtrigger:\(ca.id):\(trig.id)")
     }
 
-    func testScreenshotCustomActionIDSharesPlainPrefix() {
-        // Screenshot vs text is read from .kind at dispatch time, not encoded
-        // in the actionID — only voice (press/hold semantics) and handoff
-        // (delivery) change the prefix.
-        let ca = CustomAction.makeNew(name: "Screenshot it", prompt: "p", kind: .screenshot)
-        XCTAssertEqual(ca.actionID, "custom:\(ca.id)")
+    func testParseTriggerActionIDRoundTrips() {
+        let ca = CustomAction.makeNew(name: "Summarize", prompt: "p", kind: .screenshot)
+        let trig = ca.triggers[0]
+        let parsed = parseTriggerActionID(ca.actionID(for: trig))
+        XCTAssertEqual(parsed?.actionID, ca.id)
+        XCTAssertEqual(parsed?.triggerID, trig.id)
     }
 
-    func testPopupCustomActionIDSharesPlainPrefix() {
-        let ca = CustomAction.makeNew(name: "Popup it", prompt: "p", kind: .popup)
-        XCTAssertEqual(ca.actionID, "custom:\(ca.id)")
+    func testParseTriggerActionIDRejectsUnrelatedStrings() {
+        XCTAssertNil(parseTriggerActionID("custom:abc"))
+        XCTAssertNil(parseTriggerActionID("dictate"))
+        XCTAssertNil(parseTriggerActionID(""))
     }
 
-    func testTextHandoffActionID() {
-        let ca = CustomAction.makeNew(name: "Triage", prompt: "p", kind: .text, isHandoff: true, skill: "triage")
-        XCTAssertEqual(ca.actionID, "customhandoff:\(ca.id)")
-    }
-
-    func testScreenshotHandoffActionIDSharesHandoffPrefix() {
-        let ca = CustomAction.makeNew(name: "Triage shot", prompt: "p", kind: .screenshot, isHandoff: true, skill: "triage")
-        XCTAssertEqual(ca.actionID, "customhandoff:\(ca.id)")
-    }
-
-    func testVoiceCustomActionIDGetsItsOwnPrefix() {
-        // Voice needs the press/hold/double-tap trigger machinery, not a
-        // fire-on-press dispatch — hence a distinct prefix so main.swift's
-        // hotKeyHandler can route it to triggerDictation() instead.
-        let ca = CustomAction.makeNew(name: "Dictate task", prompt: "p", kind: .voice)
-        XCTAssertEqual(ca.actionID, "customvoice:\(ca.id)")
-    }
-
-    func testVoiceHandoffCustomActionIDCombinesBothPrefixes() {
-        let ca = CustomAction.makeNew(name: "Dictate task", prompt: "p", kind: .voice, isHandoff: true)
-        XCTAssertEqual(ca.actionID, "customvoicehandoff:\(ca.id)")
+    func testMakeNewSeedsExactlyOneTrigger() {
+        let ca = CustomAction.makeNew(name: "n", prompt: "p", kind: .voice)
+        XCTAssertEqual(ca.triggers.count, 1)
+        XCTAssertEqual(ca.triggers[0].kind, .voice)
     }
 
     func testDefaultsAreNonHandoffText() {
         let ca = CustomAction.makeNew(name: "n", prompt: "p", kind: .text)
         XCTAssertFalse(ca.isHandoff)
-        XCTAssertEqual(ca.kind, .text)
+        XCTAssertEqual(ca.triggers[0].kind, .text)
         XCTAssertEqual(ca.skill, "")
         XCTAssertTrue(ca.includeSource)
         XCTAssertEqual(ca.sessionMode, "new")
+    }
+
+    // ---- shared body, per-trigger overrides -----------------------------------
+
+    func testTriggerWithNoOverrideInheritsActionDefault() {
+        var ca = CustomAction.makeNew(name: "n", prompt: "p", kind: .text)
+        ca.isAutoSubmit = true
+        let trig = ca.triggers[0]
+        XCTAssertTrue(ca.autoSubmit(for: trig))
+    }
+
+    func testTriggerOverrideWinsOverActionDefault() {
+        var ca = CustomAction.makeNew(name: "n", prompt: "p", kind: .text)
+        ca.isAutoSubmit = true
+        var trig = ca.triggers[0]
+        trig.isAutoSubmitOverride = false
+        XCTAssertFalse(ca.autoSubmit(for: trig))
+    }
+
+    func testSessionModeAndIncludeSourceOverridesAreIndependent() {
+        var ca = CustomAction.makeNew(name: "n", prompt: "p", kind: .text)
+        ca.sessionMode = "new"; ca.includeSource = true
+        var trig = ca.triggers[0]
+        trig.sessionModeOverride = "add"
+        XCTAssertEqual(ca.effectiveSessionMode(for: trig), "add")
+        XCTAssertTrue(ca.shouldIncludeSource(for: trig))  // untouched — still inherits
     }
 
     // ---- CommandAction catalog lookups ---------------------------------------

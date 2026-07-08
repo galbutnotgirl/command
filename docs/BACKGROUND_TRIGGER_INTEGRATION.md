@@ -83,15 +83,20 @@ built exactly on that older path — it's gone, folded into `kind == .popup` (se
   and what the Retry button re-issues. Prints the submission record as JSON, waits for the
   CLI, exit code mirrors the run. Covered by `test/submit-cli.test.js` alongside the
   imported suite.
-- **`ClaudeCommandCore/ActionModels.swift`** — `CustomAction.kind: ActionKind` (`text |
-  screenshot | popup | voice`) plus `isHandoff`: any capture method × either delivery mode,
-  one model. `actionID` picks a `customvoice(handoff)?:` prefix for voice (needs the
-  press/hold trigger machinery, not fire-on-press) and `custom(handoff)?:` for everything
-  else — `kind` itself isn't in the ID; dispatch reads it off the loaded record.
+- **`ClaudeCommandCore/ActionModels.swift`** — `CustomAction` is a shared body (name/prompt/
+  skill/isHandoff/default settings) plus `triggers: [ActionTrigger]` — one prompt, any number
+  of ways to fire it (a popup binding and a voice binding of the same action reuse one
+  prompt instead of duplicating it). Each `ActionTrigger` has its own `kind`, hotkey, and
+  optional per-trigger overrides (auto-submit/session/include-source — nil inherits the
+  action's default). A fired hotkey's action string is
+  `customtrigger:<actionID>:<triggerID>` (`triggerActionID`/`parseTriggerActionID`) — one
+  lookup finds the action, then the exact trigger within it; dispatch branches on
+  `trigger.kind` (voice needs `triggerDictation`'s press/hold machinery instead of
+  fire-on-press, everything else fires immediately).
 - **`agent/Handoff.swift`** — `CustomActionTextEntryPanel` (popup trigger, replaces the old
-  fixed `HandoffTextEntryPanel`), `runCustomHandoff()` (renders + submits any handoff-kind
-  action), `submitHandoffPrompt()` (shared by that and Retry).
-- **`agent/DictationOverlay.swift`** — `dispatchCustomAction(id:text:)`: the third case
+  fixed `HandoffTextEntryPanel`), `runCustomHandoff(_:trigger:)` (renders + submits any
+  handoff-kind trigger), `submitHandoffPrompt()` (shared by that and Retry).
+- **`agent/DictationOverlay.swift`** — `dispatchCustomAction(actionID:triggerID:text:)`: the third case
   besides paste-at-cursor/paste-to-Claude for a finished transcript — feeds it into a
   voice-kind Custom Action instead.
 - **`build-agent.sh`** — bundles `capture-handoff.sh` + the vendor core (src/bin only) into
@@ -118,10 +123,12 @@ valid inputs to `submit-cli.js` for other callers.
 
 ## Using it
 
-Settings ▸ Shortcuts ▸ Custom Actions ▸ Add. Pick a **Trigger** (Text / Screenshot / Popup /
-Voice), turn on **Run as background handoff** if you want it to run silently instead of
-pasting into Claude, set a **Skill** if it addresses one, write the **prompt template**, and
-bind a hotkey. That's the whole surface — there's no separate config screen per trigger type.
+Settings ▸ Shortcuts ▸ Custom Actions ▸ Add. The sheet is the shared body: name, whether it's
+**Run as background handoff**, a **Skill** if it addresses one, and the **prompt template**.
+Save it, then in the row itself: **Add Trigger** — pick a kind (Text / Screenshot / Popup /
+Voice) and click its key field to bind a hotkey. Add as many triggers as you want; they all
+render the same prompt, just captured differently. Delete a trigger with the row's minus
+button (an action always needs at least one).
 
 The shared CLI config (command / working directory / extra args / notifications — applies to
 every handoff-kind action, not per-action) lives in Menu bar ▸ **Handoff History ▸ Handoff

@@ -7,7 +7,7 @@ import FluidAudio
 
 // ─── Mode ──────────────────────────────────────────────────────────────────────
 
-enum DictMode: Equatable { case insert, claude, customAction(id: String) }
+enum DictMode: Equatable { case insert, claude, customAction(actionID: String, triggerID: String) }
 
 // ─── Global recorder singleton ─────────────────────────────────────────────────
 // @MainActor: Recorder is @MainActor-isolated; annotation ensures init runs on main actor.

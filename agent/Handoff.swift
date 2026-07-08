@@ -248,10 +248,10 @@ private func writeClipboardImageFile() -> String? {
     do { try pngData.write(to: URL(fileURLWithPath: path)); return path } catch { return nil }
 }
 
-func runCustomHandoff(_ ca: CustomAction, capturedText: String = "") {
-    guard ca.enabled else { return }
+func runCustomHandoff(_ ca: CustomAction, trigger: ActionTrigger, capturedText: String = "") {
+    guard ca.enabled, trigger.enabled else { return }
     let skill = ca.skill.isEmpty ? nil : ca.skill
-    if ca.kind == .screenshot {
+    if trigger.kind == .screenshot {
         guard let file = writeClipboardImageFile() else {
             notify("Handoff failed", "No image on the clipboard.")
             return
@@ -262,12 +262,12 @@ func runCustomHandoff(_ ca: CustomAction, capturedText: String = "") {
         // popup/voice always arrive with definitive content (typed or spoken);
         // plain text falls back to the clipboard if nothing was captured.
         let text = !capturedText.isEmpty ? capturedText
-            : (ca.kind == .text ? (NSPasteboard.general.string(forType: .string) ?? "") : "")
+            : (trigger.kind == .text ? (NSPasteboard.general.string(forType: .string) ?? "") : "")
         guard !text.isEmpty else {
             notify("Handoff failed", "Nothing selected or on the clipboard.")
             return
         }
-        let source = ca.kind == .popup ? "popup" : (ca.kind == .voice ? "voice" : "selection")
+        let source = trigger.kind == .popup ? "popup" : (trigger.kind == .voice ? "voice" : "selection")
         let prompt = renderCustomActionHandoffPrompt(ca, content: text, file: nil)
         submitHandoffPrompt(prompt, source: source, kind: "text", skill: skill, failureTitle: "Handoff failed")
     }
@@ -370,9 +370,11 @@ final class CustomActionTextEntryPanel: NSObject, NSWindowDelegate {
     private var panel: NSPanel?
     private var textView: NSTextView?
     private var target: CustomAction?
+    private var targetTrigger: ActionTrigger?
 
-    func show(for action: CustomAction) {
+    func show(for action: CustomAction, trigger: ActionTrigger) {
         target = action
+        targetTrigger = trigger
         NSApp.activate(ignoringOtherApps: true)
         if let p = panel {
             p.title = action.name
@@ -423,17 +425,17 @@ final class CustomActionTextEntryPanel: NSObject, NSWindowDelegate {
     }
 
     @objc private func submit() {
-        guard let tv = textView, let ca = target else { return }
+        guard let tv = textView, let ca = target, let trig = targetTrigger else { return }
         let text = tv.string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { NSSound.beep(); return }
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         if ca.isHandoff {
-            DispatchQueue.global().async { runCustomHandoff(ca, capturedText: text) }
+            DispatchQueue.global().async { runCustomHandoff(ca, trigger: trig, capturedText: text) }
         } else {
             DispatchQueue.global().async {
                 runWorker("custom", source: front, captured: text,
-                          customPrompt: ca.prompt, customSubmit: ca.isAutoSubmit,
-                          customSession: ca.sessionMode, customIncludeSource: ca.includeSource)
+                          customPrompt: ca.prompt, customSubmit: ca.autoSubmit(for: trig),
+                          customSession: ca.effectiveSessionMode(for: trig), customIncludeSource: ca.shouldIncludeSource(for: trig))
             }
         }
         tv.string = ""
@@ -444,5 +446,6 @@ final class CustomActionTextEntryPanel: NSObject, NSWindowDelegate {
         panel = nil
         textView = nil
         target = nil
+        targetTrigger = nil
     }
 }
