@@ -130,8 +130,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         if action == "cliphistory" {
             DispatchQueue.main.async { picker.show(prev: front) }
-        } else if action == "handofftext" {
-            DispatchQueue.main.async { HandoffTextEntryPanel.shared.show() }
         } else {
             DispatchQueue.global().async { runWorker(action, source: front) }
         }
@@ -220,7 +218,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             }
         }
         sub.addItem(.separator())
-        add(sub, "Text Entry…", #selector(showHandoffEntry))
         add(sub, "Handoff Settings…", #selector(showHandoffSettings))
     }
 
@@ -229,7 +226,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
               FileManager.default.fileExists(atPath: path) else { NSSound.beep(); return }
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
-    @objc private func showHandoffEntry() { HandoffTextEntryPanel.shared.show() }
     @objc private func showHandoffSettings() { HandoffSettingsWindowController.shared.show() }
 
     @objc private func openSettings() { settingsWindow.show(tab: .shortcuts) }

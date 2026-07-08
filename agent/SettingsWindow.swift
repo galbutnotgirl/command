@@ -575,7 +575,7 @@ struct ShortcutsView: View {
                 }
 
                 VStack(spacing: 8) {
-                    ForEach(model.bindings.filter { !HANDOFF_ACTION_IDS.contains($0.action) }) { b in
+                    ForEach(model.bindings) { b in
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(b.name)
@@ -590,9 +590,6 @@ struct ShortcutsView: View {
                 }
 
                 // ---- Custom Actions ----
-                // Skill/Screenshot/Text Handoff are built-in, but functionally they're
-                // just prompt-triggering shortcuts like any custom action — grouped
-                // here rather than in the plain hotkey list above.
                 HStack {
                     Text("Custom Actions").font(.headline)
                     Spacer()
@@ -602,23 +599,10 @@ struct ShortcutsView: View {
                 }
                 .padding(.top, 8)
 
-                Text("Prompt templates that wrap selected text or a screenshot — paste into Claude, or run as a background handoff (no window, just \(HandoffConfig.load().cliCommand) -p addressed to a skill). Use {selection} (and {file} for screenshot handoffs) to place captured content inline — otherwise it's appended below the prompt.")
+                Text("Pick a trigger (text selection, screenshot, a typed popup, or voice) and either paste the rendered prompt into Claude or run it as a background handoff (no window, just \(HandoffConfig.load().cliCommand) -p addressed to a skill). Use {selection} (and {file} for screenshot handoffs) to place captured content inline — otherwise it's appended below the prompt.")
                     .font(.caption).foregroundColor(.secondary)
 
                 VStack(spacing: 8) {
-                    ForEach(model.bindings.filter { HANDOFF_ACTION_IDS.contains($0.action) }) { b in
-                        HStack(spacing: 12) {
-                            Image(systemName: "paperplane.circle").foregroundColor(appPurple).frame(width: 20)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(b.name)
-                                Text(b.detail).font(.caption).foregroundColor(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer()
-                            KeyBindingField(action: b.action, binding: b, model: model)
-                        }
-                        .settingsCard()
-                    }
                     ForEach(model.customActions) { ca in
                         CustomActionRow(ca: ca, model: model)
                     }
@@ -641,13 +625,28 @@ struct CustomActionRow: View {
     @ObservedObject var model: SettingsModel
     @State private var showingEdit = false
 
+    private var kindIcon: String {
+        if ca.isHandoff { return "paperplane.circle" }
+        switch ca.kind {
+        case .text: return "text.cursor"
+        case .screenshot: return "camera.viewfinder"
+        case .popup: return "text.bubble"
+        case .voice: return "waveform"
+        }
+    }
+
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: ca.isHandoff ? "paperplane.circle" : (ca.isShot ? "camera.viewfinder" : "text.cursor"))
+            Image(systemName: kindIcon)
                 .foregroundColor(appPurple).frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(ca.name).font(.callout)
+                    if ca.kind != .text {
+                        Text(ca.kind.label.components(separatedBy: " (").first ?? ca.kind.label)
+                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+                    }
                     if ca.isHandoff {
                         Text(ca.skill.isEmpty ? "handoff" : "/\(ca.skill)")
                             .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
@@ -712,7 +711,7 @@ struct CustomActionSheet: View {
 
     @State private var name: String = ""
     @State private var prompt: String = ""
-    @State private var isShot: Bool = false
+    @State private var kind: ActionKind = .text
     @State private var isAutoSubmit: Bool = false
     @State private var sessionMode: String = "new"
     @State private var includeSource: Bool = true
@@ -726,8 +725,16 @@ struct CustomActionSheet: View {
             TextField("Name (e.g. Summarize)", text: $name)
                 .textFieldStyle(.roundedBorder)
 
-            Toggle("Screenshot mode", isOn: $isShot)
-                .help("Takes a screenshot and attaches it to the prompt (or, for a handoff, saves it to a file the prompt can reference)")
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Trigger").font(.caption).bold()
+                Picker("", selection: $kind) {
+                    ForEach(ActionKind.allCases, id: \.self) { k in
+                        Text(k.label.components(separatedBy: " (").first ?? k.label).tag(k)
+                    }
+                }
+                .pickerStyle(.segmented).labelsHidden()
+                Text(kindHelpText).font(.caption2).foregroundColor(.secondary)
+            }
 
             Toggle("Run as background handoff", isOn: $isHandoff)
                 .help("No Claude window — pipes the rendered prompt to `claude -p` in the background, addressed to a skill. See it in Handoff History.")
@@ -771,12 +778,12 @@ struct CustomActionSheet: View {
                     if let existing = editing {
                         var updated = existing
                         updated.name = trimName; updated.prompt = prompt
-                        updated.isShot = isShot; updated.isAutoSubmit = isAutoSubmit
+                        updated.kind = kind; updated.isAutoSubmit = isAutoSubmit
                         updated.sessionMode = sessionMode; updated.includeSource = includeSource
                         updated.isHandoff = isHandoff; updated.skill = trimSkill
                         model.updateCustomAction(updated)
                     } else {
-                        var ca = CustomAction.makeNew(name: trimName, prompt: prompt, isShot: isShot,
+                        var ca = CustomAction.makeNew(name: trimName, prompt: prompt, kind: kind,
                                                        isHandoff: isHandoff, skill: trimSkill)
                         ca.isAutoSubmit = isAutoSubmit
                         ca.sessionMode = sessionMode; ca.includeSource = includeSource
@@ -789,26 +796,35 @@ struct CustomActionSheet: View {
             }
         }
         .padding(24)
-        .frame(minWidth: 420, minHeight: 360)
+        .frame(minWidth: 420, minHeight: 380)
         .onAppear {
             if let e = editing {
                 name = e.name; prompt = e.prompt
-                isShot = e.isShot; isAutoSubmit = e.isAutoSubmit
+                kind = e.kind; isAutoSubmit = e.isAutoSubmit
                 sessionMode = e.sessionMode; includeSource = e.includeSource
                 isHandoff = e.isHandoff; skill = e.skill
             }
         }
     }
 
+    private var kindHelpText: String {
+        switch kind {
+        case .text:       return "Captures the current selection, falling back to the clipboard."
+        case .screenshot: return "Takes a screenshot and attaches it to the prompt (or, for a handoff, saves it to a file the prompt can reference)."
+        case .popup:      return "Opens a small floating text box — type your input, ⌘⏎ runs it."
+        case .voice:      return "Hold the hotkey to talk (release to finish), or double-tap to lock hands-free — same as the built-in Dictate actions."
+        }
+    }
+
     private var promptHelpText: String {
         if isHandoff {
-            return isShot
+            return kind == .screenshot
                 ? "Runs in the background, no Claude window. {file} is replaced with the saved screenshot's path — otherwise its path is appended below the prompt."
-                : "Runs in the background, no Claude window. {selection} is replaced with the captured text — otherwise it's appended below the prompt."
+                : "Runs in the background, no Claude window. {selection} is replaced with the captured text (typed, spoken, or selected, depending on the trigger above) — otherwise it's appended below the prompt."
         }
-        return isShot
+        return kind == .screenshot
             ? "Sent to Claude with the screenshot attached, source context first (if enabled above)."
-            : "Final message Claude sees, top to bottom: 1) source context + context hint (if enabled above) 2) this template, with {selection} replaced by the selected text 3) if you didn't use {selection}, the selected text is appended after, on its own line."
+            : "Final message Claude sees, top to bottom: 1) source context + context hint (if enabled above) 2) this template, with {selection} replaced by the captured text 3) if you didn't use {selection}, the captured text is appended after, on its own line."
     }
 }
 

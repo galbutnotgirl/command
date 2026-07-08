@@ -49,9 +49,17 @@ func loadCustomActions() -> [CustomAction] {
         guard let id = d["id"] as? String,
               let name = d["name"] as? String,
               let prompt = d["prompt"] as? String else { return nil }
+        // "kind" is the current schema; "isShot" is a one-time read fallback
+        // for custom-actions.json files written before the kind enum existed.
+        let kind: ActionKind
+        if let raw = d["kind"] as? String, let k = ActionKind(rawValue: raw) {
+            kind = k
+        } else {
+            kind = (d["isShot"] as? Bool ?? false) ? .screenshot : .text
+        }
         return CustomAction(
             id: id, name: name, prompt: prompt,
-            isShot: d["isShot"] as? Bool ?? false,
+            kind: kind,
             isAutoSubmit: d["isAutoSubmit"] as? Bool ?? false,
             sessionMode: d["sessionMode"] as? String ?? "new",
             includeSource: d["includeSource"] as? Bool ?? true,
@@ -66,7 +74,7 @@ func loadCustomActions() -> [CustomAction] {
 
 func saveCustomActions(_ actions: [CustomAction]) {
     let arr = actions.map { ca -> [String: Any] in
-        ["id": ca.id, "name": ca.name, "prompt": ca.prompt, "isShot": ca.isShot,
+        ["id": ca.id, "name": ca.name, "prompt": ca.prompt, "kind": ca.kind.rawValue,
          "isAutoSubmit": ca.isAutoSubmit, "sessionMode": ca.sessionMode,
          "includeSource": ca.includeSource, "keycode": Int(ca.keycode),
          "mods": Int(ca.mods), "enabled": ca.enabled,

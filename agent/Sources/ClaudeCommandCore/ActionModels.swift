@@ -24,14 +24,9 @@ public let COMMAND_ACTIONS: [CommandAction] = [
     CommandAction(id: "shotcomment", name: "Screenshot New",     detail: "Capture → new session; you add a note."),
     CommandAction(id: "shotgo",      name: "Screenshot Go",      detail: "Capture → new session, auto-submit."),
     CommandAction(id: "cliphistory", name: "Clipboard History",  detail: "Floating picker of recent clips."),
-    CommandAction(id: "handofftext", name: "Text Handoff",       detail: "Quick entry window → background claude -p run of your configured skill."),
     CommandAction(id: "dictate",     name: "Dictate → Insert",   detail: "Speak → on-device Parakeet transcription → paste at cursor."),
     CommandAction(id: "dictateadd",  name: "Dictate → Claude",   detail: "Speak → on-device Parakeet transcription → send to Claude."),
 ]
-
-// Built-in but prompt-triggering like a user custom action — grouped with
-// Custom Actions in the Shortcuts tab instead of the plain hotkey list.
-public let HANDOFF_ACTION_IDS: Set<String> = ["handofftext"]
 
 public func actionName(_ id: String) -> String { COMMAND_ACTIONS.first { $0.id == id }?.name ?? id }
 public func actionDetail(_ id: String) -> String { COMMAND_ACTIONS.first { $0.id == id }?.detail ?? "" }
@@ -65,22 +60,40 @@ public let DEFAULT_BINDINGS: [(action: String, keycode: UInt32, mods: UInt32)] =
     ("shotcomment", 98,   2048),   // ⌥F7 — screenshot → new session
     ("shotgo",      0,    0),      // unbound
     ("cliphistory", 97,   0),      // F6  — clipboard history picker
-    ("handofftext", 0,    0),      // unbound — text-entry skill handoff
     ("dictate",     96,   0),      // F5  — dictate → insert at cursor
     ("dictateadd",  96,   2048),   // ⌥F5 — dictate → send to Claude
 ]
 
 // ---- custom actions ---------------------------------------------------------
-// User-defined prompt templates. Text mode wraps selected text; shot mode
-// captures a screenshot. isHandoff routes through claude -p in the background
-// (no Claude window) instead of pasting into the app. Stored in
-// ~/.claude/state/custom-actions.json (I/O lives in Actions.swift).
+// User-defined prompt templates, each with its own capture trigger (kind) and
+// delivery mode (paste into Claude, or isHandoff for a background claude -p
+// run with no window). Stored in ~/.claude/state/custom-actions.json (I/O
+// lives in Actions.swift).
 
-public struct CustomAction: Identifiable {
+// How the action's content gets captured before the prompt is rendered:
+//   text       — current selection, falling back to the clipboard
+//   screenshot — a screencapture region, attached to the prompt (paste mode)
+//                or saved to a file the prompt can reference via {file} (handoff mode)
+//   popup      — a small floating text box; you type, ⌘⏎ runs it
+//   voice      — press-and-hold (or double-tap to lock) to dictate, same
+//                trigger model as the built-in Dictate actions
+public enum ActionKind: String, CaseIterable, Codable, Sendable {
+    case text, screenshot, popup, voice
+    public var label: String {
+        switch self {
+        case .text:       return "Text (selection/clipboard)"
+        case .screenshot: return "Screenshot"
+        case .popup:      return "Popup (type it)"
+        case .voice:      return "Voice (dictate)"
+        }
+    }
+}
+
+public struct CustomAction: Identifiable, Sendable {
     public var id: String          // UUID string — stable key for hotkey registration
     public var name: String
-    public var prompt: String      // template; {selection} = selected text; auto-appended if omitted
-    public var isShot: Bool        // true = screenshot mode
+    public var prompt: String      // template; {selection} = captured content; auto-appended if omitted
+    public var kind: ActionKind
     public var isAutoSubmit: Bool  // true = auto-press Return after pasting prompt (ignored if isHandoff)
     public var sessionMode: String // "new" = open new Claude session, "add" = paste into existing chat (ignored if isHandoff)
     public var includeSource: Bool // prepend "from: AppName — URL" context prefix (ignored if isHandoff)
@@ -90,24 +103,28 @@ public struct CustomAction: Identifiable {
     public var isHandoff: Bool = false  // true = background `claude -p` run (no Claude window) instead of pasting in
     public var skill: String = ""      // only used when isHandoff; target skill for the background run
 
+    // Voice needs the press/hold/double-tap trigger state machine (like the
+    // built-in Dictate actions) instead of a single fire-on-press — a
+    // different Carbon dispatch path, hence its own prefix. Everything else
+    // fires immediately on keydown; only isHandoff changes where it's sent.
     public var actionID: String {
-        if isHandoff { return isShot ? "customshothandoff:\(id)" : "customhandoff:\(id)" }
-        return isShot ? "customshot:\(id)" : "custom:\(id)"
+        if kind == .voice { return isHandoff ? "customvoicehandoff:\(id)" : "customvoice:\(id)" }
+        return isHandoff ? "customhandoff:\(id)" : "custom:\(id)"
     }
     public var human: String { keycode == 0 ? "—" : humanShortcut(keycode: keycode, mods: mods) }
 
-    public init(id: String, name: String, prompt: String, isShot: Bool, isAutoSubmit: Bool,
+    public init(id: String, name: String, prompt: String, kind: ActionKind, isAutoSubmit: Bool,
                 sessionMode: String, includeSource: Bool, keycode: UInt32, mods: UInt32, enabled: Bool,
                 isHandoff: Bool = false, skill: String = "") {
-        self.id = id; self.name = name; self.prompt = prompt; self.isShot = isShot
+        self.id = id; self.name = name; self.prompt = prompt; self.kind = kind
         self.isAutoSubmit = isAutoSubmit; self.sessionMode = sessionMode; self.includeSource = includeSource
         self.keycode = keycode; self.mods = mods; self.enabled = enabled
         self.isHandoff = isHandoff; self.skill = skill
     }
 
-    public static func makeNew(name: String, prompt: String, isShot: Bool, isHandoff: Bool = false, skill: String = "") -> CustomAction {
+    public static func makeNew(name: String, prompt: String, kind: ActionKind, isHandoff: Bool = false, skill: String = "") -> CustomAction {
         CustomAction(id: UUID().uuidString, name: name, prompt: prompt,
-                     isShot: isShot, isAutoSubmit: false, sessionMode: "new",
+                     kind: kind, isAutoSubmit: false, sessionMode: "new",
                      includeSource: true, keycode: 0, mods: 0, enabled: true,
                      isHandoff: isHandoff, skill: skill)
     }

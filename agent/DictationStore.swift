@@ -179,7 +179,7 @@ final class HistoryStore: ObservableObject {
         var timestamp: Date
         var raw: String
         var processed: String
-        var mode: String   // "insert" | "claude"
+        var mode: String   // "insert" | "claude" | "custom"
     }
 
     @Published var records: [Record] = []
@@ -188,8 +188,13 @@ final class HistoryStore: ObservableObject {
     private init() { load() }
 
     func add(raw: String, processed: String, mode: DictMode) {
-        let r = Record(timestamp: Date(), raw: raw, processed: processed,
-                       mode: mode == .insert ? "insert" : "claude")
+        let modeLabel: String
+        switch mode {
+        case .insert: modeLabel = "insert"
+        case .claude: modeLabel = "claude"
+        case .customAction: modeLabel = "custom"
+        }
+        let r = Record(timestamp: Date(), raw: raw, processed: processed, mode: modeLabel)
         records.insert(r, at: 0)
         if records.count > Self.maxRecords { records = Array(records.prefix(Self.maxRecords)) }
         save()

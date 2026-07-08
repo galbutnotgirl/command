@@ -7,28 +7,50 @@ final class ActionModelsTests: XCTestCase {
     // so a wrong prefix here silently routes a custom action to the wrong path.
 
     func testPlainCustomActionID() {
-        let ca = CustomAction.makeNew(name: "Summarize", prompt: "p", isShot: false)
+        let ca = CustomAction.makeNew(name: "Summarize", prompt: "p", kind: .text)
         XCTAssertEqual(ca.actionID, "custom:\(ca.id)")
     }
 
-    func testScreenshotCustomActionID() {
-        let ca = CustomAction.makeNew(name: "Screenshot it", prompt: "p", isShot: true)
-        XCTAssertEqual(ca.actionID, "customshot:\(ca.id)")
+    func testScreenshotCustomActionIDSharesPlainPrefix() {
+        // Screenshot vs text is read from .kind at dispatch time, not encoded
+        // in the actionID — only voice (press/hold semantics) and handoff
+        // (delivery) change the prefix.
+        let ca = CustomAction.makeNew(name: "Screenshot it", prompt: "p", kind: .screenshot)
+        XCTAssertEqual(ca.actionID, "custom:\(ca.id)")
+    }
+
+    func testPopupCustomActionIDSharesPlainPrefix() {
+        let ca = CustomAction.makeNew(name: "Popup it", prompt: "p", kind: .popup)
+        XCTAssertEqual(ca.actionID, "custom:\(ca.id)")
     }
 
     func testTextHandoffActionID() {
-        let ca = CustomAction.makeNew(name: "Triage", prompt: "p", isShot: false, isHandoff: true, skill: "triage")
+        let ca = CustomAction.makeNew(name: "Triage", prompt: "p", kind: .text, isHandoff: true, skill: "triage")
         XCTAssertEqual(ca.actionID, "customhandoff:\(ca.id)")
     }
 
-    func testScreenshotHandoffActionID() {
-        let ca = CustomAction.makeNew(name: "Triage shot", prompt: "p", isShot: true, isHandoff: true, skill: "triage")
-        XCTAssertEqual(ca.actionID, "customshothandoff:\(ca.id)")
+    func testScreenshotHandoffActionIDSharesHandoffPrefix() {
+        let ca = CustomAction.makeNew(name: "Triage shot", prompt: "p", kind: .screenshot, isHandoff: true, skill: "triage")
+        XCTAssertEqual(ca.actionID, "customhandoff:\(ca.id)")
     }
 
-    func testDefaultsAreNonHandoffNonShot() {
-        let ca = CustomAction.makeNew(name: "n", prompt: "p", isShot: false)
+    func testVoiceCustomActionIDGetsItsOwnPrefix() {
+        // Voice needs the press/hold/double-tap trigger machinery, not a
+        // fire-on-press dispatch — hence a distinct prefix so main.swift's
+        // hotKeyHandler can route it to triggerDictation() instead.
+        let ca = CustomAction.makeNew(name: "Dictate task", prompt: "p", kind: .voice)
+        XCTAssertEqual(ca.actionID, "customvoice:\(ca.id)")
+    }
+
+    func testVoiceHandoffCustomActionIDCombinesBothPrefixes() {
+        let ca = CustomAction.makeNew(name: "Dictate task", prompt: "p", kind: .voice, isHandoff: true)
+        XCTAssertEqual(ca.actionID, "customvoicehandoff:\(ca.id)")
+    }
+
+    func testDefaultsAreNonHandoffText() {
+        let ca = CustomAction.makeNew(name: "n", prompt: "p", kind: .text)
         XCTAssertFalse(ca.isHandoff)
+        XCTAssertEqual(ca.kind, .text)
         XCTAssertEqual(ca.skill, "")
         XCTAssertTrue(ca.includeSource)
         XCTAssertEqual(ca.sessionMode, "new")
@@ -44,12 +66,11 @@ final class ActionModelsTests: XCTestCase {
         XCTAssertEqual(actionName("cliphistory"), "Clipboard History")
     }
 
-    func testHandoffTextIsInHandoffActionIDs() {
-        XCTAssertTrue(HANDOFF_ACTION_IDS.contains("handofftext"))
-        // The old fixed Skill/Screenshot Handoff actions were folded into
-        // user-configurable Custom Actions — they must not reappear here.
-        XCTAssertFalse(HANDOFF_ACTION_IDS.contains("handoff"))
-        XCTAssertFalse(HANDOFF_ACTION_IDS.contains("shothandoff"))
+    func testFixedCatalogHasNoHandoffActionsLeft() {
+        // Skill/Screenshot Handoff, and now Text Handoff too, were folded into
+        // user-configurable Custom Actions (kind: .popup for the old Text
+        // Handoff) — none of the fixed catalog entries should be handoffs.
+        XCTAssertFalse(COMMAND_ACTIONS.contains { $0.id.lowercased().contains("handoff") })
     }
 
     func testEveryDefaultBindingReferencesARealCatalogAction() {

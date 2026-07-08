@@ -1012,7 +1012,9 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
     // kEventHotKeyReleased: clean PTT release via Carbon event (no polling needed).
     if kind == UInt32(kEventHotKeyReleased) {
         _carbonDictHeld.remove(hkID.id)
-        if let action = hotkeyActions[hkID.id], action == "dictate" || action == "dictateadd" {
+        if let action = hotkeyActions[hkID.id],
+           action == "dictate" || action == "dictateadd"
+           || action.hasPrefix("customvoice:") || action.hasPrefix("customvoicehandoff:") {
             Task { @MainActor in
                 if _dictTrigMode == .pushToTalk {
                     _dictPTTimer?.invalidate(); _dictPTTimer = nil
@@ -1030,8 +1032,6 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             DispatchQueue.main.async { if picker.isVisible { picker.hide() } else { picker.show(prev: front) } }
         } else if action == "settings" {
             DispatchQueue.main.async { settingsWindow.show(tab: .setup) }
-        } else if action == "handofftext" {
-            DispatchQueue.main.async { HandoffTextEntryPanel.shared.show() }
         } else if action == "dictate" || action == "dictateadd" {
             // Suppress Carbon key-repeat: kEventHotKeyPressed fires on every repeat.
             // Only act on the first press; kEventHotKeyReleased clears the held state.
@@ -1040,15 +1040,27 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             let kc = CGKeyCode(hotkeyKeycodes[hkID.id] ?? 0)
             let m: DictMode = action == "dictate" ? .insert : .claude
             Task { @MainActor in triggerDictation(mode: m, keycode: kc) }
-        } else if action.hasPrefix("custom:") || action.hasPrefix("customshot:")
-                  || action.hasPrefix("customhandoff:") || action.hasPrefix("customshothandoff:") {
+        } else if action.hasPrefix("customvoice:") || action.hasPrefix("customvoicehandoff:") {
+            // Same press/hold/double-tap trigger as the built-in Dictate actions,
+            // just feeding the transcript into this custom action instead of
+            // pasting/sending it directly (see DictationOverlay.dispatchCustomAction).
+            if _carbonDictHeld.contains(hkID.id) { return noErr }
+            _carbonDictHeld.insert(hkID.id)
+            let kc = CGKeyCode(hotkeyKeycodes[hkID.id] ?? 0)
             guard let ca = loadCustomActions().first(where: { $0.actionID == action }) else { return noErr }
-            let sel = ca.isShot ? "" : captureOrClipboard()
+            Task { @MainActor in triggerDictation(mode: .customAction(id: ca.id), keycode: kc) }
+        } else if action.hasPrefix("custom:") || action.hasPrefix("customhandoff:") {
+            guard let ca = loadCustomActions().first(where: { $0.actionID == action }) else { return noErr }
+            if ca.kind == .popup {
+                DispatchQueue.main.async { CustomActionTextEntryPanel.shared.show(for: ca) }
+                return noErr
+            }
+            let sel = ca.kind == .screenshot ? "" : captureOrClipboard()
             if ca.isHandoff {
                 DispatchQueue.global().async { runCustomHandoff(ca, capturedText: sel) }
             } else {
                 DispatchQueue.global().async {
-                    runWorker(ca.isShot ? "customshot" : "custom", source: front, captured: sel,
+                    runWorker(ca.kind == .screenshot ? "customshot" : "custom", source: front, captured: sel,
                               customPrompt: ca.prompt, customSubmit: ca.isAutoSubmit,
                               customSession: ca.sessionMode, customIncludeSource: ca.includeSource)
                 }
@@ -1203,8 +1215,6 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
             if picker.isVisible { picker.hide() } else { picker.show(prev: front) }
         } else if hk.action == "settings" {
             settingsWindow.show(tab: .setup)
-        } else if hk.action == "handofftext" {
-            HandoffTextEntryPanel.shared.show()
         } else if hk.action == "dictate" {
             Task { @MainActor in triggerDictation(mode: .insert, keycode: CGKeyCode(carbon)) }
         } else if hk.action == "dictateadd" {
@@ -1214,16 +1224,24 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
             DispatchQueue.global().async { runWorker(hk.action, source: front, captured: sel) }
         }
     } else if let ca = loadCustomActions().first(where: { $0.enabled && $0.keycode == carbon && $0.mods == mods }) {
-        if ca.isShot {
+        if ca.kind == .screenshot {
             let pg = runShell("/usr/bin/pgrep", ["-x", "screencapture"])
             if pg.code == 0 { _ = runShell("/usr/bin/pkill", ["-x", "screencapture"]); return }
         }
-        let sel = ca.isShot ? "" : captureOrClipboard()
+        if ca.kind == .voice {
+            Task { @MainActor in triggerDictation(mode: .customAction(id: ca.id), keycode: CGKeyCode(carbon)) }
+            return
+        }
+        if ca.kind == .popup {
+            CustomActionTextEntryPanel.shared.show(for: ca)
+            return
+        }
+        let sel = ca.kind == .screenshot ? "" : captureOrClipboard()
         if ca.isHandoff {
             DispatchQueue.global().async { runCustomHandoff(ca, capturedText: sel) }
         } else {
             DispatchQueue.global().async {
-                runWorker(ca.isShot ? "customshot" : "custom", source: front, captured: sel,
+                runWorker(ca.kind == .screenshot ? "customshot" : "custom", source: front, captured: sel,
                           customPrompt: ca.prompt, customSubmit: ca.isAutoSubmit,
                           customSession: ca.sessionMode, customIncludeSource: ca.includeSource)
             }
