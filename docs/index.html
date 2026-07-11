@@ -54,7 +54,8 @@
     .shell { width: min(1120px, calc(100% - 40px)); margin: 0 auto; position: relative; }
     nav { height: 70px; display: flex; align-items: center; justify-content: space-between; }
     .brand { display: flex; align-items: center; gap: 10px; font-weight: 720; text-decoration: none; }
-    .mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; background: var(--purple); color: white; font-family: var(--mono); font-size: 16px; }
+    .mark { width: 30px; height: 30px; display: block; border-radius: 7px; overflow: hidden; background: var(--purple); }
+    .mark img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .nav-links { display: flex; gap: 22px; align-items: center; }
     .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; }
     .nav-links a:hover { color: var(--text); }
@@ -121,7 +122,7 @@
   <a class="skip" href="#content">Skip to content</a>
   <div class="shell">
     <nav aria-label="Primary">
-      <a class="brand" href="index.html"><span class="mark">⌘</span>Command</a>
+      <a class="brand" href="index.html"><span class="mark"><img src="app-icon.png" alt=""></span>Command</a>
       <div class="nav-links">
         <a href="#features">Features</a>
         <a href="guide.html">Docs</a>
@@ -208,7 +209,7 @@
 
   <footer>
     <div class="shell footer-row">
-      <a class="brand" href="#content"><span class="mark">⌘</span>Command</a>
+      <a class="brand" href="#content"><span class="mark"><img src="app-icon.png" alt=""></span>Command</a>
       <div class="footer-links">
         <a href="install.html">Install Guide</a><a href="uninstall.html">Uninstall</a><a href="guide.html">User Guide</a><a href="settings.html">Settings Reference</a><a href="quick-reference.html">Quick Reference</a><a href="examples.html">Examples</a><a href="faq.html">FAQ</a><a href="changelog.html">Changelog</a><a href="limitations.html">Alpha Limitations</a><a href="updates.html">Updates</a><a href="permissions.html">Permissions</a><a href="privacy.html">Privacy</a><a href="troubleshooting.html">Troubleshooting</a><a href="support.html">Support</a><a href="security.html">Security Policy</a><a href="icon-treatments.html">Icon Treatments</a><a href="background.html">Background Architecture</a><a href="release.html">Release Checklist</a><a href="404.html">Not Found</a><a href="https://github.com/galbutnotgirl/command/releases/latest">Latest release</a><a href="https://github.com/galbutnotgirl/command#readme">README</a><a href="https://github.com/galbutnotgirl/command/blob/main/CONTRIBUTING.md">Contributing</a><a href="https://github.com/galbutnotgirl/command/security/advisories/new">Private Security Report</a>
       </div>
