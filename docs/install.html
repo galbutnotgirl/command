@@ -59,13 +59,14 @@
         <p>Command requires macOS 14 or later.</p>
         <ol>
           <li>Open the <a href="https://github.com/galbutnotgirl/command/releases/latest">latest GitHub Release</a>.</li>
-          <li>Download the latest <code>Command-*.zip</code>.</li>
-          <li>Optional: download the matching <code>.zip.sha256</code> file into the same folder as the zip and verify the exact pair with <code>cd ~/Downloads</code>, then <code>shasum -a 256 -c Command-*.zip.sha256</code>.</li>
+          <li>Download <a href="https://github.com/galbutnotgirl/command/releases/download/v1.2.0-alpha.6/ClaudeCommand-1.2.0-alpha.6.zip"><code>ClaudeCommand-1.2.0-alpha.6.zip</code></a>.</li>
           <li>Unzip it.</li>
-          <li>Move <code>Command.app</code> to <code>~/Applications</code>.</li>
-          <li>Launch Command.</li>
+          <li>Move <code>ClaudeCommand.app</code> to <code>~/Applications</code>.</li>
+          <li>Control-click <code>ClaudeCommand.app</code>, choose <strong>Open</strong>, then confirm <strong>Open</strong>.</li>
         </ol>
-        <p>If macOS blocks first launch, open <strong>System Settings -> Privacy &amp; Security</strong> and allow Command. Then launch again.</p>
+        <p>If macOS says ClaudeCommand cannot be verified and only shows <strong>Move to Trash</strong>, open <strong>System Settings -> Privacy &amp; Security</strong>, scroll down, click <strong>Open Anyway</strong>, authenticate, then reopen ClaudeCommand.</p>
+        <pre><code>xattr -dr com.apple.quarantine ~/Applications/ClaudeCommand.app</code></pre>
+        <p>This Terminal command is a fallback because alpha.6 is not Apple-notarized. Never bypass this warning for an app from an untrusted source.</p>
         <p>Binary installs do not require Terminal scripts. Global shortcuts, screenshots, clipboard history, and dictation run from the app. Optional right-click Services are only for source installs that run <code>./install-quick-action.sh</code>.</p>
       </section>
 
@@ -95,9 +96,9 @@
         <table>
           <thead><tr><th>Test</th><th>Expected</th></tr></thead>
           <tbody>
-            <tr><td>Select text and press <kbd>F8</kbd></td><td>Selected text sends to existing Claude chat.</td></tr>
-            <tr><td>Press <kbd>Option-F8</kbd></td><td>New Claude chat opens with captured text.</td></tr>
-            <tr><td>Press <kbd>F6</kbd></td><td>Clipboard History picker opens.</td></tr>
+            <tr><td>Select text and press <kbd>F10</kbd></td><td>Selected text sends to existing Claude chat.</td></tr>
+            <tr><td>Press <kbd>Option-F10</kbd></td><td>New Claude chat opens with captured text.</td></tr>
+            <tr><td>Press <kbd>F8</kbd></td><td>Clipboard History picker opens.</td></tr>
           </tbody>
         </table>
         <p>If F-keys control brightness, media, or dictation instead of Command, enable standard function keys in macOS Keyboard settings, rebind prompt shortcuts in <strong>Settings -> Shortcuts</strong>, or rebind dictation shortcuts in <strong>Settings -> Dictation Settings</strong>.</p>

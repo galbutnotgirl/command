@@ -7,19 +7,24 @@ Use this for first-time installs. For updating an existing install, see [UPDATES
 Command requires macOS 14 or later.
 
 1. Open the [latest GitHub Release](https://github.com/galbutnotgirl/command/releases/latest).
-2. Download the latest `Command-*.zip`.
-3. Optional: download the matching `.zip.sha256` file into the same folder as the zip and verify the exact pair:
+2. Download [`ClaudeCommand-1.2.0-alpha.6.zip`](https://github.com/galbutnotgirl/command/releases/download/v1.2.0-alpha.6/ClaudeCommand-1.2.0-alpha.6.zip).
+3. Unzip it.
+4. Move `ClaudeCommand.app` to `~/Applications`.
+5. Control-click `ClaudeCommand.app`, choose **Open**, then confirm **Open**.
 
-   ```bash
-   cd ~/Downloads
-   shasum -a 256 -c Command-*.zip.sha256
-   ```
+If macOS says Command cannot be verified:
 
-4. Unzip it.
-5. Move `Command.app` to `~/Applications`.
-6. Launch Command.
+1. Control-click `ClaudeCommand.app` in Finder and choose **Open**.
+2. Click **Open** in the confirmation dialog.
+3. If only **Move to Trash** appears, open **System Settings -> Privacy & Security**, scroll down, click **Open Anyway**, authenticate, then reopen Command.
 
-If macOS blocks first launch, open **System Settings -> Privacy & Security** and allow Command. Then launch again.
+Terminal fallback:
+
+```bash
+xattr -dr com.apple.quarantine ~/Applications/ClaudeCommand.app
+```
+
+This warning exists because alpha.6 is not Apple-notarized. Never bypass this warning for an app from an untrusted source.
 
 Binary installs do not require Terminal scripts. Global shortcuts, screenshots, clipboard history, and dictation run from the app. Optional right-click Services are only for source installs that run `./install-quick-action.sh`.
 
@@ -56,9 +61,9 @@ Then test:
 
 | Test | Expected |
 |---|---|
-| Select text and press `F8` | Selected text sends to existing Claude chat. |
-| Press `Option-F8` | New Claude chat opens with captured text. |
-| Press `F6` | Clipboard History picker opens. |
+| Select text and press `F10` | Selected text sends to existing Claude session. |
+| Press `Option-F10` | New Claude session opens with captured text. |
+| Press `F8` | Clipboard History picker opens when enabled. |
 
 If F-keys control brightness, media, or dictation instead of Command, enable standard function keys in macOS Keyboard settings, rebind prompt shortcuts in **Settings -> Shortcuts**, or rebind dictation shortcuts in **Settings -> Dictation Settings**.
 

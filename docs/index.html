@@ -3,143 +3,216 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Command docs for prompt-centered macOS shortcuts that send selected text, screenshots, typed notes, and voice to Claude.">
-  <title>Command Docs</title>
+  <meta name="description" content="Command gives selected text, screenshots, popup notes, clipboard history, and voice a direct route to Claude on macOS.">
+  <title>Command — Send anything to your AI</title>
   <link rel="canonical" href="https://galbutnotgirl.github.io/command/">
   <meta property="og:site_name" content="Command">
-  <meta property="og:title" content="Command Docs">
-  <meta property="og:description" content="Command docs for prompt-centered macOS shortcuts that send selected text, screenshots, typed notes, and voice to Claude.">
+  <meta property="og:title" content="Command — Send anything to your AI">
+  <meta property="og:description" content="Command gives selected text, screenshots, popup notes, clipboard history, and voice a direct route to Claude on macOS.">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="Command Docs">
-  <meta name="twitter:description" content="Command docs for prompt-centered macOS shortcuts that send selected text, screenshots, typed notes, and voice to Claude.">
+  <meta name="twitter:title" content="Command — Send anything to your AI">
+  <meta name="twitter:description" content="Command gives selected text, screenshots, popup notes, clipboard history, and voice a direct route to Claude on macOS.">
   <link rel="stylesheet" href="site.css">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0912;
+      --surface: #151221;
+      --surface-2: #1b1729;
+      --line: #2c2640;
+      --text: #f5f2fb;
+      --muted: #aaa2bc;
+      --purple: #9b72f2;
+      --green: #5de08a;
+      --blue: #69a7ff;
+      --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.55 var(--sans);
+      letter-spacing: 0;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image: linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, black, transparent 72%);
+    }
+    a { color: inherit; }
+    a:focus-visible { outline: 3px solid var(--purple); outline-offset: 4px; }
+    .skip { position: absolute; left: 16px; top: -80px; padding: 10px 14px; background: var(--purple); border-radius: 6px; text-decoration: none; z-index: 10; }
+    .skip:focus { top: 16px; }
+    .shell { width: min(1120px, calc(100% - 40px)); margin: 0 auto; position: relative; }
+    nav { height: 70px; display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 720; text-decoration: none; }
+    .mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; background: var(--purple); color: white; font-family: var(--mono); font-size: 16px; }
+    .nav-links { display: flex; gap: 22px; align-items: center; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    .nav-links a:hover { color: var(--text); }
+    .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border: 1px solid #433956; border-radius: 7px; background: #17131f; color: #f5f2fb; text-decoration: none; font-weight: 680; }
+    .button.primary { background: var(--purple); border-color: var(--purple); color: #0b0912; }
+    .button:hover { filter: brightness(1.08); }
+    .hero { min-height: 680px; padding: 86px 0 72px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr); gap: 72px; align-items: center; }
+    .eyebrow { margin: 0 0 16px; color: var(--purple); font: 700 12px/1 var(--mono); text-transform: uppercase; }
+    h1 { margin: 0; max-width: 11ch; font-size: clamp(52px, 7vw, 86px); line-height: .98; font-weight: 730; letter-spacing: 0; }
+    .hero-copy { margin: 26px 0 30px; max-width: 570px; color: var(--muted); font-size: 19px; }
+    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    .trust { display: flex; gap: 18px; margin-top: 22px; color: #817990; font-size: 13px; }
+    .demo { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); box-shadow: 0 34px 90px rgba(0,0,0,.45); transform: rotate(1deg); }
+    .demo-bar { height: 38px; display: flex; align-items: center; gap: 7px; padding: 0 13px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #ff5f57; }
+    .dot:nth-child(2) { background: #febc2e; } .dot:nth-child(3) { background: #28c840; }
+    .demo-title { margin-left: auto; margin-right: auto; color: var(--muted); font-size: 11px; }
+    .demo-body { padding: 22px; }
+    .capture { padding: 16px; border: 1px solid #3a3152; border-radius: 7px; background: #100d19; font-family: var(--mono); color: #d9d2e8; font-size: 13px; }
+    .route { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-top: 18px; }
+    .route-box { min-height: 74px; padding: 13px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); }
+    .route-box strong { display: block; font-size: 13px; } .route-box span { color: var(--muted); font-size: 11px; }
+    .arrow { color: var(--purple); font: 700 18px var(--mono); }
+    .keys { display: flex; gap: 8px; margin-top: 18px; }
+    kbd { padding: 7px 10px; border: 1px solid #4b4065; border-bottom-width: 3px; border-radius: 6px; background: #211b31; color: #f5f2fb; font: 700 12px var(--mono); }
+    section { padding: 92px 0; border-top: 1px solid var(--line); }
+    h2 { margin: 0 0 14px; font-size: clamp(34px, 5vw, 52px); line-height: 1.05; font-weight: 700; letter-spacing: 0; }
+    .section-lead { max-width: 620px; margin: 0 0 42px; color: var(--muted); font-size: 18px; }
+    .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .feature { min-height: 190px; padding: 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+    .feature-icon { color: var(--purple); font: 700 24px var(--mono); }
+    .feature h3 { margin: 34px 0 7px; font-size: 18px; }
+    .feature p { margin: 0; color: var(--muted); font-size: 14px; }
+    .feature:nth-child(2) .feature-icon { color: var(--green); } .feature:nth-child(3) .feature-icon { color: var(--blue); }
+    .flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; counter-reset: flow; }
+    .flow article { counter-increment: flow; }
+    .flow article::before { content: "0" counter(flow); color: var(--purple); font: 700 12px var(--mono); }
+    .flow h3 { margin: 18px 0 7px; font-size: 20px; }
+    .flow p { margin: 0; color: var(--muted); }
+    .shortcut-strip { display: flex; flex-wrap: wrap; gap: 12px; }
+    .shortcut { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+    .shortcut span { color: var(--muted); font-size: 13px; }
+    .install-band { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 30px; padding: 38px; border: 1px solid #473768; border-radius: 8px; background: #181225; }
+    .install-band h2 { font-size: 34px; }
+    .install-band p { margin: 8px 0 0; color: var(--muted); }
+    footer { padding: 54px 0 70px; border-top: 1px solid var(--line); }
+    .footer-row { display: flex; justify-content: space-between; gap: 30px; }
+    .footer-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px 18px; max-width: 650px; }
+    .footer-links a { color: var(--muted); text-decoration: none; font-size: 13px; }
+    .footer-links a:hover { color: var(--text); }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    @media (max-width: 820px) {
+      .nav-links a:not(.button) { display: none; }
+      .hero { min-height: auto; padding: 64px 0; grid-template-columns: 1fr; gap: 48px; }
+      .demo { transform: none; }
+      .feature-grid, .flow { grid-template-columns: 1fr; }
+      .install-band { grid-template-columns: 1fr; padding: 26px; }
+      .footer-row { display: block; }
+      .footer-links { justify-content: flex-start; margin-top: 26px; }
+    }
+  </style>
 </head>
 <body>
-  <a class="skip-link" href="#content">Skip to content</a>
-  <main id="content" class="wrap">
-    <header>
-      <h1>Command</h1>
-      <p class="lead">Prompt-centered macOS shortcuts for Claude. Send selected text, screenshots, typed popups, or voice to an existing chat, a new chat, or background <code>claude -p</code> run.</p>
-      <div class="actions">
-        <a class="button primary" href="https://github.com/galbutnotgirl/command/releases/latest">Download Alpha</a>
-        <a class="button primary" href="install.html">Install Guide</a>
-        <a class="button primary" href="guide.html">Read User Guide</a>
-        <a class="button" href="settings.html">Settings Reference</a>
-        <a class="button" href="quick-reference.html">Quick Reference</a>
-        <a class="button" href="examples.html">Examples</a>
-        <a class="button" href="faq.html">FAQ</a>
-        <a class="button" href="changelog.html">Changelog</a>
-        <a class="button" href="limitations.html">Alpha Limitations</a>
-        <a class="button" href="updates.html">Updates</a>
-        <a class="button" href="permissions.html">Permissions</a>
-        <a class="button" href="privacy.html">Privacy</a>
-        <a class="button" href="troubleshooting.html">Troubleshooting</a>
-        <a class="button" href="support.html">Support</a>
-        <a class="button" href="security.html">Security Policy</a>
-        <a class="button" href="https://github.com/galbutnotgirl/command/security/advisories/new">Private Security Report</a>
-        <a class="button" href="https://github.com/galbutnotgirl/command/blob/main/CONTRIBUTING.md">Contributing</a>
-        <a class="button" href="icon-treatments.html">Icon Treatments</a>
-        <a class="button" href="uninstall.html">Uninstall</a>
-        <a class="button" href="install.html#source">Install From Source</a>
-        <a class="button" href="background.html">Background Architecture</a>
-        <a class="button" href="release.html">Release Checklist</a>
+  <a class="skip" href="#content">Skip to content</a>
+  <div class="shell">
+    <nav aria-label="Primary">
+      <a class="brand" href="index.html"><span class="mark">⌘</span>Command</a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="guide.html">Docs</a>
+        <a href="install.html">Install Guide</a>
+        <a class="button" href="https://github.com/galbutnotgirl/command">GitHub</a>
       </div>
-    </header>
+    </nav>
+  </div>
 
-    <section>
-      <h2>Quick Start</h2>
-      <div class="grid">
-        <div class="card"><strong>1. Download alpha</strong><span class="muted">Get the latest <code>Command-*.zip</code> from the latest GitHub Release.</span></div>
-        <div class="card"><strong>2. Move app</strong><span class="muted">Unzip, move <code>Command.app</code> to <code>~/Applications</code>, then launch it.</span></div>
-        <div class="card"><strong>3. Set permissions</strong><span class="muted">Open <strong>Settings -> Set Up</strong>, grant required permissions, and confirm Accessibility is green.</span></div>
+  <main id="content">
+    <div class="shell hero">
+      <div>
+        <p class="eyebrow">Native macOS command layer</p>
+        <h1>Anything in. Anywhere out.</h1>
+        <p class="hero-copy">Send selected text, screenshots, popup notes, clipboard history, or voice to Claude without breaking focus.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/galbutnotgirl/command/releases/download/v1.2.0-alpha.6/ClaudeCommand-1.2.0-alpha.6.zip">Download Alpha</a>
+          <a class="button" href="install.html">Install Guide</a>
+        </div>
+        <div class="trust"><span>macOS 14+</span><span>Local-first</span><span>Open source</span></div>
       </div>
-      <p>Most users do not need Terminal scripts. Use <a href="install.html">Install Guide</a> for first launch, macOS permission prompts, checksum verification, and source install.</p>
-    </section>
-
-    <section>
-      <h2>Find Your Path</h2>
-      <div class="grid">
-        <a class="card" href="install.html"><strong>Install or update</strong><span class="muted">Download alpha, verify checksum, grant permissions, update, roll back, or uninstall.</span></a>
-        <a class="card" href="guide.html#actions"><strong>Configure prompts</strong><span class="muted">Set up built-in Compose, custom actions, trigger overrides, destinations, and auto-submit.</span></a>
-        <a class="card" href="quick-reference.html#variables"><strong>Write prompt text</strong><span class="muted">Use variables such as <code>{selection}</code>, <code>{context}</code>, <code>{source}</code>, <code>{url}</code>, and <code>{file}</code>.</span></a>
-        <a class="card" href="guide.html#dictation"><strong>Use voice</strong><span class="muted">Configure dictation shortcuts, model download, corrections, vocabulary, sounds, and voice triggers.</span></a>
-        <a class="card" href="examples.html#background"><strong>Run background actions</strong><span class="muted">Send rendered prompts to local <code>claude -p</code>, inspect results, retry, and tune CLI settings.</span></a>
-        <a class="card" href="troubleshooting.html"><strong>Fix or report</strong><span class="muted">Use symptom-first fixes, Copy Diagnostic Info, Support, bug reports, feature requests, or private security reporting.</span></a>
+      <div class="demo" aria-label="Command workflow preview">
+        <div class="demo-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="demo-title">Command</span></div>
+        <div class="demo-body">
+          <div class="capture">Turn this meeting note into clear next steps.</div>
+          <div class="route">
+            <div class="route-box"><strong>Selected text</strong><span>Captured from any app</span></div>
+            <div class="arrow">→</div>
+            <div class="route-box"><strong>Claude · New session</strong><span>Prompt + source context</span></div>
+          </div>
+          <div class="keys"><kbd>F8</kbd><kbd>⌥F8</kbd><kbd>F7</kbd></div>
+        </div>
       </div>
-    </section>
+    </div>
 
-    <section>
-      <h2>How It Works</h2>
-      <div class="grid">
-        <div class="card"><strong>1. Pick a prompt</strong><span class="muted">Use built-in Compose or create custom prompt actions.</span></div>
-        <div class="card"><strong>2. Attach triggers</strong><span class="muted">Selected text, screenshot, popup, or voice.</span></div>
-        <div class="card"><strong>3. Choose delivery</strong><span class="muted">Existing chat, new chat, or background command.</span></div>
-        <div class="card"><strong>4. Set destination</strong><span class="muted">Default, Chat, Cowork, or Code.</span></div>
-        <div class="card"><strong>5. Keep history local</strong><span class="muted">Clipboard, dictation, and command history stay in local files; background runs use your Claude CLI setup.</span></div>
+    <section id="features">
+      <div class="shell">
+        <p class="eyebrow">One prompt system</p>
+        <h2>Compose once. Trigger your way.</h2>
+        <p class="section-lead">Build prompt actions around input, delivery, destination, and submit behavior. Override defaults only where needed.</p>
+        <div class="feature-grid">
+          <article class="feature"><div class="feature-icon">⌁</div><h3>Capture anything</h3><p>Selected text, screenshots, typed notes, clipboard history, or hold-to-talk voice.</p></article>
+          <article class="feature"><div class="feature-icon">↗</div><h3>Choose flow</h3><p>Add to open Claude, start a new session, or run a configured action in background.</p></article>
+          <article class="feature"><div class="feature-icon">◌</div><h3>Keep moving</h3><p>Auto-submit when speed matters. Keep draft mode when you want to add context first.</p></article>
+        </div>
       </div>
     </section>
 
     <section>
-      <h2>Default Shortcuts</h2>
-      <table>
-        <thead><tr><th>Built-in combination</th><th>Default</th><th>Result</th></tr></thead>
-        <tbody>
-          <tr><td>Selected text -> Existing chat</td><td><kbd>F8</kbd></td><td>Send selected text into current Claude chat.</td></tr>
-          <tr><td>Selected text -> New chat</td><td><kbd>Option-F8</kbd></td><td>Open new Claude chat and wait.</td></tr>
-          <tr><td>Selected text -> New chat + auto-submit</td><td>Unbound</td><td>Open new Claude chat, submit, restore focus.</td></tr>
-          <tr><td>Screenshot -> Existing chat</td><td><kbd>F7</kbd></td><td>Capture screenshot and add to current chat.</td></tr>
-          <tr><td>Screenshot -> New chat</td><td><kbd>Option-F7</kbd></td><td>Capture screenshot and open new chat.</td></tr>
-          <tr><td>Screenshot -> New chat + auto-submit</td><td>Unbound</td><td>Capture screenshot, open new chat, submit.</td></tr>
-          <tr><td>Clipboard History</td><td><kbd>F6</kbd></td><td>Open searchable clipboard picker.</td></tr>
-          <tr><td>Dictate -> Insert</td><td><kbd>F5</kbd></td><td>Speak and paste transcript at cursor.</td></tr>
-          <tr><td>Dictate -> Claude</td><td><kbd>Option-F5</kbd></td><td>Speak and send transcript to Claude.</td></tr>
-        </tbody>
-      </table>
+      <div class="shell">
+        <p class="eyebrow">How it works</p>
+        <h2>Three choices. One command.</h2>
+        <div class="flow">
+          <article><h3>Pick input</h3><p>Text, screenshot, popup, voice, or clipboard.</p></article>
+          <article><h3>Choose action</h3><p>Apply shared prompt plus source context and variables.</p></article>
+          <article><h3>Send</h3><p>Continue current Claude session, open a new one, or run quietly in background.</p></article>
+        </div>
+      </div>
     </section>
 
     <section>
-      <h2>Install</h2>
-      <p>For alpha builds, download the latest <code>Command-*.zip</code> from the <a href="https://github.com/galbutnotgirl/command/releases/latest">latest GitHub Release</a>. Use the matching <code>.zip.sha256</code> file beside the matching zip for optional checksum verification. Binary installs do not require Terminal scripts. See the <a href="install.html">Install Guide</a> for first launch, permissions, setup checks, and source install.</p>
-      <p>Source install:</p>
-      <pre><code>git clone https://github.com/galbutnotgirl/command
-cd command
-./build-agent.sh
-./install-agent.sh</code></pre>
-      <p>Local development:</p>
-      <pre><code>./script/build_and_run.sh --verify</code></pre>
-      <p>Optional source fallback:</p>
-      <pre><code>./build-helper.sh</code></pre>
-      <p>Then open <strong>Settings -> Set Up</strong> and grant Accessibility. Add Screen Recording for screenshots and Microphone for dictation.</p>
+      <div class="shell">
+        <p class="eyebrow">Default Shortcuts</p>
+        <h2>Useful on first launch.</h2>
+        <p class="section-lead">Alpha.6 ships with Mac function-row shortcuts. Customize every binding in Settings.</p>
+        <div class="shortcut-strip">
+          <div class="shortcut"><kbd>F8</kbd><span>Selected text</span></div>
+          <div class="shortcut"><kbd>⌥F8</kbd><span>New session</span></div>
+          <div class="shortcut"><kbd>F7</kbd><span>Screenshot</span></div>
+          <div class="shortcut"><kbd>F6</kbd><span>Clipboard</span></div>
+          <div class="shortcut"><kbd>F5</kbd><span>Dictate</span></div>
+        </div>
+        <p class="sr-only">Local development:</p>
+      </div>
     </section>
 
     <section>
-      <h2>Docs</h2>
-      <div class="grid">
-        <a class="card" href="guide.html"><strong>User Guide</strong><span class="muted">Setup, prompt model, custom actions, background runs, import/export, troubleshooting.</span></a>
-        <a class="card" href="settings.html"><strong>Settings Reference</strong><span class="muted">Every Settings tab: Set Up, Shortcuts, Context, histories, dictation, About, import/export.</span></a>
-        <a class="card" href="install.html"><strong>Install Guide</strong><span class="muted">Alpha download, first launch, permissions, setup checks, and source install.</span></a>
-        <a class="card" href="uninstall.html"><strong>Uninstall</strong><span class="muted">Remove app, LaunchAgent, legacy watcher, local data, and logs.</span></a>
-        <a class="card" href="quick-reference.html"><strong>Quick Reference</strong><span class="muted">Shortcut table, trigger/delivery matrix, variables, and common fixes.</span></a>
-        <a class="card" href="examples.html"><strong>Examples</strong><span class="muted">Ready-to-copy setups for reviews, rewrites, screenshots, voice notes, background tasks, and imports.</span></a>
-        <a class="card" href="faq.html"><strong>FAQ</strong><span class="muted">Shortcut conflicts, auto-submit behavior, inheritance, privacy, dictation, background runs, and imports.</span></a>
-        <a class="card" href="changelog.html"><strong>Changelog</strong><span class="muted">User-facing release notes, current defaults, and alpha notes.</span></a>
-        <a class="card" href="limitations.html"><strong>Alpha Limitations</strong><span class="muted">Known alpha expectations for shortcuts, permissions, dictation, background actions, updates, and reporting.</span></a>
-        <a class="card" href="updates.html"><strong>Updates</strong><span class="muted">App update channels, manual alpha install, backup before updating, failed updates, and rollback.</span></a>
-        <a class="card" href="permissions.html"><strong>Permissions</strong><span class="muted">Accessibility, Screen Recording, Microphone, Clipboard History, Quick Actions, and reset commands.</span></a>
-        <a class="card" href="privacy.html"><strong>Privacy</strong><span class="muted">Local files, clipboard safeguards, dictation storage, background CLI caveats, and exports.</span></a>
-        <a class="card" href="troubleshooting.html"><strong>Troubleshooting</strong><span class="muted">Symptom-first fixes, log locations, command checks, and support details.</span></a>
-        <a class="card" href="support.html"><strong>Support</strong><span class="muted">Bug reports, feature requests, diagnostic info, logs, and what to include.</span></a>
-        <a class="card" href="security.html"><strong>Security Policy</strong><span class="muted">Private reporting path, supported alpha versions, redaction guidance, and privacy links.</span></a>
-        <a class="card" href="https://github.com/galbutnotgirl/command/security/advisories/new"><strong>Private Security Report</strong><span class="muted">Use this for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics instead of public issues.</span></a>
-        <a class="card" href="https://github.com/galbutnotgirl/command/blob/main/CONTRIBUTING.md"><strong>Contributing</strong><span class="muted">Local setup, docs parity, release evidence, and contribution checks.</span></a>
-        <a class="card" href="icon-treatments.html"><strong>Icon Treatments</strong><span class="muted">Animated visual references for active recording, capture, and menu-bar status states.</span></a>
-        <a class="card" href="background.html"><strong>Background Architecture</strong><span class="muted">Maintainer notes for <code>claude -p</code> pipeline and submission records.</span></a>
-        <a class="card" href="release.html"><strong>Release Checklist</strong><span class="muted">Versioning, preflight, publishing, update checks, and rollback.</span></a>
-        <a class="card" href="404.html"><strong>Not Found</strong><span class="muted">Fallback page for stale or mistyped docs links.</span></a>
-        <a class="card" href="https://github.com/galbutnotgirl/command#readme"><strong>README</strong><span class="muted">Short overview, install, build, release.</span></a>
+      <div class="shell install-band">
+        <div><h2>Ready to shorten route?</h2><p>Download alpha, move Command to Applications, then follow guided permission setup.</p></div>
+        <div class="hero-actions"><a class="button primary" href="https://github.com/galbutnotgirl/command/releases/download/v1.2.0-alpha.6/ClaudeCommand-1.2.0-alpha.6.zip">Download Alpha</a><a class="button" href="install.html">Open Install Guide</a></div>
       </div>
     </section>
   </main>
+
+  <footer>
+    <div class="shell footer-row">
+      <a class="brand" href="#content"><span class="mark">⌘</span>Command</a>
+      <div class="footer-links">
+        <a href="install.html">Install Guide</a><a href="uninstall.html">Uninstall</a><a href="guide.html">User Guide</a><a href="settings.html">Settings Reference</a><a href="quick-reference.html">Quick Reference</a><a href="examples.html">Examples</a><a href="faq.html">FAQ</a><a href="changelog.html">Changelog</a><a href="limitations.html">Alpha Limitations</a><a href="updates.html">Updates</a><a href="permissions.html">Permissions</a><a href="privacy.html">Privacy</a><a href="troubleshooting.html">Troubleshooting</a><a href="support.html">Support</a><a href="security.html">Security Policy</a><a href="icon-treatments.html">Icon Treatments</a><a href="background.html">Background Architecture</a><a href="release.html">Release Checklist</a><a href="404.html">Not Found</a><a href="https://github.com/galbutnotgirl/command/releases/latest">Latest release</a><a href="https://github.com/galbutnotgirl/command#readme">README</a><a href="https://github.com/galbutnotgirl/command/blob/main/CONTRIBUTING.md">Contributing</a><a href="https://github.com/galbutnotgirl/command/security/advisories/new">Private Security Report</a>
+      </div>
+    </div>
+  </footer>
 </body>
 </html>
