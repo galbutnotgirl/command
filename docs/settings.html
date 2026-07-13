@@ -39,8 +39,9 @@
       <a href="icon-treatments.html">Icon Treatments</a>
       <a href="background.html">Background Architecture</a>
       <a href="release.html">Release Checklist</a>
+      <a href="#sidebar">Sidebar</a>
       <a href="#setup">Set Up</a>
-      <a href="#shortcuts">Shortcuts</a>
+      <a href="#shortcuts">Shortcut Settings</a>
       <a href="#context">Context</a>
       <a href="#command-history">Command History</a>
       <a href="#clipboard-history">Clipboard History</a>
@@ -59,6 +60,11 @@
         </div>
       </header>
 
+      <section id="sidebar">
+        <h2>Sidebar</h2>
+        <p>Set Up, About, Clipboard History, Shortcut Settings, Context, Background, History, Settings, Vocabulary, Corrections, History.</p>
+      </section>
+
       <section id="setup">
         <h2>Set Up</h2>
         <p>Use <strong>Set Up</strong> first after install or update.</p>
@@ -74,12 +80,15 @@
       </section>
 
       <section id="shortcuts">
-        <h2>Shortcuts</h2>
-        <p>Use <strong>Shortcuts</strong> for prompt-centered commands.</p>
+        <h2>Shortcut Settings</h2>
+        <p>Use <strong>Shortcut Settings</strong> for prompt-centered commands.</p>
         <table>
           <thead><tr><th>Control</th><th>Purpose</th></tr></thead>
           <tbody>
-            <tr><td>Default Claude destination</td><td>Top-level fallback destination: Chat, Cowork, or Code.</td></tr>
+            <tr><td>Default assistant</td><td>Top-level Claude or ChatGPT / Codex fallback.</td></tr>
+            <tr><td>Default ChatGPT destination</td><td>Chat for general chat or Codex for workspace coding.</td></tr>
+            <tr><td>Claude destination</td><td>Claude-only fallback: Chat, Cowork, or Code.</td></tr>
+            <tr><td>Codex workspace</td><td>Workspace used for new Codex sessions and background runs.</td></tr>
             <tr><td>Compose</td><td>Shared built-in prompt for selected-text and screenshot combinations: existing chat, new chat, or new chat with auto-submit.</td></tr>
             <tr><td>Custom Actions</td><td>User-defined prompt groups with selected text, screenshot, popup, or voice triggers.</td></tr>
             <tr><td>Trigger rows</td><td>Per-trigger key binding plus optional delivery, destination, and auto-submit override.</td></tr>
@@ -110,7 +119,7 @@
           <thead><tr><th>Section</th><th>Includes</th></tr></thead>
           <tbody>
             <tr><td>Foreground</td><td>Existing-chat and new-chat sends.</td></tr>
-            <tr><td>Background</td><td><code>claude -p</code> runs, status, result line, logs, retry, and mark-failed controls.</td></tr>
+            <tr><td>Background</td><td><code>claude -p</code> and <code>codex exec -</code> runs, provider, status, result line, logs, retry, and mark-failed controls.</td></tr>
           </tbody>
         </table>
         <p>Retention defaults to seven days. Changing command retention also aligns background-run retention.</p>
@@ -178,8 +187,8 @@
             <tr><td>Shortcuts and prompts</td><td>Built-in shortcut bindings, custom actions, trigger rows, and built-in compose auto-submit settings.</td></tr>
             <tr><td>Prompt text and context rules</td><td>Built-in prompt text and Context rules.</td></tr>
             <tr><td>Dictation vocabulary</td><td>Corrections, vocabulary terms, and filler words.</td></tr>
-            <tr><td>Background settings</td><td>Shared <code>claude -p</code> command, working directory, extra args, and notification settings.</td></tr>
-            <tr><td>App preferences</td><td>Default Claude destination, retention days, and dictation sounds.</td></tr>
+            <tr><td>Background settings</td><td>Separate Claude/Codex commands, working directories, extra args, safe Codex preset, CLI tests, and notifications.</td></tr>
+            <tr><td>App preferences</td><td>Default assistant, Claude destination, Codex workspace, retention days, and dictation sounds.</td></tr>
           </tbody>
         </table>
         <p>Import modes:</p>

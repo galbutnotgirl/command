@@ -68,11 +68,12 @@ REQUIRED_DOC_ASSETS = [
     "ICON_TREATMENTS.md",
     "BACKGROUND_TRIGGER_INTEGRATION.md",
     "icon-treatment-bold-animated.svg",
+    "icon-treatment-green-voice.svg",
     "icon-treatment-options-animated.svg",
     "icon-treatment-options.svg",
 ]
 REQUIRED_BUNDLE_PATTERNS = [
-    "for doc_asset in 404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html icon-treatments.html background.html release.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md ICON_TREATMENTS.md BACKGROUND_TRIGGER_INTEGRATION.md RELEASE_CHECKLIST.md icon-treatment-bold-animated.svg icon-treatment-options-animated.svg icon-treatment-options.svg",
+    "for doc_asset in 404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html icon-treatments.html background.html release.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md ICON_TREATMENTS.md BACKGROUND_TRIGGER_INTEGRATION.md RELEASE_CHECKLIST.md icon-treatment-bold-animated.svg icon-treatment-green-voice.svg icon-treatment-options-animated.svg icon-treatment-options.svg",
     "[agent] ERROR missing bundled docs asset: docs/${doc_asset}",
     'cp "${DOCS_SRC}/${doc_asset}" "${APP}/Contents/Resources/docs/"',
 ]
@@ -106,7 +107,7 @@ REQUIRED_RELEASE_PATTERNS = [
     "Command.app/Contents/Resources/docs/${required_doc}",
     "Command.app/Contents/Resources/${required_resource}",
     "claude-command-capture/bin/submit-cli.js",
-    "404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html icon-treatments.html background.html release.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md ICON_TREATMENTS.md BACKGROUND_TRIGGER_INTEGRATION.md RELEASE_CHECKLIST.md icon-treatment-bold-animated.svg icon-treatment-options-animated.svg icon-treatment-options.svg",
+    "404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html icon-treatments.html background.html release.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md ICON_TREATMENTS.md BACKGROUND_TRIGGER_INTEGRATION.md RELEASE_CHECKLIST.md icon-treatment-bold-animated.svg icon-treatment-green-voice.svg icon-treatment-options-animated.svg icon-treatment-options.svg",
 ]
 PAGES_WORKFLOW = ROOT / ".github/workflows/pages.yml"
 TEST_WORKFLOW = ROOT / ".github/workflows/test.yml"
@@ -145,7 +146,6 @@ REQUIRED_TEST_WORKFLOW_PATTERNS = [
 ]
 DEFAULT_SHORTCUT_DOCS = [
     "README.md",
-    "docs/index.html",
     "docs/guide.html",
     "docs/USER_GUIDE.md",
     "docs/quick-reference.html",
@@ -230,7 +230,7 @@ HTML_MARKDOWN_PARITY = {
     ],
     ("docs/FAQ.md", "docs/faq.html"): [
         "Why are auto-submit combinations unbound by default?",
-        "What if F5-F8 already control brightness, media, or dictation?",
+        "What if F6/F7/F8 conflict with another app?",
         "What do the built-in Compose combinations do?",
         "What does — mean in a trigger row?",
         "Does Command upload clipboard or dictation history?",
@@ -407,7 +407,7 @@ REQUIRED_TEXT = {
     ],
     "docs/quick-reference.html": [
         "Screenshot -> New chat + auto-submit",
-        "Dictate -> Claude",
+        "Dictate -> Assistant",
         "Dictation Settings",
         "only shows prompt/action shortcuts that are enabled and bound to a key",
         "do not appear in the menu",
@@ -481,7 +481,7 @@ REQUIRED_TEXT = {
         "checksum verification when kept beside the matching zip",
         ".zip.sha256",
         "Quick start for most users",
-        "move `Command.app` to `~/Applications`",
+        "Move to Applications",
         "verify **Accessibility** is green",
         "Binary installs do not require Terminal scripts",
         "For downloaded app installs, use **Settings -> About -> Copy Diagnostic Info**",
@@ -586,47 +586,29 @@ REQUIRED_TEXT = {
         "./test/test-release-asset.sh",
     ],
     "docs/index.html": [
-        "<title>Command Docs</title>",
+        "<title>Command — Send anything to your AI</title>",
         "href=\"#content\">Skip to content</a>",
-        "<main id=\"content\" class=\"wrap\">",
+        "<main id=\"content\">",
         "install.html",
         "settings.html",
         "uninstall.html",
         "404.html",
-        "Quick Start",
-        "Find Your Path",
-        "Install or update",
-        "Configure prompts",
-        "Write prompt text",
-        "Use voice",
-        "Run background actions",
-        "Fix or report",
-        "guide.html#actions",
-        "quick-reference.html#variables",
-        "examples.html#background",
+        "Anything in. Anywhere out.",
+        "Compose once. Trigger your way.",
+        "Capture anything",
+        "Choose flow",
+        "Keep moving",
         "https://github.com/galbutnotgirl/command/releases/latest",
-        "latest GitHub Release",
-        "Most users do not need Terminal scripts",
-        "Accessibility is green",
         "updates.html",
         "limitations.html",
         "Alpha Limitations",
-        "Known alpha expectations for shortcuts, permissions, dictation, background actions, updates, and reporting.",
         "permissions.html",
         "troubleshooting.html",
-        "support details",
-        "Bug reports, feature requests, diagnostic info",
         "security.html",
         "Security Policy",
-        "Private reporting path",
         "Private Security Report",
-        "vulnerabilities, exposed secrets, private logs, or sensitive diagnostics",
         "icon-treatments.html",
-        ".zip.sha256",
-        "Binary installs do not require Terminal scripts",
         "Local development:",
-        "./script/build_and_run.sh --verify",
-        "Optional source fallback",
         "uninstall.html",
     ],
     "docs/404.html": [
@@ -661,7 +643,7 @@ REQUIRED_TEXT = {
         "Context Rules",
         "Clipboard History",
         "Command History",
-        "Dictate -> Claude",
+        "Dictate -> Assistant",
         "Privacy And Local Files",
         "~/.claude/state/cliphistory/",
         "mark-failed, retention, and parsed result",
@@ -684,7 +666,7 @@ REQUIRED_TEXT = {
     ],
     "docs/settings.html": [
         "<title>Command Settings Reference</title>",
-        "Default Claude destination",
+        "Default assistant",
         "Trigger rows",
         "Preview as",
         "Foreground",
@@ -715,7 +697,7 @@ REQUIRED_TEXT = {
         "GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics",
     ],
     "docs/SETTINGS_REFERENCE.md": [
-        "Default Claude destination",
+        "Default assistant",
         "Trigger rows",
         "Preview as",
         "Foreground",
@@ -746,9 +728,9 @@ REQUIRED_TEXT = {
         "GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics",
     ],
     "docs/STATUS.md": [
-        "80 Swift",
-        "48 Node",
-        "21 shell",
+        "100 Swift",
+        "56 Node",
+        "41 shell",
         "python3 ./test/test-docs.py",
         "compact solid-purple voice-lines",
         "compact active width",
@@ -879,7 +861,7 @@ REQUIRED_TEXT = {
     "docs/INSTALL.md": [
         "https://github.com/galbutnotgirl/command/releases/latest",
         "latest GitHub Release",
-        "Download the latest `Command-*.zip`",
+        "ClaudeCommand-1.2.0-alpha.6.zip",
         "Existing Alpha Installs",
         "Command was previously named ClaudeCommand",
         "local support paths stay compatible",
@@ -929,11 +911,10 @@ REQUIRED_TEXT = {
         "<title>Command Install Guide</title>",
         "https://github.com/galbutnotgirl/command/releases/latest",
         "latest GitHub Release",
-        "Download the latest <code>Command-*.zip</code>",
+        "ClaudeCommand-1.2.0-alpha.6.zip",
         "System Settings -> Privacy &amp; Security",
-        "matching <code>.zip.sha256</code>",
-        "same folder as the zip",
-        "shasum -a 256 -c Command-*.zip.sha256",
+        "Open Anyway",
+        "xattr -dr com.apple.quarantine ~/Applications/ClaudeCommand.app",
         "Existing Alpha Installs",
         "href=\"#existing-alpha\"",
         "<section id=\"existing-alpha\">",
@@ -1246,9 +1227,9 @@ REQUIRED_TEXT = {
         "How should I request a feature?",
         "https://github.com/galbutnotgirl/command/issues/new?template=feature_request.md",
         "workflow, trigger type, delivery mode, destination, auto-submit preference",
-        "Home, End, PgUp, and PgDn",
+        "Fresh defaults use F8/Option-F8",
         "Built-in Dictate shortcuts live in **Dictation Settings**",
-        "voice prompt triggers live in **Shortcuts**",
+        "voice prompt triggers live in **Shortcut Settings**",
         "Also check **Background Settings**",
         "Why did Claude - To-Do send text instead of the URL?",
         "Right-click Services prefer highlighted text",
@@ -1273,9 +1254,9 @@ REQUIRED_TEXT = {
         "Right-click Services prefer highlighted text",
         "Why do some local paths still say <code>claude-command</code>?",
         "bundle identifier stay stable on purpose",
-        "Home, End, PgUp, and PgDn",
+        "Fresh defaults use F8/Option-F8",
         "Built-in Dictate shortcuts live in <strong>Dictation Settings</strong>",
-        "voice prompt triggers live in <strong>Shortcuts</strong>",
+        "voice prompt triggers live in <strong>Shortcut Settings</strong>",
         "stop timing is tuned inside the app",
         "The stop sound means release was accepted",
     ],
@@ -1288,7 +1269,7 @@ REQUIRED_TEXT = {
         "Sends current tab URL from Safari, Chrome, Brave, Chromium, or Arc",
     ],
     "docs/changelog.html": [
-        "Dictate -> Claude",
+        "Dictate -> Assistant",
         "install, uninstall",
         "settings reference",
         "troubleshooting",
@@ -1324,7 +1305,7 @@ REQUIRED_TEXT = {
     ],
     "docs/QUICK_REFERENCE.md": [
         "Screenshot -> New chat + auto-submit",
-        "Dictate -> Claude",
+        "Dictate -> Assistant",
         "Dictation Settings",
         "Glossary",
         "A named prompt setup, with defaults and one or more triggers.",
@@ -1374,8 +1355,7 @@ REQUIRED_TEXT = {
     "docs/LIMITATIONS.md": [
         "Use this before trying or sharing an alpha build.",
         "New chat + auto-submit combinations are unbound by default",
-        "F5-F8 may conflict",
-        "Home, End, PgUp, and PgDn can be better dictation choices",
+        "F6/F7/F8 may control macOS features",
         "Quick Actions are optional source-install Services",
         "Compare raw text, processed text, and the sent command.",
         "Structured `KEY=value` output is displayed",
@@ -1387,8 +1367,7 @@ REQUIRED_TEXT = {
         "<title>Command Alpha Limitations</title>",
         "Alpha Expectations",
         "New chat + auto-submit combinations are unbound by default",
-        "F5-F8 may conflict",
-        "Home, End, PgUp, and PgDn can be better dictation choices",
+        "F6/F7/F8 may control macOS features",
         "Quick Actions are optional source-install Services",
         "Compare raw text, processed text, and the sent command.",
         "Structured <code>KEY=value</code> output is displayed",
@@ -1454,12 +1433,12 @@ REQUIRED_TEXT = {
         "Update channel:",
         "Update check:",
         "Update download asset:",
-        "Default Claude destination:",
+        "Default assistant:",
         "Quick Actions optional",
         "Restart Command",
         "Restart Command. If it still fails, reinstall from the Install Guide",
         "If macOS asks again after a rebuild, re-grant permissions for Command.",
-        "bind dictation to Home, End, PgUp, or PgDn in Dictation Settings",
+        "Function-key shortcuts don't fire? Enable standard function keys in macOS Keyboard settings, or rebind prompt and dictation shortcuts.",
         "Clipboard History is off. Enable it in Clipboard History settings if you want the picker.",
         "Red means a checked requirement is not met for that workflow",
         "claude-command.log (shortcut actions)",
@@ -1595,8 +1574,8 @@ REQUIRED_TEXT = {
         "Command owns hotkeys",
         "Command restarted with new config",
         "Command not running",
-        "comment|Claude - New|opt F8",
-        "shotcomment|Claude - Screenshot New|opt F7",
+        "comment|Command - New|F8",
+        "shotcomment|Command - Screenshot New|F7",
     ],
     "script/build_and_run.sh": [
         'APP_NAME="Command"',
@@ -1630,7 +1609,7 @@ REQUIRED_TEXT = {
         "Clipboard History errors",
         "Clipboard source attribution",
         "Background run logs",
-        "Default Claude destination:",
+        "Default assistant:",
         "Shortcut row enabled and bound in Settings:",
         "Another app or macOS already uses that shortcut:",
         "Action or built-in command name:",
@@ -1657,7 +1636,7 @@ REQUIRED_TEXT = {
         "Voice / dictation",
         "Command History / background action",
         "Delivery: Existing chat / New chat / Background",
-        "Destination: Default / Chat / Cowork / Code",
+        "Destination: Default / Claude Chat / Claude Cowork / Claude Code / ChatGPT / Codex",
         "Auto-submit:",
         "Current setting or workaround:",
         "Needs Settings UI",
@@ -2047,7 +2026,7 @@ FORBIDDEN_TEXT = {
         "Restart agent",
         "restart agent",
         "After a rebuild, re-grant permissions",
-        "If F6–F8 don't fire",
+        "If F5–F8 don't fire",
         "Agent socket missing",
         "Agent running",
         "Clipboard History watcher not running",
@@ -2161,7 +2140,7 @@ HTML_OG_DESCRIPTION = re.compile(r"""<meta\s+property=["']og:description["']\s+c
 HTML_TWITTER_TITLE = re.compile(r"""<meta\s+name=["']twitter:title["']\s+content=["']([^"']+)["']>""")
 HTML_TWITTER_DESCRIPTION = re.compile(r"""<meta\s+name=["']twitter:description["']\s+content=["']([^"']+)["']>""")
 HTML_MD_LINK = re.compile(r"""<a\s+href=["']([^"']+\.md(?:#[^"']*)?)["'][^>]*>(.*?)</a>""", re.IGNORECASE | re.DOTALL)
-GENERIC_RELEASE_URL = re.compile(r"https://github\.com/galbutnotgirl/command/releases(?!/latest)")
+GENERIC_RELEASE_URL = re.compile(r"https://github\.com/galbutnotgirl/command/releases(?!/(?:latest|download/))")
 RAW_URL = re.compile(r"https?://[^\s)>\\]]+")
 SITEMAP_LOC = re.compile(r"<loc>([^<]+)</loc>")
 PAGES_BASE_URL = "https://galbutnotgirl.github.io/command/"
@@ -2667,7 +2646,7 @@ def validate_docs_home_card_label_parity(failures: list[str]) -> None:
     for href, label in CORE_DOC_NAV_LABELS.items():
         if href == "index.html":
             continue
-        pattern = rf'<a class="card" href="{re.escape(href)}">\s*<strong>{re.escape(label)}</strong>'
+        pattern = rf'<a[^>]*href="{re.escape(href)}"[^>]*>\s*(?:<strong>)?{re.escape(label)}'
         if not re.search(pattern, home):
             failures.append(f"docs/index.html: docs home card label missing or mismatched: {href} -> {label}")
 

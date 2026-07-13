@@ -103,9 +103,10 @@ else
     print -- "[agent] ⚠ socket not up yet — check ~/.claude/logs/command-agent.err"
 fi
 
-# Ensure clipboard history is enabled — register(defaults:) is in-memory only and
-# won't persist across launches if the key is absent from the plist.
-defaults write com.claudecommand cliphistoryEnabled -bool true
+# Clipboard History is opt-in during onboarding. Never turn it on during install.
+if ! defaults read com.claudecommand cliphistoryEnabled >/dev/null 2>&1; then
+    defaults write com.claudecommand cliphistoryEnabled -bool false
+fi
 
 # Fresh install: clear persisted onboarding flag so setup flow triggers on first launch.
 # On update-installs (plist already existed) this is skipped — preserves user state.

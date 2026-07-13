@@ -30,6 +30,8 @@ const DEFAULT_IMAGE_TEMPLATE = [
 ].join('\n');
 
 const DEFAULT_SETTINGS = {
+  schemaVersion: 2,
+  defaultProvider: 'claude',
   // Name of the Claude Code skill (slash command) that should process
   // captures. The skill itself lives elsewhere; this app only invokes it.
   skill: '',
@@ -48,6 +50,20 @@ const DEFAULT_SETTINGS = {
     extraArgs: [],
     // Working directory for the CLI process. Empty -> home directory.
     cwd: '',
+  },
+  providers: {
+    claude: {
+      command: 'claude',
+      baseArgs: ['-p'],
+      extraArgs: [],
+      cwd: '',
+    },
+    codex: {
+      command: 'codex',
+      baseArgs: ['exec'],
+      extraArgs: ['--sandbox', 'read-only'],
+      cwd: '',
+    },
   },
   hotkeys: {
     text: 'CommandOrControl+Alt+T',
@@ -82,16 +98,33 @@ function mergeSettings(defaults, stored) {
       merged[key] = structuredClone(storedVal);
     }
   }
+  for (const key of Object.keys(stored)) {
+    if (!(key in merged)) merged[key] = structuredClone(stored[key]);
+  }
   return merged;
 }
 
 function loadSettings(baseDir) {
   try {
     const raw = fs.readFileSync(settingsPath(baseDir), 'utf8');
-    return mergeSettings(DEFAULT_SETTINGS, JSON.parse(raw));
+    const stored = JSON.parse(raw);
+    const merged = mergeSettings(DEFAULT_SETTINGS, stored);
+    // Schema v1 had one `cli` block. Treat it as Claude configuration while
+    // preserving that block for external callers still reading old settings.
+    if (!isPlainObject(stored.providers) && isPlainObject(stored.cli)) {
+      merged.providers.claude = mergeSettings(DEFAULT_SETTINGS.providers.claude, stored.cli);
+    }
+    return merged;
   } catch {
     return structuredClone(DEFAULT_SETTINGS);
   }
+}
+
+function settingsForProvider(settings, provider) {
+  const selected = provider === 'codex' ? 'codex' : 'claude';
+  const providers = isPlainObject(settings.providers) ? settings.providers : DEFAULT_SETTINGS.providers;
+  const cli = mergeSettings(DEFAULT_SETTINGS.providers[selected], providers[selected]);
+  return { ...settings, provider: selected, cli, workspace: cli.cwd || null };
 }
 
 function saveSettings(baseDir, settings) {
@@ -123,4 +156,5 @@ module.exports = {
   mergeSettings,
   resolveCwd,
   settingsPath,
+  settingsForProvider,
 };

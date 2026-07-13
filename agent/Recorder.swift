@@ -4,6 +4,7 @@
 import Cocoa
 import AVFoundation
 import FluidAudio
+import ClaudeCommandCore
 
 // ─── Mode ──────────────────────────────────────────────────────────────────────
 
@@ -45,8 +46,7 @@ final class Recorder: ObservableObject {
     private var streamTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
     private var bufferFeederTask: Task<Void, Never>?
-    private let quietStopTailNanoseconds: UInt64 = 250_000_000
-    private let activeStopTailNanoseconds: UInt64 = 850_000_000
+    private let stopTailPolicy = DEFAULT_DICTATION_STOP_TAIL_POLICY
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
 
@@ -244,7 +244,7 @@ final class Recorder: ObservableObject {
 
         let capturedStreamTask = streamTask
         streamTask = nil
-        let stopTailNanoseconds = audioLevel > 0.035 ? activeStopTailNanoseconds : quietStopTailNanoseconds
+        let stopTailNanoseconds = stopTailPolicy.tailNanoseconds(for: audioLevel)
         // Don't tear the tap/engine down synchronously here — that was the actual
         // source of dropped tail words, not the flush step below. People keep
         // talking through the last syllable as they release the key/hotkey;

@@ -1,9 +1,8 @@
 #!/bin/zsh
 # send-to-claude.sh (v3)
-# Grab the current selection (text OR image) + source context and hand it to the
-# Claude DESKTOP app. CLAUDE_DESTINATION picks which mode inside that one app —
-# chat, cowork, or code — via the claude:// URL scheme; all three are the same
-# process, so paste/auto-submit/focus-restore work identically for all of them.
+# Grab current selection (text OR image) + source context and hand it to selected
+# desktop assistant. Claude supports Chat/Cowork/Code through claude://. ChatGPT
+# supports ChatGPT general chat plus workspace-aware Codex through ChatGPT app.
 #
 # ACTIONs (each wired to a right-click Quick Action):
 #   go        Background-feel: open a NEW Claude Code session, auto-submit, then
@@ -42,10 +41,23 @@ AGENT_SOCK="${AGENT_SOCK:-${HOME}/.claude/state/command-agent.sock}"
 SOURCE_BUNDLE="${SOURCE_BUNDLE:-}"   # set by Command when a hotkey fires
 SOURCE_APP_NAME="${SOURCE_APP_NAME:-}"
 SKIP_SELECTION_CAPTURE="${SKIP_SELECTION_CAPTURE:-0}"   # tests only: jump straight to URL fallback
+COMMAND_PROVIDER="${COMMAND_PROVIDER:-claude}"
 CLAUDE_DESTINATION="${CLAUDE_DESTINATION:-code}"
+OPENAI_DESTINATION="${OPENAI_DESTINATION:-code}"
+CODEX_WORKSPACE="${CODEX_WORKSPACE:-${HOME}}"
+CODEX_WORKSPACE="${CODEX_WORKSPACE/#\~/$HOME}"
 BUILTIN_AUTO_SUBMIT="${BUILTIN_AUTO_SUBMIT:-}"
 CLAUDE_BUNDLE="com.anthropic.claudefordesktop"   # chat/cowork/code are all this one app
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null)}"
+CODEX_BUNDLE="com.openai.codex"
+CODEX_BIN="${CODEX_BIN:-$(command -v codex 2>/dev/null)}"
+[ -n "$CODEX_BIN" ] || [ ! -x /Applications/ChatGPT.app/Contents/Resources/codex ] || CODEX_BIN=/Applications/ChatGPT.app/Contents/Resources/codex
+if [ "$COMMAND_PROVIDER" = "codex" ]; then
+  TARGET_BUNDLE="$CODEX_BUNDLE"
+  [ "$OPENAI_DESTINATION" = "chat" ] && TARGET_LABEL="ChatGPT" || TARGET_LABEL="Codex"
+else
+  TARGET_BUNDLE="$CLAUDE_BUNDLE"; TARGET_LABEL="Claude"
+fi
 
 # All paths below are absolute (SCRIPT_DIR/STATE/HELPER via ${0:A}); nothing uses
 # the cwd. Move to / so Python's `-c` import scan (sys.path[0]=cwd) never hits a
@@ -57,7 +69,7 @@ BLOCK_BUNDLES=(com.apple.keychainaccess com.apple.SecurityAgent com.1password.1p
 
 mkdir -p "$(dirname "$DO_LOG")" 2>/dev/null
 log()    { print -r -- "$(date '+%Y-%m-%d %H:%M:%S') [s2c] $*" >> "$LOG_FILE" 2>/dev/null; }
-notify() { osascript -e "display notification \"$1\" with title \"${2:-Command}\"" 2>/dev/null; }
+notify() { [ "${COMMAND_TEST_SILENT:-0}" = "1" ] || osascript -e "display notification \"$1\" with title \"${2:-Command}\"" 2>/dev/null; }
 urlencode() { printf '%s' "$1" | /usr/bin/python3 -c 'import sys,urllib.parse; sys.stdout.write(urllib.parse.quote(sys.stdin.read()))'; }
 pb_cc()  { /usr/bin/python3 -c 'from AppKit import NSPasteboard; print(NSPasteboard.generalPasteboard().changeCount())' 2>/dev/null; }
 clipboard_has_image() {
@@ -90,15 +102,35 @@ except Exception:
 PY
 }
 helper_run()   { [ -d "$HELPER_APP" ] && open -gW "$HELPER_APP" --args "$@" 2>/dev/null; }
-helper_paste() { agent_cmd paste  >/dev/null 2>&1 || helper_run paste; }
-helper_return(){ agent_cmd return >/dev/null 2>&1 || helper_run return; }
+helper_paste() {
+  # New Claude and unified ChatGPT can create an Electron window without making
+  # it AX-frontmost. Post directly to target process so paste cannot land in
+  # whichever app macOS still reports as active.
+  [ "$(agent_cmd "pasteapp $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]
+}
+helper_return(){ [ "$(agent_cmd "returnapp $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]; }
+helper_newtask(){ [ "$(agent_cmd "newtask $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]; }
+helper_newchat(){ [ "$(agent_cmd "newchat $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]; }
 helper_copy()  {
   local t
   if t="$(agent_cmd copy)"; then print -r -- "$t"; return; fi
   local out; out="$(mktemp -t s2c_copy)"; rm -f "$out"; helper_run copy "$out"; [ -f "$out" ] && { cat "$out"; rm -f "$out"; }
 }
 helper_activate(){ [ -n "$1" ] && { agent_cmd "activate $1" >/dev/null 2>&1 || open -b "$1" 2>/dev/null; }; }   # focus restore
-wait_for_claude(){ [ -z "$CLAUDE_BUNDLE" ] && return 1; local i=0; while (( i < 25 )); do [ "$(front_bundle)" = "$CLAUDE_BUNDLE" ] && return 0; sleep 0.2; (( i++ )); done; return 1; }
+wait_for_assistant(){ [ -z "$TARGET_BUNDLE" ] && return 1; local i=0; while (( i < 25 )); do [ "$(front_bundle)" = "$TARGET_BUNDLE" ] && return 0; sleep 0.2; (( i++ )); done; return 1; }
+wait_for_editor(){ local i=0; while (( i < 30 )); do [ "$(agent_cmd editable 2>/dev/null)" = "ok" ] && return 0; sleep 0.1; (( i++ )); done; return 1; }
+provider_app_installed() {
+  [ "${COMMAND_TEST_ASSUME_APP:-0}" = "1" ] && return 0
+  /usr/bin/python3 - "$TARGET_BUNDLE" <<'PY' >/dev/null 2>&1
+import sys
+from AppKit import NSWorkspace
+sys.exit(0 if NSWorkspace.sharedWorkspace().URLForApplicationWithBundleIdentifier_(sys.argv[1]) else 1)
+PY
+}
+ensure_provider_app() {
+  [ "$DRY_RUN" = "1" ] && return 0
+  provider_app_installed || { notify "$TARGET_LABEL app not found. Open Set Up in Command."; return 1; }
+}
 
 # Write $1 to the clipboard and, in the SAME process, stamp last_copy.json with the
 # exact resulting changeCount (not just a timestamp) — clipwatch matches on that value,
@@ -162,7 +194,7 @@ case "$ACTION" in
     SHOT=1
     # shothandoff never touches the Claude window — skip the hide/restore dance.
     if [ "$DRY_RUN" != "1" ] && [ "$ACTION" != "shothandoff" ]; then
-      agent_cmd "hide $CLAUDE_BUNDLE" >/dev/null 2>&1 && sleep 0.15   # let the window clear
+      agent_cmd "hide $TARGET_BUNDLE" >/dev/null 2>&1 && sleep 0.15   # let the window clear
     fi
     CC0="$(pb_cc)"
     if [ "$DRY_RUN" != "1" ]; then
@@ -174,7 +206,7 @@ case "$ACTION" in
     CC1="$(pb_cc)"
     if [ "$DRY_RUN" != "1" ] && { [ "$CC1" = "$CC0" ] || ! clipboard_has_image; }; then
       log "screenshot cancelled / no image"
-      [ "$ACTION" = "shothandoff" ] || agent_cmd "activate $CLAUDE_BUNDLE" >/dev/null 2>&1   # bring Claude back
+      [ "$ACTION" = "shothandoff" ] || agent_cmd "activate $TARGET_BUNDLE" >/dev/null 2>&1
       exit 0
     fi
     IMG=1
@@ -318,16 +350,83 @@ ADD_RAW="$(read_template add)"
 
 open_new() {  # $1 = q text (may be empty)
   local q="$1"
-  if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN open: dest=$CLAUDE_DESTINATION chars=${#q}"; return 0; fi
-  local path
+  if [ "$DRY_RUN" = "1" ]; then
+    local dest="$CLAUDE_DESTINATION"; [ "$COMMAND_PROVIDER" = "codex" ] && dest="$OPENAI_DESTINATION"
+    local route=""
+    if [ "$COMMAND_PROVIDER" = "codex" ]; then
+      if [ "$OPENAI_DESTINATION" = "chat" ]; then
+        route="native-new-session"
+      else
+        route="codex://threads/new?path=$(urlencode "$CODEX_WORKSPACE")"
+      fi
+    elif [ "$CLAUDE_DESTINATION" = "cowork" ]; then
+      route="claude://cowork/new"
+    elif [ "$CLAUDE_DESTINATION" = "code" ]; then
+      route="claude://code/new"
+    elif [ "$CLAUDE_DESTINATION" = "recent" ]; then
+      route="native-new-session"
+    else
+      route="claude://claude.ai/new"
+    fi
+    print -r -- "DRY_RUN open: provider=$COMMAND_PROVIDER dest=$dest workspace=$CODEX_WORKSPACE route=$route chars=${#q}"; return 0
+  fi
+  ensure_provider_app || return 1
+  if [ "$COMMAND_PROVIDER" = "codex" ]; then
+    if [ "$OPENAI_DESTINATION" = "chat" ]; then
+      helper_activate "$TARGET_BUNDLE" || return 1
+      sleep 0.2
+      helper_newchat || { notify "Command could not open a new ChatGPT chat. Restart Command and try again."; return 1; }
+      sleep 0.45
+      if [ "${IMG:-0}" = "1" ]; then
+        CODEX_PENDING_PROMPT="$q"
+      else
+        copy_for_send "$q" "$COPY_SOURCE"
+        helper_paste || return 1
+      fi
+      return 0
+    fi
+    local link="codex://threads/new"
+    [ -d "$CODEX_WORKSPACE" ] || { notify "Codex workspace not found: $CODEX_WORKSPACE"; return 1; }
+    /usr/bin/git -C "$CODEX_WORKSPACE" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+      || { notify "Codex workspace is not a Git repository: $CODEX_WORKSPACE"; return 1; }
+    link="${link}?path=$(urlencode "$CODEX_WORKSPACE")"
+    /usr/bin/open -b "$TARGET_BUNDLE" "$link" 2>/dev/null || { notify "Could not open $TARGET_LABEL."; return 1; }
+    sleep 0.25
+    if [ "${IMG:-0}" = "1" ]; then
+      CODEX_PENDING_PROMPT="$q"
+    else
+      copy_for_send "$q" "$COPY_SOURCE"; helper_paste || return 1
+    fi
+    return 0
+  fi
+  if [ "$CLAUDE_DESTINATION" = "recent" ]; then
+    helper_activate "$TARGET_BUNDLE" || return 1
+    sleep 0.2
+    helper_newtask || { notify "Command could not open a new Claude session. Restart Command and try again."; return 1; }
+    sleep 0.45
+    copy_for_send "$q" "$COPY_SOURCE"
+    helper_paste
+    return $?
+  fi
+  local routePath
   case "$CLAUDE_DESTINATION" in
-    chat)   path="claude.ai/new" ;;
-    cowork) path="cowork/new" ;;
-    *)      path="code/new" ;;
+    chat)   routePath="claude.ai/new" ;;
+    cowork) routePath="cowork/new" ;;
+    *)      routePath="code/new" ;;
   esac
-  local link="claude://${path}?q=$(urlencode "$q")"
+  local link="claude://${routePath}?q=$(urlencode "$q")"
   log "open new session dest=$CLAUDE_DESTINATION chars=${#link}"
-  open "$link" 2>/dev/null
+  /usr/bin/open -b "$TARGET_BUNDLE" "$link" 2>/dev/null || return 1
+  sleep 0.45
+}
+
+paste_codex_pending() {
+  [ "$COMMAND_PROVIDER" = "codex" ] || return 0
+  [ -n "${CODEX_PENDING_PROMPT:-}" ] || return 0
+  sleep 0.2
+  copy_for_send "$CODEX_PENDING_PROMPT" "$COPY_SOURCE"
+  helper_paste || return 1
+  CODEX_PENDING_PROMPT=""
 }
 
 builtin_should_submit() {
@@ -341,10 +440,11 @@ builtin_should_submit() {
 # --- 3. dispatch -------------------------------------------------------------
 case "$ACTION" in
   go)
+    ensure_provider_app || exit 1
     PRIOR="$BUNDLE_ID"
     SHOULD_SUBMIT=0; builtin_should_submit && SHOULD_SUBMIT=1
     GO_Q="$(expand_template "$GO_RAW" "$([ "$IMG" = "1" ] && echo "(image attached below)" || printf '%s' "$SEL")")"
-    open_new "$GO_Q" || { notify "Could not open Claude."; exit 1; }
+    open_new "$GO_Q" || { notify "Could not open $TARGET_LABEL."; exit 1; }
     if [ "$DRY_RUN" = "1" ]; then
       [ "$IMG" = "1" ] && print -r -- "DRY_RUN would paste image"
       if [ "$SHOULD_SUBMIT" = "1" ]; then
@@ -354,14 +454,14 @@ case "$ACTION" in
       fi
       exit 0
     fi
-    wait_for_claude || log "WARN Claude not frontmost"
+    wait_for_assistant || log "WARN $TARGET_LABEL not frontmost"
     sleep 0.8   # let input field populate + focus before follow-up action
-    [ "$IMG" = "1" ] && { helper_paste; sleep 0.4; }
+    [ "$IMG" = "1" ] && { helper_paste || exit 1; paste_codex_pending || exit 1; sleep 0.4; }
     if [ "$SHOULD_SUBMIT" = "1" ]; then
       helper_return
       sleep 0.25
       case "$PRIOR" in
-        ""|"$CLAUDE_BUNDLE"|com.claudecommand.*) log "submitted (prior=${PRIOR:-none}; no restore)" ;;
+        ""|"$TARGET_BUNDLE"|com.claudecommand.*) log "submitted (prior=${PRIOR:-none}; no restore)" ;;
         *) helper_activate "$PRIOR"; log "submitted + restored focus to $PRIOR" ;;
       esac
     else
@@ -370,37 +470,45 @@ case "$ACTION" in
     ;;
 
   comment)
+    ensure_provider_app || exit 1
     SHOULD_SUBMIT=0; builtin_should_submit && SHOULD_SUBMIT=1
     if [ "$IMG" = "1" ]; then
-      open_new "$(expand_template "$COMMENT_RAW" "")" || { notify "Could not open Claude."; exit 1; }
+      open_new "$(expand_template "$COMMENT_RAW" "")" || { notify "Could not open $TARGET_LABEL."; exit 1; }
       [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste image into new session"; exit 0; }
-      wait_for_claude || log "WARN not frontmost"; sleep 0.3; helper_paste
+      wait_for_assistant || log "WARN not frontmost"; sleep 0.3; helper_paste || exit 1; paste_codex_pending || exit 1
       [ "$SHOULD_SUBMIT" = "1" ] && { sleep 0.1; helper_return; }
     else
-      open_new "$(expand_template "$COMMENT_RAW" "$SEL")"$'\n\n'
+      open_new "$(expand_template "$COMMENT_RAW" "$SEL")"$'\n\n' \
+        || { notify "Could not open $TARGET_LABEL."; exit 1; }
       if [ "$SHOULD_SUBMIT" = "1" ] && [ "$DRY_RUN" != "1" ]; then
-        wait_for_claude || log "WARN not frontmost"; sleep 0.3; helper_return
+        wait_for_assistant || log "WARN not frontmost"; sleep 0.3; helper_return
       fi
     fi
     ;;
 
   add)
+    ensure_provider_app || exit 1
     SHOULD_SUBMIT=0; builtin_should_submit && SHOULD_SUBMIT=1
     if [ "$IMG" = "1" ]; then
-      [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would activate Claude + paste image into open chat"; exit 0; }
-      helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
+      [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would activate $TARGET_LABEL + paste image into open chat"; exit 0; }
+      helper_activate "$TARGET_BUNDLE" || { notify "Could not activate $TARGET_LABEL."; exit 1; }
+      wait_for_assistant || { notify "$TARGET_LABEL did not become ready."; exit 1; }
+      sleep 0.3; helper_paste || exit 1
       [ "$SHOULD_SUBMIT" = "1" ] && { sleep 0.1; helper_return; }
     else
       PAYLOAD="$(expand_template "$ADD_RAW" "$SEL")"
-      if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN would copy payload + paste into open Claude chat"; exit 0; fi
+      if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN would copy payload + paste into open $TARGET_LABEL session"; exit 0; fi
       copy_for_send "$PAYLOAD" "$COPY_SOURCE"
-      helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
+      helper_activate "$TARGET_BUNDLE" || { notify "Could not activate $TARGET_LABEL."; exit 1; }
+      wait_for_assistant || { notify "$TARGET_LABEL did not become ready."; exit 1; }
+      sleep 0.3; helper_paste || exit 1
       [ "$SHOULD_SUBMIT" = "1" ] && { sleep 0.1; helper_return; }
     fi
-    log "pasted into open Claude chat"
+    log "pasted into open $TARGET_LABEL session"
     ;;
 
   custom)
+    ensure_provider_app || exit 1
     TMPL="${CUSTOM_PROMPT:-}"
     # If template uses {selection}/{text} placeholder — substitute it.
     # If template has no placeholder — auto-append the selection below the prompt
@@ -421,33 +529,37 @@ case "$ACTION" in
     fi
     log "custom: session=${CUSTOM_SESSION:-new} submit=${CUSTOM_SUBMIT:-} src=${CUSTOM_INCLUDE_SOURCE:-1} img=$IMG sel_bytes=${#SEL}"
     if [ "${CUSTOM_SESSION:-new}" = "add" ]; then
-      # Paste into existing open Claude Code chat
+      # Paste into existing task for selected foreground destination.
       if [ "$IMG" = "1" ]; then
-        [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste image+prompt into open Claude"; exit 0; }
+        [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste image+prompt into open $TARGET_LABEL"; exit 0; }
         # Image is still on the clipboard from the screenshot pre-step — paste it FIRST,
         # then overwrite the clipboard with the text prompt. Reversing this order (text
         # first) clobbers the image before it's ever pasted — the old bug here.
-        helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
+        helper_activate "$TARGET_BUNDLE" || { notify "Could not activate $TARGET_LABEL."; exit 1; }
+        wait_for_assistant || { notify "$TARGET_LABEL did not become ready."; exit 1; }
+        sleep 0.3; helper_paste || exit 1
         sleep 0.3
         copy_for_send "${PREFIX}${PAYLOAD}" "$COPY_SOURCE"
-        helper_paste
+        helper_paste || exit 1
       else
-        [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste into existing Claude"; exit 0; }
+        [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste into existing $TARGET_LABEL"; exit 0; }
         copy_for_send "${PREFIX}${PAYLOAD}" "$COPY_SOURCE"
-        helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.5; helper_paste
+        helper_activate "$TARGET_BUNDLE" || { notify "Could not activate $TARGET_LABEL."; exit 1; }
+        wait_for_assistant || { notify "$TARGET_LABEL did not become ready."; exit 1; }
+        sleep 0.5; helper_paste || exit 1
       fi
-      if [ "${CUSTOM_SUBMIT:-}" = "go" ]; then sleep 0.3; agent_cmd return >/dev/null 2>&1 || true; fi
+      if [ "${CUSTOM_SUBMIT:-}" = "go" ]; then sleep 0.3; helper_return || true; fi
     else
-      # Open new Claude session
+      # Open new task for selected foreground destination.
       if [ "$IMG" = "1" ]; then
-        open_new "${PREFIX}${PAYLOAD}" || { notify "Could not open Claude."; exit 1; }
+        open_new "${PREFIX}${PAYLOAD}" || { notify "Could not open $TARGET_LABEL."; exit 1; }
         [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste screenshot into custom prompt"; exit 0; }
-        wait_for_claude || log "WARN not frontmost"; sleep 0.3; helper_paste
-        if [ "${CUSTOM_SUBMIT:-}" = "go" ]; then sleep 0.1; agent_cmd return >/dev/null 2>&1 || true; fi
+        wait_for_assistant || log "WARN not frontmost"; sleep 0.3; helper_paste || exit 1; paste_codex_pending || exit 1
+        if [ "${CUSTOM_SUBMIT:-}" = "go" ]; then sleep 0.1; helper_return || true; fi
       else
-        open_new "${PREFIX}${PAYLOAD}"
+        open_new "${PREFIX}${PAYLOAD}" || { notify "Could not open $TARGET_LABEL."; exit 1; }
         if [ "${CUSTOM_SUBMIT:-}" = "go" ]; then
-          wait_for_claude || log "WARN not frontmost"; sleep 0.3; agent_cmd return >/dev/null 2>&1 || true
+          wait_for_assistant || log "WARN not frontmost"; sleep 0.3; helper_return || true
         fi
       fi
     fi

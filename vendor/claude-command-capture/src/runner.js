@@ -8,10 +8,24 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { resolveCwd } = require('./settings');
 
-function buildArgs(cli) {
+function buildArgs(cli, { provider = 'claude', attachments = [] } = {}) {
   const base = Array.isArray(cli.baseArgs) ? cli.baseArgs : ['-p'];
   const extra = Array.isArray(cli.extraArgs) ? cli.extraArgs : [];
+  if (provider === 'codex') {
+    const imageArgs = attachments.flatMap((file) => ['-i', file]);
+    return [...base, ...extra, ...imageArgs, '-'];
+  }
   return [...base, ...extra];
+}
+
+function redactArgs(args) {
+  const sensitive = /token|secret|password|api[-_]?key|authorization|header/i;
+  return args.map((arg, index) => {
+    const previous = index > 0 ? args[index - 1] : '';
+    if (String(previous).startsWith('-') && sensitive.test(previous)) return '[REDACTED]';
+    if (sensitive.test(arg) && String(arg).includes('=')) return `${String(arg).split('=')[0]}=[REDACTED]`;
+    return arg;
+  });
 }
 
 // Convention for a structured result, with no per-call configuration needed:
@@ -35,7 +49,7 @@ function extractResult(stdout) {
 
 // Returns a promise resolving to { exitCode, error, result }. Never rejects —
 // the caller decides how to surface failures (notification + submission record).
-function runCli({ cli, prompt, logFile }) {
+function runCli({ cli, prompt, logFile, provider = 'claude', attachments = [] }) {
   return new Promise((resolve) => {
     let logStream = null;
     let logOpen = false;
@@ -59,11 +73,12 @@ function runCli({ cli, prompt, logFile }) {
       }
     };
 
-    log(`[claude-command] ${new Date().toISOString()} running: ${cli.command} ${buildArgs(cli).join(' ')}\n`);
+    const args = buildArgs(cli, { provider, attachments });
+    log(`[claude-command] ${new Date().toISOString()} provider=${provider} running: ${cli.command} ${redactArgs(args).join(' ')}\n`);
 
     let child;
     try {
-      child = spawn(cli.command, buildArgs(cli), {
+      child = spawn(cli.command, args, {
         cwd: resolveCwd(cli.cwd),
         env: process.env,
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -109,4 +124,4 @@ function runCli({ cli, prompt, logFile }) {
   });
 }
 
-module.exports = { runCli, buildArgs, extractResult };
+module.exports = { runCli, buildArgs, extractResult, redactArgs };

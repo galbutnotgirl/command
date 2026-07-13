@@ -50,7 +50,7 @@ if print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/docs/STATU
   fail "zip contains internal docs/STATUS.md"
 fi
 
-for required_doc in 404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html icon-treatments.html background.html release.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md ICON_TREATMENTS.md BACKGROUND_TRIGGER_INTEGRATION.md RELEASE_CHECKLIST.md icon-treatment-bold-animated.svg icon-treatment-options-animated.svg icon-treatment-options.svg; do
+for required_doc in 404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html icon-treatments.html background.html release.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md ICON_TREATMENTS.md BACKGROUND_TRIGGER_INTEGRATION.md RELEASE_CHECKLIST.md icon-treatment-bold-animated.svg icon-treatment-green-voice.svg icon-treatment-options-animated.svg icon-treatment-options.svg; do
   print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/docs/${required_doc}" \
     || fail "missing bundled docs asset: docs/${required_doc}"
   if [ -f "${DIR}/docs/${required_doc}" ]; then
@@ -175,6 +175,8 @@ unzip -p "$ZIP" Command.app/Contents/Resources/docs/faq.html 2>/dev/null | grep 
   || fail "bundled docs/faq.html still has stale Add/New/Go preview wording"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/install.html 2>/dev/null | grep -q 'id="existing-alpha"' \
   || fail "bundled docs/install.html missing existing-alpha migration anchor"
+unzip -p "$ZIP" Command.app/Contents/Resources/docs/install.html 2>/dev/null | grep -Eqi "move .*Applications" \
+  || fail "bundled docs/install.html missing automatic relocation guidance"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/install.html 2>/dev/null | grep -q "For local development, use" \
   || fail "bundled docs/install.html missing neutral local-development wording"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/install.html 2>/dev/null | grep -qv "For local Codex development" \
@@ -187,7 +189,7 @@ unzip -p "$ZIP" Command.app/Contents/Resources/docs/settings.html 2>/dev/null | 
   || fail "bundled docs/settings.html missing Command export filename"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/release.html 2>/dev/null | grep -q "Feature request" \
   || fail "bundled docs/release.html missing Feature request repo-surface check"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/index.html 2>/dev/null | grep -q "auto-submit behavior" \
+unzip -p "$ZIP" Command.app/Contents/Resources/docs/index.html 2>/dev/null | grep -Eqi "auto-submit (behavior|when)" \
   || fail "bundled docs/index.html missing auto-submit FAQ wording"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/index.html 2>/dev/null | grep -qv "Go behavior" \
   || fail "bundled docs/index.html still has stale Go behavior wording"

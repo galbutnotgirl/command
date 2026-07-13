@@ -1,5 +1,18 @@
 # Command Changelog
 
+## 1.2.0-alpha.8
+
+- Added first-class Claude and ChatGPT / Codex provider selection globally, per Custom Action, and per trigger.
+- Added ChatGPT destination parity: ChatGPT general chat and workspace-aware Codex, with global, action, and trigger inheritance.
+- Preserved legacy `codex` provider keys while adopting current ChatGPT app and Codex coding-product names.
+- Routed ChatGPT through the unified app's Quick Chat command and Codex through a workspace-aware `codex://threads/new` deep link.
+- Targeted paste and submit keystrokes to the assistant process, fixing delivery when Electron creates a background window without becoming AX-frontmost.
+- Fixed Claude Chat/Cowork/Code routing after a zsh-local variable accidentally replaced the worker's executable search path.
+- Fixed foreground failures that previously logged success when Codex workspace validation or new-task creation failed.
+- Added Codex foreground existing/new-task delivery, configured workspace, screenshots, clipboard sends, dictation, popup, voice, and auto-submit paths.
+- Added provider-specific background settings and `codex exec -` delivery with image attachments, safe execution presets, provider-tagged history, retry, diagnostics, and schema-v2 migration.
+- Existing installations and provider-less records remain Claude by default; bundle ID and local support paths stay unchanged.
+
 ## 1.2.0-alpha.6
 
 Current alpha line. Major changes:
@@ -23,15 +36,15 @@ Current alpha line. Major changes:
 
 | Built-in combination | Default |
 |---|---:|
-| Selected text -> Existing chat | F8 |
-| Selected text -> New chat | Option-F8 |
+| Selected text -> Existing chat | Option-F8 |
+| Selected text -> New chat | F8 |
 | Selected text -> New chat + auto-submit | Unbound |
-| Screenshot -> Existing chat | F7 |
-| Screenshot -> New chat | Option-F7 |
+| Screenshot -> Existing chat | Option-F7 |
+| Screenshot -> New chat | F7 |
 | Screenshot -> New chat + auto-submit | Unbound |
 | Clipboard History | F6 |
-| Dictate -> Insert | F5 |
-| Dictate -> Claude | Option-F5 |
+| Dictate -> Insert | Home |
+| Dictate -> Assistant | Option-Home |
 
 ## Alpha Notes
 

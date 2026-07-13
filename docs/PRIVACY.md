@@ -1,13 +1,13 @@
 # Command Privacy
 
-Command stores settings and history on this Mac. Clipboard and dictation history do not leave through Command; background actions use your local Claude CLI setup.
+Command stores settings and history on this Mac. Clipboard and dictation history do not leave through Command; background actions use selected local Claude or Codex CLI setup.
 
 ## Short Version
 
 - Settings, shortcuts, history, vocabulary, and logs are local files.
 - Clipboard History skips known password apps and secret-looking copies.
 - Dictation runs on-device and stores history, corrections, and vocabulary locally.
-- Background actions call local `claude -p`; access depends on your Claude CLI setup, allowed tools, and prompt.
+- Background actions call local `claude -p` or `codex exec -`; access depends on provider CLI, sandbox, allowed tools, and prompt.
 
 ## Local File Locations
 
@@ -27,7 +27,7 @@ Command stores settings and history on this Mac. Clipboard and dictation history
 
 ## Background Actions
 
-Background delivery sends rendered prompts to local `claude -p`. Command does not decide what Claude CLI can access. Network access, file access, MCP/tool use, and account behavior depend on Claude CLI configuration and allowed tools.
+Background delivery sends rendered prompts to selected local CLI. Command defaults Codex to read-only, but network access, file access, MCP/tool use, and account behavior ultimately depend on Claude/Codex configuration and chosen execution settings.
 
 Review background prompts and CLI extra args before enabling a shortcut or sharing an export.
 

@@ -36,6 +36,27 @@ assert_status() {  # $1 = label, $2 = actual status, $3 = expected status
   fi
 }
 
+assert_contains() {  # $1 = label, $2 = actual, $3 = expected substring
+  if [[ "$2" == *"$3"* ]]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    print -r -- "FAIL: $1"
+    print -r -- "  missing: $3"
+    print -r -- "  actual:  $2"
+  fi
+}
+
+assert_not_contains() {  # $1 = label, $2 = actual, $3 = forbidden substring
+  if [[ "$2" != *"$3"* ]]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    print -r -- "FAIL: $1"
+    print -r -- "  unexpected: $3"
+  fi
+}
+
 # ---- expand_template ---------------------------------------------------------
 # expand_template reads CONTEXT_LINE / URL / SOURCE_LINE from the caller's
 # scope (see send-to-claude-lib.sh's header comment) — set them per case.
@@ -160,6 +181,70 @@ assert_eq "legacy To-Do Quick Action aliases to background handoff with URL fall
   "$TODO_URL_OUTPUT" \
   "DRY_RUN handoff src=url img=0 sel_bytes=31"
 
+CLAUDE_DRY_OUTPUT="$(ACTION=go DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=claude zsh "$SEND_SCRIPT" 2>/dev/null)"
+assert_contains "Claude foreground dry run keeps Claude provider" "$CLAUDE_DRY_OUTPUT" \
+  "DRY_RUN open: provider=claude dest=code"
+
+CODEX_DRY_OUTPUT="$(ACTION=go DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=codex CODEX_WORKSPACE='/tmp/project space' zsh "$SEND_SCRIPT" 2>/dev/null)"
+assert_contains "Codex foreground dry run preserves workspace with spaces" "$CODEX_DRY_OUTPUT" \
+  "provider=codex dest=code workspace=/tmp/project space"
+assert_contains "Codex new session uses explicit workspace deep link" "$CODEX_DRY_OUTPUT" \
+  "route=codex://threads/new?path=/tmp/project%20space"
+
+CHATGPT_DRY_OUTPUT="$(ACTION=go DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=codex OPENAI_DESTINATION=chat CODEX_WORKSPACE='/tmp/project space' zsh "$SEND_SCRIPT" 2>/dev/null)"
+assert_contains "ChatGPT foreground dry run selects general chat without changing provider key" "$CHATGPT_DRY_OUTPUT" \
+  "provider=codex dest=chat workspace=/tmp/project space"
+assert_contains "ChatGPT new session uses native app command, not Codex deep link" "$CHATGPT_DRY_OUTPUT" \
+  "route=native-new-session chars="
+
+CLAUDE_COWORK_DRY_OUTPUT="$(ACTION=comment DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=claude CLAUDE_DESTINATION=cowork zsh "$SEND_SCRIPT" 2>/dev/null)"
+assert_contains "Claude Cowork uses installed app deep link contract" "$CLAUDE_COWORK_DRY_OUTPUT" \
+  "route=claude://cowork/new"
+
+CLAUDE_CODE_DRY_OUTPUT="$(ACTION=comment DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=claude CLAUDE_DESTINATION=code zsh "$SEND_SCRIPT" 2>/dev/null)"
+assert_contains "Claude Code uses installed app deep link contract" "$CLAUDE_CODE_DRY_OUTPUT" \
+  "route=claude://code/new"
+assert_not_contains "Claude route variable never shadows zsh PATH array" "$(sed -n '/open_new()/,/paste_codex_pending()/p' "$SEND_SCRIPT")" \
+  'local path'
+
+SEND_SOURCE="$(cat "$SEND_SCRIPT")"
+AGENT_SOURCE="$(cat "${DIR}/agent/main.swift")"
+assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
+  'helper_newchat ||'
+assert_contains "Quick Chat uses installed app Command-Option-N shortcut" "$AGENT_SOURCE" \
+  'posted = postKey(45, cmd: true, opt: isChat, to: parts[1])'
+assert_contains "Native session commands target assistant process directly" "$AGENT_SOURCE" \
+  'd.postToPid(app.processIdentifier)'
+assert_contains "paste targets assistant process when Electron window stays backgrounded" "$SEND_SOURCE" \
+  'agent_cmd "pasteapp $TARGET_BUNDLE"'
+assert_contains "submit targets assistant process when Electron window stays backgrounded" "$SEND_SOURCE" \
+  'agent_cmd "returnapp $TARGET_BUNDLE"'
+assert_not_contains "paste fallback no longer rejects non-settable AXValue" "$SEND_SOURCE" \
+  'input field is not ready. Open a session and try again.'
+
+INSTALL_SOURCE="$(cat "${DIR}/install-agent.sh")"
+assert_contains "fresh install keeps Clipboard History opt-in" "$INSTALL_SOURCE" \
+  'defaults write com.claudecommand cliphistoryEnabled -bool false'
+
+DOCTOR_SOURCE="$(cat "${DIR}/doctor.sh")"
+assert_contains "doctor accepts built-in shortcuts without override file" "$DOCTOR_SOURCE" \
+  'built-in default shortcuts active (no override file)'
+assert_not_contains "doctor no longer reports missing override file as failure" "$DOCTOR_SOURCE" \
+  'fail "no hotkey config"'
+
+ACTION=comment CAPTURED_TEXT=x COMMAND_PROVIDER=codex OPENAI_DESTINATION=code \
+  CODEX_WORKSPACE='/private/tmp/command-definitely-missing-workspace' \
+  COMMAND_TEST_ASSUME_APP=1 COMMAND_TEST_SILENT=1 zsh "$SEND_SCRIPT" >/dev/null 2>&1
+MISSING_WORKSPACE_STATUS=$?
+assert_status "Codex missing workspace fails instead of logging success" "$MISSING_WORKSPACE_STATUS" "1"
+
+TMP_NON_GIT_WORKSPACE="$(mktemp -d)"
+ACTION=comment CAPTURED_TEXT=x COMMAND_PROVIDER=codex OPENAI_DESTINATION=code \
+  CODEX_WORKSPACE="$TMP_NON_GIT_WORKSPACE" \
+  COMMAND_TEST_ASSUME_APP=1 COMMAND_TEST_SILENT=1 zsh "$SEND_SCRIPT" >/dev/null 2>&1
+NON_GIT_WORKSPACE_STATUS=$?
+assert_status "Codex non-Git workspace fails instead of logging success" "$NON_GIT_WORKSPACE_STATUS" "1"
+
 # ---- capture-handoff.sh compatibility path ---------------------------------
 # ClaudeCommand's native background actions use submit-cli.js --retry-prompt
 # directly, but capture-handoff.sh remains as a compatibility entry point for
@@ -169,12 +254,15 @@ CAPTURE_SCRIPT="${DIR}/capture-handoff.sh"
 TMP_CAPTURE_BASE="$(mktemp -d)"
 TMP_MISSING_CORE="$(mktemp -d)"
 TMP_FAKE_CORE="$(mktemp -d)"
-trap 'rm -f "$RULES_FILE"; rm -rf "$TMP_CAPTURE_BASE" "$TMP_MISSING_CORE" "$TMP_FAKE_CORE"' EXIT
+trap 'rm -f "$RULES_FILE"; rm -rf "$TMP_NON_GIT_WORKSPACE" "$TMP_CAPTURE_BASE" "$TMP_MISSING_CORE" "$TMP_FAKE_CORE"' EXIT
 
+set +e
 CLAUDE_CAPTURE_CORE="$TMP_MISSING_CORE" \
 CLAUDE_CAPTURE_HOME="$TMP_CAPTURE_BASE" \
 zsh "$CAPTURE_SCRIPT" >/dev/null 2>/dev/null <<<"hello"
-assert_status "capture-handoff missing core exits with failure" "$?" "1"
+MISSING_CAPTURE_STATUS="$?"
+set -e
+assert_status "capture-handoff missing core exits with failure" "$MISSING_CAPTURE_STATUS" "1"
 
 mkdir -p "$TMP_FAKE_CORE/bin"
 cat > "$TMP_FAKE_CORE/bin/submit-cli.js" <<'JS'

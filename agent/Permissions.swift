@@ -7,6 +7,7 @@ import Cocoa
 import ApplicationServices
 import CoreGraphics
 import AVFoundation
+import ClaudeCommandCore
 
 enum CheckState: Equatable { case ok, missing, unknown }
 
@@ -240,6 +241,27 @@ func micPermissionDenied() -> Bool {
     return s == .denied || s == .restricted
 }
 
+private func providerExecutable(_ provider: AIProvider) -> String? {
+    let candidates: [String]
+    switch provider {
+    case .claude:
+        candidates = ["/opt/homebrew/bin/claude", "\(NSHomeDirectory())/.claude/local/claude", "/usr/local/bin/claude"]
+    case .codex:
+        candidates = ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/Applications/ChatGPT.app/Contents/Resources/codex"]
+    }
+    return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+}
+
+private func providerAppInstalled(_ provider: AIProvider) -> Bool {
+    NSWorkspace.shared.urlForApplication(withBundleIdentifier: provider.appBundleIdentifier) != nil
+}
+
+private func providerCLIState(_ provider: AIProvider) -> CheckState {
+    guard let executable = providerExecutable(provider) else { return .missing }
+    let args = provider == .codex ? ["login", "status"] : ["auth", "status"]
+    return runShell(executable, args).code == 0 ? .ok : .unknown
+}
+
 func componentChecks() -> [StatusCheck] {
     [
         StatusCheck(title: "Background service",
@@ -248,6 +270,21 @@ func componentChecks() -> [StatusCheck] {
         StatusCheck(title: "Hotkeys configured",
                     detail: "command-hotkeys.json present. Edit bindings in the Shortcuts tab.",
                     state: fileExists(home(".claude/state/command-hotkeys.json")) ? .ok : .missing),
+        StatusCheck(title: "Claude app",
+                    detail: "Foreground Claude delivery via installed desktop app.",
+                    state: providerAppInstalled(.claude) ? .ok : .unknown),
+        StatusCheck(title: "Claude CLI",
+                    detail: "Background Claude delivery. Unknown usually means sign-in is needed.",
+                    state: providerCLIState(.claude)),
+        StatusCheck(title: "ChatGPT app",
+                    detail: "Foreground ChatGPT and Codex delivery via com.openai.codex.",
+                    state: providerAppInstalled(.codex) ? .ok : .unknown),
+        StatusCheck(title: "Codex CLI",
+                    detail: "Background Codex delivery. Unknown usually means `codex login` is needed.",
+                    state: providerCLIState(.codex)),
+        StatusCheck(title: "Codex workspace",
+                    detail: UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory(),
+                    state: FileManager.default.fileExists(atPath: UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory()) ? .ok : .missing),
         StatusCheck(title: "Right-click actions",
                     detail: fileExists(home("Library/Services/Claude - Add.workflow"))
                         ? "Optional Quick Actions installed in ~/Library/Services."

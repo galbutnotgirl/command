@@ -1,5 +1,14 @@
 # Command Background Architecture
 
+## Provider routing
+
+Background records and runner configuration are provider-aware. `settings.json` schema v2 keeps legacy `cli` as Claude compatibility data and adds `providers.claude` plus `providers.codex`. Missing provider fields decode as Claude.
+
+- Claude: prompt on stdin to `claude -p`; skill syntax `/name`.
+- Codex: prompt on stdin to `codex exec -`; screenshots attach through `-i`; skill syntax `$name`.
+- Codex defaults to `--sandbox read-only`. Workspace-write requires explicit selection in Background Settings. Unrestricted mode has no preset.
+- Submission records add optional `provider`, `workspace`, and `attachments` fields. Existing consumers can ignore them.
+
 How the imported capture-and-handoff app (`vendor/claude-command-capture/`, from
 `galbutnotgirl/claudecommand` branch `claude/cli-submission-skill-app-cvciqf`) is folded into
 Command.

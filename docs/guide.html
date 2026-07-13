@@ -59,7 +59,9 @@
     <main id="content" class="doc-main">
       <header class="doc-hero">
         <h1>User Guide</h1>
-        <p class="lead">Set up prompt-centered macOS shortcuts for Claude: selected text, screenshots, typed notes, voice, clipboard history, and background <code>claude -p</code> runs.</p>
+        <p class="lead">Set up prompt-centered macOS shortcuts for Claude, ChatGPT, or Codex: selected text, screenshots, typed notes, voice, clipboard history, and background CLI runs.</p>
+        <h2>Choose Claude, ChatGPT, or Codex</h2>
+        <p>Choose <strong>Default assistant</strong> in <strong>Settings -&gt; Shortcuts</strong>. Custom Actions and triggers can override it. Claude uses Chat/Cowork/Code destinations; Codex uses configured workspace. Command never silently falls back to another provider.</p>
         <div class="nav">
           <a class="button primary" href="quick-reference.html">Quick Reference</a>
           <a class="button" href="settings.html">Settings Reference</a>
@@ -80,15 +82,15 @@
         <table>
           <thead><tr><th>Built-in combination</th><th>Default</th><th>Result</th></tr></thead>
           <tbody>
-            <tr><td>Selected text -> Existing chat</td><td><kbd>F8</kbd></td><td>Send selected text into current Claude chat.</td></tr>
-            <tr><td>Selected text -> New chat</td><td><kbd>Option-F8</kbd></td><td>Open new Claude chat and wait.</td></tr>
+            <tr><td>Selected text -> Existing chat</td><td><kbd>Option-F8</kbd></td><td>Send selected text into current Claude chat.</td></tr>
+            <tr><td>Selected text -> New chat</td><td><kbd>F8</kbd></td><td>Open new Claude chat and wait.</td></tr>
             <tr><td>Selected text -> New chat + auto-submit</td><td>Unbound</td><td>Open new Claude chat, submit, then restore focus.</td></tr>
-            <tr><td>Screenshot -> Existing chat</td><td><kbd>F7</kbd></td><td>Capture screenshot and add to current chat.</td></tr>
-            <tr><td>Screenshot -> New chat</td><td><kbd>Option-F7</kbd></td><td>Capture screenshot and open new chat.</td></tr>
+            <tr><td>Screenshot -> Existing chat</td><td><kbd>Option-F7</kbd></td><td>Capture screenshot and add to current chat.</td></tr>
+            <tr><td>Screenshot -> New chat</td><td><kbd>F7</kbd></td><td>Capture screenshot and open new chat.</td></tr>
             <tr><td>Screenshot -> New chat + auto-submit</td><td>Unbound</td><td>Capture screenshot, open new chat, submit.</td></tr>
             <tr><td>Clipboard History</td><td><kbd>F6</kbd></td><td>Open searchable clipboard picker.</td></tr>
-            <tr><td>Dictate -> Insert</td><td><kbd>F5</kbd></td><td>Speak and paste transcript at cursor.</td></tr>
-            <tr><td>Dictate -> Claude</td><td><kbd>Option-F5</kbd></td><td>Speak and send transcript to Claude.</td></tr>
+            <tr><td>Dictate -> Insert</td><td><kbd>Home</kbd></td><td>Speak and paste transcript at cursor.</td></tr>
+            <tr><td>Dictate -> Assistant</td><td><kbd>Option-Home</kbd></td><td>Speak and send transcript to selected assistant.</td></tr>
           </tbody>
         </table>
         <p>You can change prompt and trigger shortcuts from <strong>Settings -> Shortcuts</strong>. Dictation shortcuts live in <strong>Settings -> Dictation Settings</strong>.</p>
@@ -96,8 +98,8 @@
         <table>
           <thead><tr><th>Case</th><th>Guidance</th></tr></thead>
           <tbody>
-            <tr><td>F5-F8</td><td>Default alpha bindings, but macOS or hardware keyboards may treat them as media/brightness keys unless standard function keys are enabled.</td></tr>
-            <tr><td>Home, End, PgUp, PgDn</td><td>Useful alternatives for press-and-hold dictation on keyboards where F-keys conflict. Bind them in <strong>Dictation Settings</strong>.</td></tr>
+            <tr><td>F6/F7/F8 and Home</td><td>Default alpha bindings. F6/F7/F8 can still conflict with app shortcuts, and Home can conflict with navigation-heavy workflows.</td></tr>
+            <tr><td>Home, End, PgUp, PgDn</td><td>Useful alternatives for press-and-hold dictation on keyboards where F-keys conflict. rebind dictation shortcuts in Dictation Settings.</td></tr>
             <tr><td>Press-and-hold dictation</td><td>Hold to record, release after the last word. The stop sound confirms release; the active menu-bar chip may stay visible while tail capture, transcription, cleanup, and dispatch finish.</td></tr>
             <tr><td>Locked dictation</td><td>Double-tap to lock recording on when holding is awkward; stop from the menu or dictation control.</td></tr>
           </tbody>
@@ -275,7 +277,7 @@ Return:
           <thead><tr><th>Problem</th><th>Fix</th></tr></thead>
           <tbody>
             <tr><td>Hotkeys do nothing</td><td>Grant Accessibility, then restart Command.</td></tr>
-            <tr><td>F5-F8 do system functions</td><td>Enable standard function keys, rebind prompt shortcuts in Shortcuts, or rebind dictation shortcuts in Dictation Settings.</td></tr>
+            <tr><td>Shortcut keys conflict</td><td>Rebind prompt shortcuts in Shortcuts; rebind dictation shortcuts in Dictation Settings.</td></tr>
             <tr><td>Screenshot fails</td><td>Grant Screen Recording, then restart Command.</td></tr>
             <tr><td>Dictation fails</td><td>Grant Microphone; download model in Dictation Settings.</td></tr>
             <tr><td>Background run fails</td><td>Open Command History -> Background and inspect log.</td></tr>

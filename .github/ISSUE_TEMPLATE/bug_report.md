@@ -35,7 +35,8 @@ Source app:
 For Claude - To-Do URL capture: was text highlighted?
 For Claude - To-Do URL capture: browser and current tab URL, if safe to share:
 Action or built-in command name:
-Default Claude destination:
+Default assistant:
+Destination or workspace:
 Action/trigger delivery, destination, and auto-submit overrides, if relevant:
 Target update version, if relevant:
 

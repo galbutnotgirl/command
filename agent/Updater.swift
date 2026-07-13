@@ -62,7 +62,8 @@ func reportBugURL() -> URL? {
     **Trigger / workflow:** Selected text / Screenshot / Popup / Voice / Dictation / Clipboard History / Background / Import / Export / Update
     **Shortcut:** 
     **Source app:** 
-    **Default Claude destination:** 
+    **Assistant (Claude/ChatGPT/Codex):**
+    **Destination or workspace:**
     **Target update version, if relevant:** 
 
     **What happened:**

@@ -65,3 +65,9 @@ test('buildPrompt does not expand placeholders inside captured content', () => {
   const prompt = buildPrompt(settings, { kind: 'text', source: 'text', text: 'keep {file} literal' });
   assert.strictEqual(prompt, 'keep {file} literal\n');
 });
+
+test('buildPrompt uses Codex skill invocation syntax', () => {
+  const settings = { ...DEFAULT_SETTINGS, provider: 'codex', skill: 'triage-capture' };
+  const prompt = buildPrompt(settings, { kind: 'text', source: 'text', text: 'x' });
+  assert.ok(prompt.startsWith('$triage-capture'));
+});

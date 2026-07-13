@@ -2,6 +2,10 @@
 
 Use this as a map of every Settings tab and where each workflow lives.
 
+## Sidebar
+
+Set Up, About, Clipboard History, Shortcut Settings, Context, Background, History, Settings, Vocabulary, Corrections, History.
+
 ## Set Up
 
 Use **Set Up** first after install or update.
@@ -14,13 +18,16 @@ Use **Set Up** first after install or update.
 
 Required items should be green before using global shortcuts. Optional items only matter for workflows you use: Screen Recording for screenshots, Microphone for dictation or voice triggers, Clipboard History for picker/history, and Quick Actions for source installs that still use macOS Services.
 
-## Shortcuts
+## Shortcut Settings
 
-Use **Shortcuts** for prompt-centered commands.
+Use **Shortcut Settings** for prompt-centered commands.
 
 | Control | Purpose |
 |---|---|
-| Default Claude destination | Top-level fallback destination: Chat, Cowork, or Code. |
+| Default assistant | Top-level Claude or ChatGPT / Codex fallback. |
+| Default ChatGPT destination | Chat for general chat or Codex for workspace coding. |
+| Claude destination | Claude-only fallback destination: Chat, Cowork, or Code. |
+| Codex workspace | Workspace used for new Codex sessions and background runs. |
 | Compose | Shared built-in prompt for selected-text and screenshot combinations: existing chat, new chat, or new chat with auto-submit. |
 | Custom Actions | User-defined prompt groups with selected text, screenshot, popup, or voice triggers. |
 | Trigger rows | Per-trigger key binding plus optional delivery, destination, and auto-submit override. |
@@ -47,7 +54,7 @@ Use **Command History** to inspect what Command sent.
 | Section | Includes |
 |---|---|
 | Foreground | Existing-chat and new-chat sends. |
-| Background | `claude -p` runs, status, result line, logs, retry, and mark-failed controls. |
+| Background | `claude -p` and `codex exec -` runs, provider, status, result line, logs, retry, and mark-failed controls. |
 
 Retention defaults to seven days. Changing command retention also aligns background-run retention.
 
@@ -108,8 +115,8 @@ Use **About** for release, help, and portability workflows.
 | Shortcuts and prompts | Built-in shortcut bindings, custom actions, trigger rows, and built-in compose auto-submit settings. |
 | Prompt text and context rules | Built-in prompt text and Context rules. |
 | Dictation vocabulary | Corrections, vocabulary terms, and filler words. |
-| Background settings | Shared `claude -p` command, working directory, extra args, and notification settings. |
-| App preferences | Default Claude destination, retention days, and dictation sounds. |
+| Background settings | Separate Claude/Codex commands, working directories, extra args, safe Codex execution preset, tests, and notifications. |
+| App preferences | Default assistant, Claude destination, Codex workspace, retention days, and dictation sounds. |
 
 Import modes:
 

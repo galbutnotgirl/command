@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { runCli, buildArgs, extractResult } = require('../src/runner');
+const { runCli, buildArgs, extractResult, redactArgs } = require('../src/runner');
 
 function tmpFile(name) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-command-test-'));
@@ -18,6 +18,21 @@ test('buildArgs combines base and extra args', () => {
     ['-p', '--permission-mode', 'acceptEdits']
   );
   assert.deepStrictEqual(buildArgs({}), ['-p']);
+});
+
+test('buildArgs creates Codex exec invocation with images before stdin marker', () => {
+  assert.deepStrictEqual(
+    buildArgs({ baseArgs: ['exec'], extraArgs: ['--sandbox', 'read-only'] },
+      { provider: 'codex', attachments: ['/tmp/a.png', '/tmp/b.png'] }),
+    ['exec', '--sandbox', 'read-only', '-i', '/tmp/a.png', '-i', '/tmp/b.png', '-']
+  );
+});
+
+test('redactArgs hides common secret-bearing flags without changing safe args', () => {
+  assert.deepStrictEqual(
+    redactArgs(['--sandbox', 'read-only', '--api-key', 'secret-value', '--token=abc']),
+    ['--sandbox', 'read-only', '--api-key', '[REDACTED]', '--token=[REDACTED]']
+  );
 });
 
 test('runCli pipes the prompt to stdin and logs output', async () => {

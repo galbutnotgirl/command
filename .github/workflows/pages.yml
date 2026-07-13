@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "test/test-docs.py"
       - "test/test-pages.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
@@ -27,6 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Docs quality checks
+        run: python3 ./test/test-docs.py
+      - name: Pages-specific checks
         run: python3 ./test/test-pages.py
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

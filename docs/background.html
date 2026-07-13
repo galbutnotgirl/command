@@ -54,7 +54,14 @@
     <main id="content" class="doc-main">
       <header class="doc-hero">
         <h1>Background Architecture</h1>
-        <p class="lead">Maintainer-oriented overview of how custom actions route captured content through local <code>claude -p</code> runs.</p>
+        <p class="lead">Maintainer-oriented overview of how custom actions route captured content through local Claude or Codex CLI runs.</p>
+        <h2>Provider routing</h2>
+        <ul>
+          <li>Claude uses <code>claude -p</code> and <code>/skill</code> syntax.</li>
+          <li>Codex uses <code>codex exec -</code>, <code>-i</code> image attachments, and <code>$skill</code> syntax.</li>
+          <li>Schema v2 keeps legacy Claude CLI settings and adds separate provider configurations.</li>
+          <li>Codex defaults to read-only; workspace-write requires explicit selection.</li>
+        </ul>
       </header>
       <section id="stack-decision">
         <h2>Stack decision</h2>

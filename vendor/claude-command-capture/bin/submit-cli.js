@@ -38,7 +38,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { appDirs } = require('../src/paths');
-const { loadSettings, saveSettings, settingsPath, DEFAULT_SETTINGS } = require('../src/settings');
+const { loadSettings, saveSettings, settingsPath, DEFAULT_SETTINGS, settingsForProvider } = require('../src/settings');
 const { submitCapture, resubmitPrompt } = require('../src/submit');
 
 function defaultBaseDir() {
@@ -68,6 +68,7 @@ function parseArgs(argv) {
       case '--base-dir': args.baseDir = next(); break;
       case '--retry-prompt': args.retryPrompt = true; break;
       case '--skill': args.skill = next(); break;
+      case '--provider': args.provider = next(); break;
       case '--no-wait': args.wait = false; break;
       case '--quiet': args.quiet = true; break;
       case '--init-settings': args.initSettings = true; break;
@@ -138,7 +139,12 @@ async function main() {
       process.stderr.write('submit-cli: --retry-prompt got an empty prompt on stdin\n');
       process.exit(2);
     }
-    const settings = loadSettings(baseDir);
+    if (args.provider && !['claude', 'codex'].includes(args.provider)) {
+      process.stderr.write(`submit-cli: bad --provider ${args.provider}\n`);
+      process.exit(2);
+    }
+    const loaded = loadSettings(baseDir);
+    const settings = settingsForProvider(loaded, args.provider || loaded.defaultProvider);
     const notify = !args.quiet && settings.notifications ? notifyDesktop : () => {};
     const { record, donePromise } = resubmitPrompt({
       dirs: appDirs(baseDir),
@@ -147,6 +153,8 @@ async function main() {
       source: args.source || 'retry',
       kind: args.kind || 'text',
       skill: args.skill,
+      contentFile: args.file ? path.resolve(args.file) : null,
+      attachments: args.file ? [path.resolve(args.file)] : [],
       notify,
     });
     process.stdout.write(JSON.stringify(record) + '\n');
@@ -183,7 +191,12 @@ async function main() {
     }
   }
 
-  const settings = loadSettings(baseDir);
+  if (args.provider && !['claude', 'codex'].includes(args.provider)) {
+    process.stderr.write(`submit-cli: bad --provider ${args.provider}\n`);
+    process.exit(2);
+  }
+  const loaded = loadSettings(baseDir);
+  const settings = settingsForProvider(loaded, args.provider || loaded.defaultProvider);
   const notify = !args.quiet && settings.notifications ? notifyDesktop : () => {};
   const { record, donePromise } = submitCapture({
     dirs: appDirs(baseDir),

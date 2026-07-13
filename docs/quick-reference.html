@@ -65,15 +65,15 @@
         <table>
           <thead><tr><th>Built-in combination</th><th>Default</th><th>Result</th></tr></thead>
           <tbody>
-            <tr><td>Selected text -> Existing chat</td><td><kbd>F8</kbd></td><td>Send selected text into current Claude chat.</td></tr>
-            <tr><td>Selected text -> New chat</td><td><kbd>Option-F8</kbd></td><td>Open new Claude chat and wait.</td></tr>
+            <tr><td>Selected text -> Existing chat</td><td><kbd>Option-F8</kbd></td><td>Send selected text into current Claude chat.</td></tr>
+            <tr><td>Selected text -> New chat</td><td><kbd>F8</kbd></td><td>Open new Claude chat and wait.</td></tr>
             <tr><td>Selected text -> New chat + auto-submit</td><td>Unbound</td><td>Open new Claude chat, submit, restore focus.</td></tr>
-            <tr><td>Screenshot -> Existing chat</td><td><kbd>F7</kbd></td><td>Capture screenshot and add to current chat.</td></tr>
-            <tr><td>Screenshot -> New chat</td><td><kbd>Option-F7</kbd></td><td>Capture screenshot and open new chat.</td></tr>
+            <tr><td>Screenshot -> Existing chat</td><td><kbd>Option-F7</kbd></td><td>Capture screenshot and add to current chat.</td></tr>
+            <tr><td>Screenshot -> New chat</td><td><kbd>F7</kbd></td><td>Capture screenshot and open new chat.</td></tr>
             <tr><td>Screenshot -> New chat + auto-submit</td><td>Unbound</td><td>Capture screenshot, open new chat, submit.</td></tr>
             <tr><td>Clipboard History</td><td><kbd>F6</kbd></td><td>Open searchable clipboard picker.</td></tr>
-            <tr><td>Dictate -> Insert</td><td><kbd>F5</kbd></td><td>Speak and paste transcript at cursor.</td></tr>
-            <tr><td>Dictate -> Claude</td><td><kbd>Option-F5</kbd></td><td>Speak and send transcript to Claude.</td></tr>
+            <tr><td>Dictate -> Insert</td><td><kbd>Home</kbd></td><td>Speak and paste transcript at cursor.</td></tr>
+            <tr><td>Dictate -> Assistant</td><td><kbd>Option-Home</kbd></td><td>Speak and send transcript to selected assistant.</td></tr>
           </tbody>
         </table>
       </section>
@@ -84,8 +84,8 @@
         <table>
           <thead><tr><th>Case</th><th>Guidance</th></tr></thead>
           <tbody>
-            <tr><td>Home, End, PgUp, PgDn</td><td>Good choices for press-and-hold dictation because they avoid F-key media behavior on many keyboards. Rebind in <strong>Dictation Settings</strong>.</td></tr>
-            <tr><td>F5-F8</td><td>Default alpha choices, but macOS or hardware keyboards may treat them as media/brightness keys unless standard function keys are enabled.</td></tr>
+            <tr><td>Home, End, PgUp, PgDn</td><td>Good choices for press-and-hold dictation because they avoid F-key media behavior on many keyboards. rebind dictation shortcuts in Dictation Settings.</td></tr>
+            <tr><td>F6/F7/F8 and Home</td><td>Default alpha choices. F6/F7/F8 can still conflict with app shortcuts, and Home can conflict with navigation-heavy workflows.</td></tr>
             <tr><td>Press-and-hold voice</td><td>Hold to record, release after the last word. The stop sound confirms release; the active menu-bar chip can stay visible while tail capture, transcription, cleanup, and dispatch finish.</td></tr>
             <tr><td>Double-tap voice</td><td>Double-tap to lock recording on when holding is awkward; stop from the menu or dictation control.</td></tr>
           </tbody>
@@ -113,7 +113,7 @@
             <tr><td>Action</td><td>A named prompt setup, with defaults and one or more triggers.</td></tr>
             <tr><td>Trigger</td><td>The way content is captured: selected text, screenshot, popup, or voice.</td></tr>
             <tr><td>Delivery</td><td>Where the rendered prompt goes: existing chat, new chat, or background.</td></tr>
-            <tr><td>Destination</td><td>Which Claude surface opens: Default, Chat, Cowork, or Code.</td></tr>
+            <tr><td>Destination</td><td>Claude: Default, Chat, Cowork, or Code. ChatGPT: Default, Chat, or Codex.</td></tr>
             <tr><td>Auto-submit</td><td>Whether Command presses Return after filling a new chat.</td></tr>
             <tr><td>Background</td><td>A local <code>claude -p</code> run with no Claude window.</td></tr>
           </tbody>
@@ -126,7 +126,7 @@
           <tbody>
             <tr><td>Trigger</td><td>Selected text, Screenshot, Popup, Voice</td></tr>
             <tr><td>Delivery</td><td>Existing chat, New chat, Background</td></tr>
-            <tr><td>Destination</td><td>Default, Chat, Cowork, Code</td></tr>
+            <tr><td>Destination</td><td>Claude: Default, Chat, Cowork, Code. ChatGPT: Default, Chat, Codex.</td></tr>
           </tbody>
         </table>
         <p><code>—</code> means inherit from prompt/action.</p>
@@ -220,7 +220,7 @@
           <thead><tr><th>Problem</th><th>Fix</th></tr></thead>
           <tbody>
             <tr><td>Hotkeys do nothing</td><td>Grant Accessibility, then restart Command.</td></tr>
-            <tr><td>F-keys control media</td><td>Enable standard function keys, rebind prompt shortcuts in Shortcuts, or rebind dictation shortcuts in Dictation Settings.</td></tr>
+            <tr><td>Shortcut conflicts</td><td>Rebind prompt shortcuts in Shortcuts; rebind dictation shortcuts in Dictation Settings.</td></tr>
             <tr><td>Screenshot fails</td><td>Grant Screen Recording, then restart Command.</td></tr>
             <tr><td>Dictation fails</td><td>Grant Microphone; download model in Dictation Settings.</td></tr>
             <tr><td>Claude opens wrong mode</td><td>Check global destination, action destination, trigger override.</td></tr>

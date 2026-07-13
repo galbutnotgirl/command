@@ -54,8 +54,8 @@ test('submitCapture runs the full pipeline for a text capture', async () => {
   const log = fs.readFileSync(record.logFile, 'utf8');
   assert.ok(log.includes('highlighted words'));
 
-  assert.ok(notifications.some((n) => n.title === 'Submitted to Claude'));
-  assert.ok(notifications.some((n) => n.title === 'Claude finished'));
+  assert.ok(notifications.some((n) => n.title === 'Submitted in Command'));
+  assert.ok(notifications.some((n) => n.title === 'Background action finished'));
 });
 
 test('submitCapture extracts a structured result and includes it in the finish notification', async () => {
@@ -71,7 +71,7 @@ test('submitCapture extracts a structured result and includes it in the finish n
   });
   const finished = await donePromise;
   assert.strictEqual(finished.result, 'TASK_ID=abc123');
-  const done = notifications.find((n) => n.title === 'Claude finished');
+  const done = notifications.find((n) => n.title === 'Background action finished');
   assert.ok(done);
   assert.ok(done.body.includes('TASK_ID=abc123'));
 });
@@ -107,7 +107,7 @@ test('submitCapture marks failures and notifies with the log path', async () => 
   const finished = await donePromise;
   assert.strictEqual(finished.status, 'failed');
   assert.ok(finished.error);
-  const failure = notifications.find((n) => n.title === 'Claude submission failed');
+  const failure = notifications.find((n) => n.title === 'Background action failed');
   assert.ok(failure);
   assert.ok(failure.body.includes(finished.logFile));
 });
@@ -146,5 +146,23 @@ test('resubmitPrompt marks failures the same way submitCapture does', async () =
   });
   const finished = await donePromise;
   assert.strictEqual(finished.status, 'failed');
-  assert.ok(notifications.some((n) => n.title === 'Claude submission failed'));
+  assert.ok(notifications.some((n) => n.title === 'Background action failed'));
+
+});
+
+test('Codex submissions record provider, workspace, and image attachment', async () => {
+  const dirs = tmpDirs();
+  const imageFile = path.join(os.tmpdir(), 'codex-shot.png');
+  const settings = fakeCliSettings({ cli: { command: 'cat', baseArgs: [], extraArgs: [], cwd: '' } });
+  settings.provider = 'codex';
+  settings.workspace = '/tmp/workspace';
+  const { record, donePromise } = submitCapture({
+    dirs, settings,
+    capture: { kind: 'image', source: 'screenshot', capturedAt: '', file: imageFile },
+    notify: () => {},
+  });
+  assert.strictEqual(record.provider, 'codex');
+  assert.strictEqual(record.workspace, '/tmp/workspace');
+  assert.deepStrictEqual(record.attachments, [imageFile]);
+  await donePromise;
 });

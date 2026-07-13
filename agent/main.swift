@@ -56,12 +56,30 @@ func ensureTrusted() {
     _ = AXIsProcessTrustedWithOptions(o)
 }
 
-func postKey(_ k: CGKeyCode, cmd: Bool) {
+func postKey(_ k: CGKeyCode, cmd: Bool, opt: Bool = false) {
     let s = CGEventSource(stateID: .combinedSessionState)
     guard let d = CGEvent(keyboardEventSource: s, virtualKey: k, keyDown: true),
           let u = CGEvent(keyboardEventSource: s, virtualKey: k, keyDown: false) else { return }
-    if cmd { d.flags = .maskCommand; u.flags = .maskCommand }
+    var flags: CGEventFlags = []
+    if cmd { flags.insert(.maskCommand) }
+    if opt { flags.insert(.maskAlternate) }
+    d.flags = flags; u.flags = flags
     d.post(tap: .cghidEventTap); u.post(tap: .cghidEventTap)
+}
+
+func postKey(_ k: CGKeyCode, cmd: Bool, opt: Bool = false, to bundle: String) -> Bool {
+    guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first else {
+        return false
+    }
+    let s = CGEventSource(stateID: .combinedSessionState)
+    guard let d = CGEvent(keyboardEventSource: s, virtualKey: k, keyDown: true),
+          let u = CGEvent(keyboardEventSource: s, virtualKey: k, keyDown: false) else { return false }
+    var flags: CGEventFlags = []
+    if cmd { flags.insert(.maskCommand) }
+    if opt { flags.insert(.maskAlternate) }
+    d.flags = flags; u.flags = flags
+    d.postToPid(app.processIdentifier); u.postToPid(app.processIdentifier)
+    return true
 }
 
 func activate(_ bundle: String) {
@@ -114,7 +132,8 @@ func captureOrClipboard() -> String {
 
 func runWorker(_ action: String, source: String, captured: String = "", customPrompt: String = "",
                customSubmit: Bool = false, customSession: String = "new", customIncludeSource: Bool = true,
-               claudeDestination: String? = nil, builtInAutoSubmit: Bool? = nil) {
+               destination: String? = nil, provider: AIProvider? = nil,
+               builtInAutoSubmit: Bool? = nil) {
     // Screenshot actions need Screen Recording. Without it, `screencapture` fails
     // ("could not create image from rect") and the user just re-prompts forever.
     // Gate it: fire the system prompt + open Set Up, and skip the doomed capture.
@@ -150,8 +169,15 @@ func runWorker(_ action: String, source: String, captured: String = "", customPr
     if customSession == "add" { env["CUSTOM_SESSION"] = "add" }
     if !customIncludeSource { env["CUSTOM_INCLUDE_SOURCE"] = "0" }
     if let builtInAutoSubmit { env["BUILTIN_AUTO_SUBMIT"] = builtInAutoSubmit ? "1" : "0" }
-    let effectiveClaudeDestination = claudeDestination ?? settingsModel.claudeDestination
-    env["CLAUDE_DESTINATION"] = effectiveClaudeDestination
+    let effectiveProvider = provider ?? AIProvider(rawValue: settingsModel.defaultProvider) ?? .claude
+    let providerDefaultDestination = effectiveProvider == .claude ? settingsModel.claudeDestination : settingsModel.codexDestination
+    let requestedDestination = destination ?? providerDefaultDestination
+    let effectiveDestination = effectiveProvider == .codex && requestedDestination == "cowork"
+        ? providerDefaultDestination : requestedDestination
+    env["CLAUDE_DESTINATION"] = effectiveDestination
+    env["OPENAI_DESTINATION"] = effectiveDestination
+    env["COMMAND_PROVIDER"] = effectiveProvider.rawValue
+    env["CODEX_WORKSPACE"] = settingsModel.codexWorkspace
     p.environment = env
     let errPipe = Pipe()
     p.standardError = errPipe
@@ -162,20 +188,23 @@ func runWorker(_ action: String, source: String, captured: String = "", customPr
             if p.terminationStatus != 0 {
                 let out = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
                 appendLog("[runWorker] action=\(action) exit=\(p.terminationStatus) stderr=\(out.prefix(400))")
-                appendForegroundCommandHistory(action: action, source: source, destination: effectiveClaudeDestination,
+                appendForegroundCommandHistory(action: action, source: source, destination: effectiveDestination,
                                                status: "failed", prompt: customPrompt.isEmpty ? nil : customPrompt,
-                                               error: String(out.prefix(400)))
+                                               error: String(out.prefix(400)), provider: effectiveProvider,
+                                               workspace: effectiveProvider == .codex ? settingsModel.codexWorkspace : nil)
             } else {
-                appendForegroundCommandHistory(action: action, source: source, destination: effectiveClaudeDestination,
+                appendForegroundCommandHistory(action: action, source: source, destination: effectiveDestination,
                                                status: "succeeded", prompt: customPrompt.isEmpty ? nil : customPrompt,
-                                               error: nil)
+                                               error: nil, provider: effectiveProvider,
+                                               workspace: effectiveProvider == .codex ? settingsModel.codexWorkspace : nil)
             }
         }
     } catch {
         appendLog("[runWorker] launch failed: \(error)")
-        appendForegroundCommandHistory(action: action, source: source, destination: effectiveClaudeDestination,
+        appendForegroundCommandHistory(action: action, source: source, destination: effectiveDestination,
                                        status: "failed", prompt: customPrompt.isEmpty ? nil : customPrompt,
-                                       error: String(describing: error))
+                                       error: String(describing: error), provider: effectiveProvider,
+                                       workspace: effectiveProvider == .codex ? settingsModel.codexWorkspace : nil)
     }
 }
 
@@ -213,7 +242,7 @@ let purpleAccent = NSColor(name: nil) { appearance in
 }
 
 func pickerTheme() -> PickerTheme {
-    PickerTheme(rawValue: UserDefaults.standard.string(forKey: "pickerTheme") ?? "light") ?? .light
+    PickerTheme(rawValue: UserDefaults.standard.string(forKey: "pickerTheme") ?? "auto") ?? .auto
 }
 func setPickerTheme(_ t: PickerTheme) { UserDefaults.standard.set(t.rawValue, forKey: "pickerTheme") }
 
@@ -312,6 +341,36 @@ func loadClips() -> [Clip] {
 }
 
 let CLAUDE_BUNDLE = "com.anthropic.claudefordesktop"
+let CODEX_BUNDLE = "com.openai.codex"
+
+func selectedProvider() -> AIProvider {
+    AIProvider(rawValue: settingsModel.defaultProvider) ?? .claude
+}
+
+func dictationAssistantProvider() -> AIProvider {
+    let raw = UserDefaults.standard.string(forKey: VoiceSettingsKeys.dictationAssistantProvider) ?? VoiceSettingsDefaults.dictationAssistantProvider
+    guard let choice = AIProviderChoice(rawValue: raw) else { return selectedProvider() }
+    return choice.resolve(default: selectedProvider())
+}
+
+func selectedProviderBundle() -> String { selectedProvider().appBundleIdentifier }
+
+func codexExecutablePath() -> String? {
+    let candidates = ["/opt/homebrew/bin/codex", "/usr/local/bin/codex",
+                      "/Applications/ChatGPT.app/Contents/Resources/codex"]
+    return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+}
+
+func focusedElementIsEditable() -> Bool {
+    let system = AXUIElementCreateSystemWide()
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &value) == .success,
+          let focused = value else { return false }
+    let element = unsafeBitCast(focused, to: AXUIElement.self)
+    var settable = DarwinBoolean(false)
+    return AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success
+        && settable.boolValue
+}
 let pickerW: CGFloat = 768
 let pickerH: CGFloat = 565   // fixed height
 let listColW: CGFloat = 359
@@ -665,7 +724,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
 
     func makeHint() -> NSView {
         let v = NSView()
-        let t = NSTextField(labelWithString: "↑↓ · 1-9 pick · ↩ prev · ⌘↩ new · ⌥↩ Claude · esc")
+        let t = NSTextField(labelWithString: "↑↓ · 1-9 pick · ↩ previous · ⌘↩ new session · ⌥↩ assistant · esc")
         t.font = .systemFont(ofSize: 10); t.textColor = .quaternaryLabelColor
         t.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(t)
@@ -978,17 +1037,26 @@ final class ClipPicker: NSObject, NSWindowDelegate {
                 NSApp.hide(nil)
             }
         case .claude:
-            openBundle(CLAUDE_BUNDLE)
-            whenActive(CLAUDE_BUNDLE) {
-                postKey(kV, cmd: true)
+            let bundle = selectedProviderBundle()
+            openBundle(bundle)
+            whenActive(bundle) {
+                if focusedElementIsEditable() { postKey(kV, cmd: true) }
+                else { notify("Assistant input not ready", "Open a session and try Clipboard History again.") }
                 NSApp.hide(nil)
             }
         case .claudeNew:
-            openBundle(CLAUDE_BUNDLE)
-            whenActive(CLAUDE_BUNDLE) {
-                postKey(45, cmd: true)   // ⌘N — open new Claude window
+            let provider = selectedProvider()
+            let bundle = provider.appBundleIdentifier
+            if provider == .codex, let codex = codexExecutablePath() {
+                let p = Process(); p.executableURL = URL(fileURLWithPath: codex)
+                p.arguments = ["app", settingsModel.codexWorkspace]
+                try? p.run()
+            } else { openBundle(bundle) }
+            whenActive(bundle) {
+                postKey(45, cmd: true)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    postKey(kV, cmd: true)
+                    if focusedElementIsEditable() { postKey(kV, cmd: true) }
+                    else { notify("Assistant input not ready", "Open a session and try Clipboard History again.") }
                     NSApp.hide(nil)
                 }
             }
@@ -1003,16 +1071,19 @@ struct HK { let action: String; let keycode: UInt32; let mods: UInt32 }
 
 func loadHotkeys() -> [HK] {
     let validActions = Set(COMMAND_ACTIONS.map(\.id))
+    let clipboardEnabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
     guard let data = FileManager.default.contents(atPath: CFG),
           let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
         // No user file — fall back to built-in defaults.
-        return DEFAULT_BINDINGS.map { HK(action: $0.action, keycode: $0.keycode, mods: $0.mods) }
+        return DEFAULT_BINDINGS
+            .filter { $0.action != "cliphistory" || clipboardEnabled }
+            .map { HK(action: $0.action, keycode: $0.keycode, mods: $0.mods) }
     }
     return arr.compactMap { d in
         guard let a = d["action"] as? String,
               let k = d["keycode"] as? Int, let m = d["mods"] as? Int else { return nil }
         let enabled = (d["enabled"] as? Bool) ?? true
-        guard enabled, validActions.contains(a) else { return nil }
+        guard enabled, validActions.contains(a), a != "cliphistory" || clipboardEnabled else { return nil }
         return HK(action: a, keycode: UInt32(k), mods: UInt32(m))
     }
 }
@@ -1092,11 +1163,12 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
                 DispatchQueue.global().async { runCustomHandoff(ca, trigger: trig, capturedText: sel) }
             } else {
                 let dest = ca.effectiveDestination(for: trig).envValue
+                let provider = ca.effectiveProvider(for: trig, default: selectedProvider())
                 DispatchQueue.global().async {
                     runWorker(trig.kind == .screenshot ? "customshot" : "custom", source: front, captured: sel,
                               customPrompt: ca.prompt, customSubmit: ca.autoSubmit(for: trig),
                               customSession: delivery.sessionMode, customIncludeSource: ca.shouldIncludeSource(for: trig),
-                              claudeDestination: dest)
+                              destination: dest, provider: provider)
                 }
             }
         } else {
@@ -1256,7 +1328,6 @@ func triggerDictation(mode: DictMode, keycode: CGKeyCode?, pollForRelease: Bool 
         _dictLastPress = now
 
         if !DictationOverlay.shared.isVisible {
-            playUISound(settingsModel.startSound)
             DictationOverlay.shared.show(mode: mode)
         }
 
@@ -1319,11 +1390,12 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
             DispatchQueue.global().async { runCustomHandoff(ca, trigger: trig, capturedText: sel) }
         } else {
             let dest = ca.effectiveDestination(for: trig).envValue
+            let provider = ca.effectiveProvider(for: trig, default: selectedProvider())
             DispatchQueue.global().async {
                 runWorker(trig.kind == .screenshot ? "customshot" : "custom", source: front, captured: sel,
                           customPrompt: ca.prompt, customSubmit: ca.autoSubmit(for: trig),
                           customSession: delivery.sessionMode, customIncludeSource: ca.shouldIncludeSource(for: trig),
-                          claudeDestination: dest)
+                          destination: dest, provider: provider)
             }
         }
     }
@@ -1448,6 +1520,26 @@ func handle(_ line: String) -> String {
         return out
     case "paste":  DispatchQueue.main.sync { postKey(kV, cmd: true) };  return "ok"
     case "return": DispatchQueue.main.sync { postKey(kRet, cmd: false) }; return "ok"
+    case "pasteapp", "returnapp":
+        guard parts.count > 1 else { return "err" }
+        var posted = false
+        let isPaste = parts[0] == "pasteapp"
+        DispatchQueue.main.sync {
+            posted = postKey(isPaste ? kV : kRet, cmd: isPaste, to: parts[1])
+        }
+        return posted ? "ok" : "err"
+    case "newtask", "newchat":
+        guard parts.count > 1 else { return "err" }
+        var posted = false
+        let isChat = parts[0] == "newchat"
+        DispatchQueue.main.sync {
+            posted = postKey(45, cmd: true, opt: isChat, to: parts[1])
+        }
+        return posted ? "ok" : "err"
+    case "editable":
+        var ready = false
+        DispatchQueue.main.sync { ready = focusedElementIsEditable() }
+        return ready ? "ok" : "wait"
     case "activate":
         if parts.count > 1 { let b = parts[1]; DispatchQueue.main.sync { activate(b) } }
         return "ok"
@@ -1525,11 +1617,46 @@ func applyDockPolicy() {
 // reopens the window — there's no other launch action.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        settingsWindow.show(tab: .setup)
+        openLastSettingsTab()
         return true
+    }
+
+    @objc func openAbout(_ sender: Any?) { settingsWindow.show(tab: .about) }
+    @objc func openSettings(_ sender: Any?) { openLastSettingsTab() }
+    @objc func openSetUp(_ sender: Any?) { settingsWindow.show(tab: .setup) }
+    @objc func openShortcuts(_ sender: Any?) { settingsWindow.show(tab: .shortcuts) }
+    @objc func openContext(_ sender: Any?) { settingsWindow.show(tab: .templates) }
+    @objc func openCommandHistory(_ sender: Any?) { settingsWindow.show(tab: .handoffs) }
+    @objc func openClipboardHistorySettings(_ sender: Any?) { settingsWindow.show(tab: .history) }
+    @objc func openDictationHistory(_ sender: Any?) { settingsWindow.show(tab: .dictHistory) }
+    @objc func openDictationSettings(_ sender: Any?) { settingsWindow.show(tab: .dictSettings) }
+    @objc func openImportExport(_ sender: Any?) { settingsWindow.show(tab: .about) }
+    @objc func restartCommand(_ sender: Any?) { restartApp() }
+    @MainActor @objc func copyDiagnosticInfo(_ sender: Any?) {
+        copyCommandDiagnosticInfo()
+        notify("Diagnostic Info Copied", "Command status, bindings, recent run summaries, and log tails are on the clipboard.")
+    }
+    @objc func openDocumentation(_ sender: Any?) { openHelpDoc(named: "index") }
+    @objc func openUserGuide(_ sender: Any?) { openHelpDoc(named: "guide") }
+    @objc func openTroubleshooting(_ sender: Any?) { openHelpDoc(named: "troubleshooting") }
+    @objc func openSupport(_ sender: Any?) { openHelpDoc(named: "support") }
+    @objc func reportBug(_ sender: Any?) {
+        if let url = reportBugURL() { NSWorkspace.shared.open(url) }
+    }
+    @objc func requestFeature(_ sender: Any?) {
+        if let url = requestFeatureURL() { NSWorkspace.shared.open(url) }
     }
 }
 let appDelegate = AppDelegate()
+
+private func openLastSettingsTab() {
+    if let raw = UserDefaults.standard.string(forKey: "lastSettingsTab"),
+       let tab = SettingsTab(storageValue: raw) {
+        settingsWindow.show(tab: tab)
+    } else {
+        settingsWindow.show(tab: .setup)
+    }
+}
 
 // ---- main ------------------------------------------------------------------
 
@@ -1604,6 +1731,59 @@ func validateInstall() {
     }
 }
 
+// Downloaded builds can launch from Downloads, Desktop, or an App Translocation
+// path. Offer one-click relocation so updates and login launch use stable path.
+// Source builds beside build-agent.sh stay in place for development.
+@MainActor
+func offerMoveToApplicationsIfNeeded() -> Bool {
+    let fm = FileManager.default
+    let current = URL(fileURLWithPath: Bundle.main.bundlePath).standardizedFileURL
+    let userApplications = URL(fileURLWithPath: NSHomeDirectory())
+        .appendingPathComponent("Applications", isDirectory: true)
+    let sourceRoot = current.deletingLastPathComponent()
+    let sourceRootHasBuildScript = fm.fileExists(
+        atPath: sourceRoot.appendingPathComponent("build-agent.sh").path
+    )
+    guard InstallLocationPolicy.shouldOfferMove(
+        bundlePath: current.path,
+        homeDirectory: NSHomeDirectory(),
+        sourceRootHasBuildScript: sourceRootHasBuildScript
+    ) else {
+        return false
+    }
+
+    let alert = NSAlert()
+    alert.alertStyle = .informational
+    alert.messageText = "Move Command to Applications?"
+    alert.informativeText = "Command works best from your Applications folder. Moving it keeps updates, login launch, and macOS permissions tied to one stable copy."
+    alert.addButton(withTitle: "Move to Applications")
+    alert.addButton(withTitle: "Not Now")
+    guard alert.runModal() == .alertFirstButtonReturn else { return false }
+
+    let destination = userApplications.appendingPathComponent("Command.app", isDirectory: true)
+    do {
+        try fm.createDirectory(at: userApplications, withIntermediateDirectories: true)
+        if fm.fileExists(atPath: destination.path) {
+            try fm.removeItem(at: destination)
+        }
+        try fm.copyItem(at: current, to: destination)
+        NSWorkspace.shared.openApplication(
+            at: destination,
+            configuration: NSWorkspace.OpenConfiguration()
+        )
+        NSApp.terminate(nil)
+        return true
+    } catch {
+        let failure = NSAlert()
+        failure.alertStyle = .warning
+        failure.messageText = "Command couldn't move itself"
+        failure.informativeText = "Move Command.app to ~/Applications, then open that copy.\n\n\(error.localizedDescription)"
+        failure.addButton(withTitle: "OK")
+        failure.runModal()
+        return false
+    }
+}
+
 func stopClipwatch() {
     _ = runShell("/usr/bin/pkill", ["-f", "clipwatch.py"])
 }
@@ -1667,8 +1847,20 @@ func installMainMenu() {
 
     let appMenuItem = NSMenuItem()
     mainMenu.addItem(appMenuItem)
-    let appMenu = NSMenu()
+    let appMenu = NSMenu(title: "Command")
     appMenuItem.submenu = appMenu
+    appMenu.addItem(withTitle: "About Command", action: #selector(AppDelegate.openAbout(_:)), keyEquivalent: "").target = appDelegate
+    appMenu.addItem(NSMenuItem.separator())
+    let settingsItem = appMenu.addItem(withTitle: "Settings…", action: #selector(AppDelegate.openSettings(_:)), keyEquivalent: ",")
+    settingsItem.target = appDelegate
+    let updatesItem = appMenu.addItem(withTitle: "Check for Updates…", action: #selector(AppDelegate.openAbout(_:)), keyEquivalent: "")
+    updatesItem.target = appDelegate
+    appMenu.addItem(NSMenuItem.separator())
+    appMenu.addItem(withTitle: "Hide Command", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+    let hideOthers = appMenu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+    hideOthers.keyEquivalentModifierMask = [.command, .option]
+    appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+    appMenu.addItem(NSMenuItem.separator())
     appMenu.addItem(withTitle: "Quit Command", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
     let editMenuItem = NSMenuItem()
@@ -1683,14 +1875,65 @@ func installMainMenu() {
     editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
     editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
 
+    let viewMenuItem = NSMenuItem()
+    mainMenu.addItem(viewMenuItem)
+    let viewMenu = NSMenu(title: "View")
+    viewMenuItem.submenu = viewMenu
+    for (title, selector) in [
+        ("Set Up", #selector(AppDelegate.openSetUp(_:))),
+        ("Shortcuts", #selector(AppDelegate.openShortcuts(_:))),
+        ("Context", #selector(AppDelegate.openContext(_:))),
+        ("Command History", #selector(AppDelegate.openCommandHistory(_:))),
+        ("Clipboard History", #selector(AppDelegate.openClipboardHistorySettings(_:))),
+        ("Dictation History", #selector(AppDelegate.openDictationHistory(_:))),
+        ("Dictation Settings", #selector(AppDelegate.openDictationSettings(_:))),
+        ("About", #selector(AppDelegate.openAbout(_:))),
+    ] {
+        let item = viewMenu.addItem(withTitle: title, action: selector, keyEquivalent: "")
+        item.target = appDelegate
+    }
+
+    let commandMenuItem = NSMenuItem()
+    mainMenu.addItem(commandMenuItem)
+    let commandMenu = NSMenu(title: "Command")
+    commandMenuItem.submenu = commandMenu
+    let importExport = commandMenu.addItem(withTitle: "Import / Export…", action: #selector(AppDelegate.openImportExport(_:)), keyEquivalent: "")
+    importExport.target = appDelegate
+    let diagnostics = commandMenu.addItem(withTitle: "Copy Diagnostic Info", action: #selector(AppDelegate.copyDiagnosticInfo(_:)), keyEquivalent: "")
+    diagnostics.target = appDelegate
+    commandMenu.addItem(NSMenuItem.separator())
+    let restart = commandMenu.addItem(withTitle: "Restart Command", action: #selector(AppDelegate.restartCommand(_:)), keyEquivalent: "")
+    restart.target = appDelegate
+
+    let helpMenuItem = NSMenuItem()
+    mainMenu.addItem(helpMenuItem)
+    let helpMenu = NSMenu(title: "Help")
+    helpMenuItem.submenu = helpMenu
+    NSApp.helpMenu = helpMenu
+    for (title, selector) in [
+        ("Command Help", #selector(AppDelegate.openDocumentation(_:))),
+        ("User Guide", #selector(AppDelegate.openUserGuide(_:))),
+        ("Troubleshooting", #selector(AppDelegate.openTroubleshooting(_:))),
+        ("Support", #selector(AppDelegate.openSupport(_:))),
+    ] {
+        let item = helpMenu.addItem(withTitle: title, action: selector, keyEquivalent: "")
+        item.target = appDelegate
+    }
+    helpMenu.addItem(NSMenuItem.separator())
+    let bug = helpMenu.addItem(withTitle: "Report a Bug", action: #selector(AppDelegate.reportBug(_:)), keyEquivalent: "")
+    bug.target = appDelegate
+    let feature = helpMenu.addItem(withTitle: "Request Feature", action: #selector(AppDelegate.requestFeature(_:)), keyEquivalent: "")
+    feature.target = appDelegate
+
     NSApplication.shared.mainMenu = mainMenu
 }
 
 let app = NSApplication.shared
 app.delegate = appDelegate
 installMainMenu()
-UserDefaults.standard.register(defaults: ["showDockIcon": false, "cliphistoryEnabled": true])
+UserDefaults.standard.register(defaults: ["showDockIcon": false, "cliphistoryEnabled": false, "pickerTheme": "auto"])
 applyDockPolicy()                 // menu-bar only unless the user enabled "Show in Dock"
+if MainActor.assumeIsolated({ offerMoveToApplicationsIfNeeded() }) { exit(0) }
 validateInstall()
 installHotkeys()
 startMediaKeyHook()
@@ -1704,7 +1947,10 @@ menuBar.install()                 // greyscale menu-bar icon + Set Up / Shortcut
 Task { @MainActor in await recorder.initModels() }  // warm Parakeet from cache if available
 // First run: show onboarding wizard. Subsequent runs with permission problems: go straight to Setup.
 if UserDefaults.standard.bool(forKey: "onboardingCompleted") {
-    if !axTrusted() || !screenRecordingOK() { settingsWindow.show(tab: .setup) }
+    if UserDefaults.standard.bool(forKey: "postOnboardingOpenShortcuts") {
+        UserDefaults.standard.set(false, forKey: "postOnboardingOpenShortcuts")
+        settingsWindow.show(tab: .shortcuts)
+    } else if !axTrusted() || !screenRecordingOK() { settingsWindow.show(tab: .setup) }
 } else {
     onboardingWindow.showIfNeeded()
 }

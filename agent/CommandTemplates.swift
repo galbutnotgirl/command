@@ -107,6 +107,15 @@ final class TemplatesModel: ObservableObject {
         if changed { saveCommandTemplates(templates) }
     }
 
+    func resetBuiltInComposeTemplates() {
+        for i in templates.indices {
+            guard builtInComposeActions.contains(templates[i].action),
+                  let def = DEFAULT_COMMAND_TEMPLATES.first(where: { $0.action == templates[i].action }) else { continue }
+            templates[i] = def
+        }
+        saveCommandTemplates(templates)
+    }
+
     func addRule() {
         rules.append(EnrichRule(match: .host, pattern: "", text: ""))
         saveEnrichRules(rules)

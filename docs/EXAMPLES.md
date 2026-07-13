@@ -14,7 +14,7 @@ Settings:
 | Trigger | Selected text |
 | Delivery | Existing chat |
 | Destination | Default |
-| Default shortcut | F8 |
+| Default shortcut | Option-F8 |
 
 Prompt text:
 
@@ -36,7 +36,7 @@ Settings:
 | Trigger | Selected text |
 | Delivery | New chat |
 | Destination | Default or Code |
-| Default shortcut | Option-F8 |
+| Default shortcut | F8 |
 
 Prompt text:
 
@@ -58,7 +58,7 @@ Settings:
 | Trigger | Screenshot |
 | Delivery | New chat |
 | Destination | Chat |
-| Default shortcut | Option-F7 |
+| Default shortcut | F7 |
 
 Prompt text:
 

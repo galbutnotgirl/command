@@ -15,12 +15,13 @@ function renderTemplate(template, vars) {
 
 // capture: { kind: 'text'|'image', source, capturedAt, text?, file? }
 function buildPrompt(settings, capture) {
-  const skill = (settings.skill || '').trim().replace(/^\//, '');
+  const skill = (settings.skill || '').trim().replace(/^[\/$]/, '');
+  const skillPrefix = settings.provider === 'codex' ? '$' : '/';
   const template =
     capture.kind === 'image' ? settings.imagePromptTemplate : settings.promptTemplate;
   const rendered = renderTemplate(template, {
     skill,
-    skillInvocation: skill ? `/${skill}` : '',
+    skillInvocation: skill ? `${skillPrefix}${skill}` : '',
     source: capture.source || 'unknown',
     timestamp: capture.capturedAt || '',
     content: capture.text != null ? capture.text : '',

@@ -21,7 +21,8 @@ function writeRecord(dirs, record) {
   return record;
 }
 
-function createSubmission(dirs, { id, source, kind, skill, prompt, contentFile, logFile }) {
+function createSubmission(dirs, { id, source, kind, skill, prompt, contentFile, logFile,
+                                  provider = 'claude', workspace = null, attachments = [] }) {
   if (!id) id = crypto.randomUUID();
   const record = {
     id,
@@ -40,6 +41,9 @@ function createSubmission(dirs, { id, source, kind, skill, prompt, contentFile, 
     // for one (see runner.js's extractResult) — null until the run finishes,
     // and stays null if the CLI never printed a matching line.
     result: null,
+    provider,
+    workspace: workspace || null,
+    attachments: Array.isArray(attachments) ? attachments : [],
   };
   return writeRecord(dirs, record);
 }

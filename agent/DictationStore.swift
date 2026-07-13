@@ -5,6 +5,7 @@
 
 import Cocoa
 import Foundation
+import ClaudeCommandCore
 
 // ─── Debug log ────────────────────────────────────────────────────────────────
 
@@ -153,18 +154,19 @@ final class VocabularyStore: ObservableObject {
 final class ProcessingSettings: ObservableObject {
     static let shared = ProcessingSettings()
 
-    @Published var fillerRemoval: Bool   { didSet { UserDefaults.standard.set(fillerRemoval,   forKey: "proc_filler") } }
-    @Published var smartFormatting: Bool { didSet { UserDefaults.standard.set(smartFormatting, forKey: "proc_format") } }
-    @Published var aiCleanup: Bool       { didSet { UserDefaults.standard.set(aiCleanup,       forKey: "proc_ai") } }
+    @Published var fillerRemoval: Bool   { didSet { UserDefaults.standard.set(fillerRemoval,   forKey: VoiceSettingsKeys.fillerRemoval) } }
+    @Published var smartFormatting: Bool { didSet { UserDefaults.standard.set(smartFormatting, forKey: VoiceSettingsKeys.smartFormatting) } }
+    @Published var aiCleanup: Bool       { didSet { UserDefaults.standard.set(aiCleanup,       forKey: VoiceSettingsKeys.aiCleanup) } }
 
     private init() {
         let ud = UserDefaults.standard
-        fillerRemoval   = ud.object(forKey: "proc_filler") as? Bool ?? true
-        smartFormatting = ud.object(forKey: "proc_format") as? Bool ?? true
-        if ud.object(forKey: "proc_ai_v3") == nil {
-            ud.set(true, forKey: "proc_ai"); ud.set(true, forKey: "proc_ai_v3")
+        fillerRemoval   = ud.object(forKey: VoiceSettingsKeys.fillerRemoval) as? Bool ?? VoiceSettingsDefaults.fillerRemoval
+        smartFormatting = ud.object(forKey: VoiceSettingsKeys.smartFormatting) as? Bool ?? VoiceSettingsDefaults.smartFormatting
+        if ud.object(forKey: VoiceSettingsKeys.aiCleanupMigration) == nil {
+            ud.set(VoiceSettingsDefaults.aiCleanup, forKey: VoiceSettingsKeys.aiCleanup)
+            ud.set(true, forKey: VoiceSettingsKeys.aiCleanupMigration)
         }
-        aiCleanup = ud.object(forKey: "proc_ai") as? Bool ?? true
+        aiCleanup = ud.object(forKey: VoiceSettingsKeys.aiCleanup) as? Bool ?? VoiceSettingsDefaults.aiCleanup
     }
 }
 

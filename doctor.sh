@@ -32,7 +32,7 @@ print -- ""
 print -- "Builds"
 [ -x "${BUILT_APP}/Contents/MacOS/Command" ] \
   && pass "Command.app built" \
-  || { fail "Command.app missing"; note "run ./build-agent.sh"; }
+  || note "source Command.app not built — run ./build-agent.sh only when creating a new local bundle"
 
 check_app_metadata() {
   local label="$1"
@@ -47,7 +47,14 @@ check_app_metadata() {
     fi
     return
   fi
-  [ -f "$plist" ] || { fail "${label} Info.plist missing"; return; }
+  if [ ! -f "$plist" ]; then
+    if [ "$required" = "required" ]; then
+      fail "${label} Info.plist missing"
+    else
+      note "${label} is incomplete — run ./build-agent.sh only when creating a new local bundle"
+    fi
+    return
+  fi
   local version bundle min_macos docs_index
   version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist" 2>/dev/null || true)"
   bundle="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$plist" 2>/dev/null || true)"
@@ -118,8 +125,8 @@ fi
 
 print -- "Config"
 [ -f "${STATE}/command-hotkeys.json" ] \
-  && pass "hotkeys configured" \
-  || { fail "no hotkey config"; note "run ./set-hotkeys.sh (or rebind in the Shortcuts tab)"; }
+  && pass "custom hotkeys configured" \
+  || pass "built-in default shortcuts active (no override file)"
 qa=("${SERVICES}/Claude - "*.workflow(N))
 (( ${#qa} > 0 )) \
   && pass "Quick Actions installed (${#qa})" \

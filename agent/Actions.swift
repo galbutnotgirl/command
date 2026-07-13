@@ -47,6 +47,7 @@ private func decodeTrigger(_ d: [String: Any]) -> ActionTrigger? {
           let rawKind = d["kind"] as? String, let kind = ActionKind(rawValue: rawKind) else { return nil }
     let delivery = (d["deliveryOverride"] as? String).flatMap(ActionDelivery.init(rawValue:))
     let destination = (d["destinationOverride"] as? String).flatMap(ClaudeDestination.init(rawValue:))
+    let provider = (d["providerOverride"] as? String).flatMap(AIProviderChoice.init(rawValue:))
     return ActionTrigger(
         id: id, kind: kind,
         keycode: UInt32(d["keycode"] as? Int ?? 0), mods: UInt32(d["mods"] as? Int ?? 0),
@@ -55,7 +56,8 @@ private func decodeTrigger(_ d: [String: Any]) -> ActionTrigger? {
         sessionModeOverride: d["sessionModeOverride"] as? String,
         includeSourceOverride: d["includeSourceOverride"] as? Bool,
         deliveryOverride: delivery,
-        destinationOverride: destination
+        destinationOverride: destination,
+        providerOverride: provider
     )
 }
 
@@ -99,6 +101,7 @@ func loadCustomActions() -> [CustomAction] {
             skill: d["skill"] as? String ?? "",
             delivery: (d["delivery"] as? String).flatMap(ActionDelivery.init(rawValue:)),
             destination: (d["destination"] as? String).flatMap(ClaudeDestination.init(rawValue:)) ?? .default,
+            provider: (d["provider"] as? String).flatMap(AIProviderChoice.init(rawValue:)) ?? .default,
             triggers: triggers
         )
     }
@@ -112,6 +115,7 @@ private func encodeTrigger(_ t: ActionTrigger) -> [String: Any] {
     if let v = t.includeSourceOverride { d["includeSourceOverride"] = v }
     if let v = t.deliveryOverride { d["deliveryOverride"] = v.rawValue }
     if let v = t.destinationOverride { d["destinationOverride"] = v.rawValue }
+    if let v = t.providerOverride { d["providerOverride"] = v.rawValue }
     return d
 }
 
@@ -122,6 +126,7 @@ func saveCustomActions(_ actions: [CustomAction]) {
          "includeSource": ca.includeSource, "enabled": ca.enabled,
          "isHandoff": ca.isHandoff, "skill": ca.skill,
          "delivery": ca.delivery.rawValue, "destination": ca.destination.rawValue,
+         "provider": ca.provider.rawValue,
          "triggers": ca.triggers.map(encodeTrigger)]
     }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {

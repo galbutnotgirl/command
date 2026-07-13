@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="menuDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8b909c"/>
+      <stop offset="0.48" stop-color="#575d6a"/>
+      <stop offset="1" stop-color="#252a34"/>
+    </linearGradient>
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif; fill:#f7fff9; }
+      .lead { fill:#d6eadb; font-size:15px; }
+      .caption { font-size:21px; font-weight:720; }
+      .small { fill:#b8c8bd; font-size:12px; }
+      .tile { fill:rgba(255,255,255,.07); stroke:rgba(255,255,255,.15); stroke-width:1; }
+      .menuText { fill:#f8fafc; opacity:.9; font-size:13px; font-weight:650; }
+      .greenA { fill:#00a86b; }
+      .greenB { fill:#00bf63; }
+      .greenC { fill:#008f5f; }
+      .greenD { fill:#00d084; }
+      .stroke { stroke:#fff; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+      .bar1 { animation:bar1 .88s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
+      .bar2 { animation:bar2 .88s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
+      .bar3 { animation:bar3 .88s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
+      .bar4 { animation:bar4 .88s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
+      @keyframes bar1 { 0%,100% { transform:scaleY(.52); } 50% { transform:scaleY(1.04); } }
+      @keyframes bar2 { 0%,100% { transform:scaleY(1.08); } 50% { transform:scaleY(.62); } }
+      @keyframes bar3 { 0%,100% { transform:scaleY(.78); } 50% { transform:scaleY(1.14); } }
+      @keyframes bar4 { 0%,100% { transform:scaleY(.62); } 50% { transform:scaleY(.96); } }
+      .float { animation:float 1.65s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
+      @keyframes float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-3px); } }
+    </style>
+  </defs>
+
+  <rect width="1280" height="640" fill="#15191d"/>
+  <rect width="1280" height="86" fill="url(#menuDark)"/>
+  <text x="54" y="50" font-size="28" font-weight="760">Green active voice icon directions</text>
+  <text x="54" y="74" class="lead">Compact solid color with animated white voice lines. No glyph, no long pill, no black treatment.</text>
+
+  <g transform="translate(54 118)">
+    <rect width="270" height="438" rx="20" class="tile"/>
+    <text x="24" y="42" class="caption">1. System Green</text>
+    <text x="24" y="68" class="lead">Best default candidate</text>
+    <rect x="20" y="100" width="230" height="42" rx="12" fill="url(#menuDark)"/>
+    <text x="36" y="126" class="menuText">Fri 10:15</text>
+    <g class="float" transform="translate(166 108)" filter="url(#softGlow)">
+      <rect x="0" y="0" width="32" height="32" rx="10" class="greenA"/>
+      <g stroke="#fff" stroke-width="2.8" stroke-linecap="round">
+        <line x1="9" y1="23" x2="9" y2="13" class="bar1"/>
+        <line x1="14" y1="24" x2="14" y2="8" class="bar2"/>
+        <line x1="19" y1="24" x2="19" y2="11" class="bar3"/>
+        <line x1="24" y1="23" x2="24" y2="15" class="bar4"/>
+      </g>
+    </g>
+    <g transform="translate(72 186) scale(3.7)" filter="url(#softGlow)">
+      <rect x="0" y="0" width="32" height="32" rx="10" class="greenA"/>
+      <g stroke="#fff" stroke-width="2.8" stroke-linecap="round">
+        <line x1="9" y1="23" x2="9" y2="13" class="bar1"/>
+        <line x1="14" y1="24" x2="14" y2="8" class="bar2"/>
+        <line x1="19" y1="24" x2="19" y2="11" class="bar3"/>
+        <line x1="24" y1="23" x2="24" y2="15" class="bar4"/>
+      </g>
+    </g>
+    <text x="24" y="364" class="small">Pure #00A86B. Reads polished, less loud than lime, still high contrast.</text>
+  </g>
+
+  <g transform="translate(356 118)">
+    <rect width="270" height="438" rx="20" class="tile"/>
+    <text x="24" y="42" class="caption">2. Bright Signal</text>
+    <text x="24" y="68" class="lead">Most visible</text>
+    <rect x="20" y="100" width="230" height="42" rx="12" fill="url(#menuDark)"/>
+    <text x="36" y="126" class="menuText">Fri 10:15</text>
+    <g class="float" transform="translate(166 108)" filter="url(#softGlow)">
+      <rect x="0" y="0" width="32" height="32" rx="10" class="greenB"/>
+      <g stroke="#fff" stroke-width="2.8" stroke-linecap="round">
+        <line x1="9" y1="23" x2="9" y2="13" class="bar1"/>
+        <line x1="14" y1="24" x2="14" y2="8" class="bar2"/>
+        <line x1="19" y1="24" x2="19" y2="11" class="bar3"/>
+        <line x1="24" y1="23" x2="24" y2="15" class="bar4"/>
+      </g>
+    </g>
+    <g transform="translate(72 186) scale(3.7)" filter="url(#softGlow)">
+      <rect x="0" y="0" width="32" height="32" rx="10" class="greenB"/>
+      <g stroke="#fff" stroke-width="2.8" stroke-linecap="round">
+        <line x1="9" y1="23" x2="9" y2="13" class="bar1"/>
+        <line x1="14" y1="24" x2="14" y2="8" class="bar2"/>
+        <line x1="19" y1="24" x2="19" y2="11" class="bar3"/>
+        <line x1="24" y1="23" x2="24" y2="15" class="bar4"/>
+      </g>
+    </g>
+    <text x="24" y="364" class="small">Pure #00BF63. Strong on busy backgrounds, may feel more “status light.”</text>
+  </g>
+
+  <g transform="translate(658 118)">
+    <rect width="270" height="438" rx="20" class="tile"/>
+    <text x="24" y="42" class="caption">3. Deep Emerald</text>
+    <text x="24" y="68" class="lead">Most understated</text>
+    <rect x="20" y="100" width="230" height="42" rx="12" fill="url(#menuDark)"/>
+    <text x="36" y="126" class="menuText">Fri 10:15</text>
+    <g class="float" transform="translate(166 108)" filter="url(#softGlow)">
+      <rect x="0" y="0" width="32" height="32" rx="10" class="greenC"/>
+      <g stroke="#fff" stroke-width="2.8" stroke-linecap="round">
+        <line x1="9" y1="23" x2="9" y2="13" class="bar1"/>
+        <line x1="14" y1="24" x2="14" y2="8" class="bar2"/>
+        <line x1="19" y1="24" x2="19" y2="11" class="bar3"/>
+        <line x1="24" y1="23" x2="24" y2="15" class="bar4"/>
+      </g>
+    </g>
+    <g transform="translate(72 186) scale(3.7)" filter="url(#softGlow)">
+      <rect x="0" y="0" width="32" height="32" rx="10" class="greenC"/>
+      <g stroke="#fff" stroke-width="2.8" stroke-linecap="round">
+        <line x1="9" y1="23" x2="9" y2="13" class="bar1"/>
+        <line x1="14" y1="24" x2="14" y2="8" class="bar2"/>
+        <line x1="19" y1="24" x2="19" y2="11" class="bar3"/>
+        <line x1="24" y1="23" x2="24" y2="15" class="bar4"/>
+      </g>
+    </g>
+    <text x="24" y="364" class="small">Pure #008F5F. Classiest, but least visible against dark translucent bars.</text>
+  </g>
+
+  <g transform="translate(960 118)">
+    <rect width="270" height="438" rx="20" class="tile"/>
+    <text x="24" y="42" class="caption">4. Mint Active</text>
+    <text x="24" y="68" class="lead">Friendliest motion</text>
+    <rect x="20" y="100" width="230" height="42" rx="12" fill="url(#menuDark)"/>
+    <text x="36" y="126" class="menuText">Fri 10:15</text>
+    <g class="float" transform="translate(166 108)" filter="url(#softGlow)">
+      <rect x="0" y="0" width="32" height="32" rx="10" class="greenD"/>
+      <g stroke="#fff" stroke-width="2.8" stroke-linecap="round">
+        <line x1="9" y1="23" x2="9" y2="13" class="bar1"/>
+        <line x1="14" y1="24" x2="14" y2="8" class="bar2"/>
+        <line x1="19" y1="24" x2="19" y2="11" class="bar3"/>
+        <line x1="24" y1="23" x2="24" y2="15" class="bar4"/>
+      </g>
+    </g>
+    <g transform="translate(72 186) scale(3.7)" filter="url(#softGlow)">
+      <rect x="0" y="0" width="32" height="32" rx="10" class="greenD"/>
+      <g stroke="#fff" stroke-width="2.8" stroke-linecap="round">
+        <line x1="9" y1="23" x2="9" y2="13" class="bar1"/>
+        <line x1="14" y1="24" x2="14" y2="8" class="bar2"/>
+        <line x1="19" y1="24" x2="19" y2="11" class="bar3"/>
+        <line x1="24" y1="23" x2="24" y2="15" class="bar4"/>
+      </g>
+    </g>
+    <text x="24" y="364" class="small">Pure #00D084. Fresh and readable, slightly less serious.</text>
+  </g>
+</svg>

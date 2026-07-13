@@ -34,6 +34,8 @@ function submitCapture({ dirs, settings, capture, notify = () => {} }) {
   const prompt = buildPrompt(settings, capture);
   const logFile = path.join(dirs.logs, `${id}.log`);
   const skill = (settings.skill || '').trim().replace(/^\//, '') || null;
+  const provider = settings.provider || 'claude';
+  const attachments = provider === 'codex' && capture.kind === 'image' && contentFile ? [contentFile] : [];
 
   const record = createSubmission(dirs, {
     id,
@@ -43,14 +45,17 @@ function submitCapture({ dirs, settings, capture, notify = () => {} }) {
     prompt,
     contentFile,
     logFile,
+    provider,
+    workspace: settings.workspace || null,
+    attachments,
   });
 
   notify(
-    'Submitted to Claude',
-    skill ? `${capture.source} capture handed to /${skill}` : `${capture.source} capture submitted`
+    'Submitted in Command',
+    skill ? `${capture.source} capture handed to ${provider === 'codex' ? '$' : '/'}${skill}` : `${capture.source} capture submitted to ${provider}`
   );
 
-  const donePromise = runCli({ cli: settings.cli, prompt, logFile }).then(({ exitCode, error, result }) => {
+  const donePromise = runCli({ cli: settings.cli, prompt, logFile, provider, attachments }).then(({ exitCode, error, result }) => {
     const status = error ? 'failed' : 'succeeded';
     const updated = updateSubmission(dirs, id, {
       status,
@@ -60,10 +65,10 @@ function submitCapture({ dirs, settings, capture, notify = () => {} }) {
       finishedAt: new Date().toISOString(),
     });
     if (error) {
-      notify('Claude submission failed', `${error} — see log: ${logFile}`);
+      notify('Background action failed', `${provider}: ${error} — see log: ${logFile}`);
     } else {
       const base = skill ? `/${skill} completed for ${capture.source} capture` : 'Submission completed';
-      notify('Claude finished', result ? `${base} — ${result}` : base);
+      notify('Background action finished', result ? `${provider}: ${base} — ${result}` : `${provider}: ${base}`);
     }
     return updated;
   });
@@ -76,10 +81,12 @@ function submitCapture({ dirs, settings, capture, notify = () => {} }) {
 // {skillInvocation}/{source}/{timestamp}/{content} substituted, so re-rendering
 // would wrap it a second time. Otherwise mirrors submitCapture: new id, new log
 // file, same runCli + submissions bookkeeping.
-function resubmitPrompt({ dirs, settings, prompt, source, kind, skill, contentFile, notify = () => {} }) {
+function resubmitPrompt({ dirs, settings, prompt, source, kind, skill, contentFile,
+                          attachments = [], notify = () => {} }) {
   ensureDirs(dirs);
   const id = crypto.randomUUID();
   const logFile = path.join(dirs.logs, `${id}.log`);
+  const provider = settings.provider || 'claude';
 
   const record = createSubmission(dirs, {
     id,
@@ -89,11 +96,14 @@ function resubmitPrompt({ dirs, settings, prompt, source, kind, skill, contentFi
     prompt,
     contentFile: contentFile || null,
     logFile,
+    provider,
+    workspace: settings.workspace || null,
+    attachments,
   });
 
-  notify('Submitted to Claude', skill ? `retry: ${source} capture handed to /${skill}` : `retry: ${source} capture submitted`);
+  notify('Submitted in Command', skill ? `retry: ${source} capture handed to ${provider === 'codex' ? '$' : '/'}${skill}` : `retry: ${source} capture submitted to ${provider}`);
 
-  const donePromise = runCli({ cli: settings.cli, prompt, logFile }).then(({ exitCode, error, result }) => {
+  const donePromise = runCli({ cli: settings.cli, prompt, logFile, provider, attachments }).then(({ exitCode, error, result }) => {
     const status = error ? 'failed' : 'succeeded';
     const updated = updateSubmission(dirs, id, {
       status,
@@ -103,10 +113,10 @@ function resubmitPrompt({ dirs, settings, prompt, source, kind, skill, contentFi
       finishedAt: new Date().toISOString(),
     });
     if (error) {
-      notify('Claude submission failed', `${error} — see log: ${logFile}`);
+      notify('Background action failed', `${provider}: ${error} — see log: ${logFile}`);
     } else {
       const base = skill ? `/${skill} completed for ${source} capture (retry)` : 'Submission completed (retry)';
-      notify('Claude finished', result ? `${base} — ${result}` : base);
+      notify('Background action finished', result ? `${provider}: ${base} — ${result}` : `${provider}: ${base}`);
     }
     return updated;
   });

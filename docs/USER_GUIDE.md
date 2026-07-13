@@ -1,6 +1,6 @@
 # Command User Guide
 
-Command is a native macOS menu-bar app for sending selected text, screenshots, typed notes, and dictated notes to Claude. It also supports background commands through `claude -p`, clipboard history, dictation history, import/export, and local troubleshooting.
+Command is a native macOS menu-bar app for sending selected text, screenshots, typed notes, and dictated notes to Claude, ChatGPT, or Codex. It also supports background commands through `claude -p` or `codex exec -`, clipboard history, dictation history, import/export, and local troubleshooting.
 
 This guide is written for end users. For a shorter cheat sheet, see [QUICK_REFERENCE.md](QUICK_REFERENCE.md). For ready-to-copy workflow setups, see [EXAMPLES.md](EXAMPLES.md). Maintainer and architecture notes live in [BACKGROUND_TRIGGER_INTEGRATION.md](BACKGROUND_TRIGGER_INTEGRATION.md).
 
@@ -14,19 +14,25 @@ This guide is written for end users. For a shorter cheat sheet, see [QUICK_REFER
 
 For permission details and reset commands, see [PERMISSIONS.md](PERMISSIONS.md).
 
+## Choose Claude, ChatGPT, or Codex
+
+Open **Settings -> Shortcuts** and choose **Default assistant**. Existing and fresh installations default to Claude. Choose **ChatGPT / Codex**, then select **ChatGPT** for general chats or **Codex** for workspace coding. ChatGPT and Codex delivery remain opt-in until **Set Up** shows ChatGPT app, Codex CLI, and workspace readiness.
+
+Provider resolution is trigger override, then Custom Action default, then global default. Claude exposes Chat, Cowork, and Code destinations. Codex uses configured workspace instead. Command never silently sends to another provider when selected provider is unavailable.
+
 Default built-in shortcuts:
 
 | Built-in combination | Default | Result |
 |---|---:|---|
-| Selected text -> Existing chat | F8 | Send selected text into current Claude chat. |
-| Selected text -> New chat | Option-F8 | Open new Claude chat and wait for your note. |
+| Selected text -> Existing chat | Option-F8 | Send selected text into current Claude chat. |
+| Selected text -> New chat | F8 | Open new Claude chat and wait for your note. |
 | Selected text -> New chat + auto-submit | Unbound | Open new Claude chat, submit, then restore focus. |
-| Screenshot -> Existing chat | F7 | Capture screenshot and add to current chat. |
-| Screenshot -> New chat | Option-F7 | Capture screenshot and open new chat. |
+| Screenshot -> Existing chat | Option-F7 | Capture screenshot and add to current chat. |
+| Screenshot -> New chat | F7 | Capture screenshot and open new chat. |
 | Screenshot -> New chat + auto-submit | Unbound | Capture screenshot, open new chat, submit. |
 | Clipboard History | F6 | Open searchable clipboard picker. |
-| Dictate -> Insert | F5 | Speak and paste transcript at cursor. |
-| Dictate -> Claude | Option-F5 | Speak and send transcript to Claude. |
+| Dictate -> Insert | Home | Speak and paste transcript at cursor. |
+| Dictate -> Assistant | Option-Home | Speak and send transcript to selected assistant. |
 
 You can change prompt and trigger shortcuts from **Settings -> Shortcuts**. Open the prompt/action editor or trigger row, click a key field, press a combo, press Delete to clear, or Esc to cancel. Dictation shortcuts live in **Settings -> Dictation Settings**.
 
@@ -34,8 +40,8 @@ Shortcut capture notes:
 
 | Case | Guidance |
 |---|---|
-| F5-F8 | Default alpha bindings, but macOS or hardware keyboards may treat them as media/brightness keys unless standard function keys are enabled. |
-| Home, End, PgUp, PgDn | Useful alternatives for press-and-hold dictation on keyboards where F-keys conflict. Bind them in **Dictation Settings**. |
+| F6/F7/F8 and Home | Default alpha bindings. F6/F7/F8 can still conflict with app shortcuts, and Home can conflict with navigation-heavy workflows. |
+| Home, End, PgUp, PgDn | Useful alternatives for press-and-hold dictation on keyboards where F-keys conflict. rebind dictation shortcuts in Dictation Settings. |
 | Press-and-hold dictation | Hold to record, release after the last word. The stop sound confirms release; the active menu-bar chip may stay visible while tail capture, transcription, cleanup, and dispatch finish. |
 | Locked dictation | Double-tap to lock recording on when holding is awkward; stop from the menu or dictation control. |
 
@@ -69,11 +75,11 @@ Each prompt chooses delivery:
 
 | Delivery | Result |
 |---|---|
-| Existing chat | Paste into current Claude chat. |
-| New chat | Open a new Claude chat and wait. |
-| Background | Run through `claude -p` with no Claude window. |
+| Existing session | Paste into current Claude, ChatGPT, or Codex session. |
+| New session | Open new session in selected assistant and wait. |
+| Background | Run through selected local CLI with no assistant window. |
 
-Each prompt can choose a destination:
+Claude prompts can choose destination. Codex prompts inherit configured workspace:
 
 | Destination | Result |
 |---|---|
@@ -82,10 +88,10 @@ Each prompt can choose a destination:
 | Cowork | Send to Claude Cowork mode. |
 | Code | Send to Claude Code mode. |
 
-You can set defaults at three levels:
+You can set provider defaults at three levels:
 
-1. Global default destination in **Shortcuts**.
-2. Prompt/action default delivery and destination.
+1. Global default assistant in **Shortcuts**.
+2. Prompt/action default assistant, delivery, and Claude destination.
 3. Trigger-level override for one specific trigger.
 
 If a trigger shows `—`, it inherits from the prompt/action.
@@ -160,7 +166,7 @@ More complete setups live in [EXAMPLES.md](EXAMPLES.md).
 
 ## Background Actions
 
-Background delivery runs without opening Claude. Command renders your prompt and passes it to `claude -p`. Runs appear under **Command History -> Background** with status, age, logs, retry, mark-failed, retention, and parsed result when available.
+Background delivery runs without opening assistant app. Command renders prompt and passes it to `claude -p` or `codex exec -`. Runs appear under **Command History -> Background** with provider, status, age, logs, retry, mark-failed, retention, and parsed result when available.
 
 Use background actions for:
 
@@ -266,7 +272,7 @@ Tabs:
 | Vocabulary | Proper nouns, product names, filler words. |
 | Dictation Settings | Model, microphone access, shortcuts, processing, sounds. |
 
-Use **Dictation Settings** for Dictate -> Insert and Dictate -> Claude shortcuts. Use **Shortcuts** for voice triggers tied to prompt actions.
+Use **Dictation Settings** for Dictate -> Insert and Dictate -> Assistant shortcuts. Use **Shortcuts** for voice triggers tied to prompt actions.
 
 Voice custom actions use the same recording engine as built-in Dictate. Configure voice prompt actions in **Shortcuts**, not Dictation Settings.
 
@@ -344,7 +350,7 @@ Common fixes:
 | Problem | Fix |
 |---|---|
 | Hotkeys do nothing | Grant Accessibility, then restart Command. |
-| F5-F8 do system functions | Enable standard function keys, rebind prompt shortcuts in Shortcuts, or rebind dictation shortcuts in Dictation Settings. |
+| Shortcut keys conflict | Rebind prompt shortcuts in Shortcuts; rebind dictation shortcuts in Dictation Settings. |
 | Screenshot fails | Grant Screen Recording, then restart Command. |
 | Dictation does not start | Grant Microphone and download model in Dictation Settings. |
 | Background action fails | Open Command History, expand failed run, inspect log. |

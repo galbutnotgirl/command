@@ -118,6 +118,39 @@ final class ActionModelsTests: XCTestCase {
         }
     }
 
+    func testNewUserDefaultsUseMacFunctionRowKeys() {
+        let byAction = Dictionary(uniqueKeysWithValues: DEFAULT_BINDINGS.map { ($0.action, (keycode: $0.keycode, mods: $0.mods)) })
+        XCTAssertEqual(byAction["add"]?.keycode, 100)
+        XCTAssertEqual(byAction["add"]?.mods, 2048)
+        XCTAssertEqual(byAction["comment"]?.keycode, 100)
+        XCTAssertEqual(byAction["comment"]?.mods, 0)
+        XCTAssertEqual(byAction["shotadd"]?.keycode, 98)
+        XCTAssertEqual(byAction["shotadd"]?.mods, 2048)
+        XCTAssertEqual(byAction["shotcomment"]?.keycode, 98)
+        XCTAssertEqual(byAction["shotcomment"]?.mods, 0)
+        XCTAssertEqual(byAction["cliphistory"]?.keycode, 97)
+        XCTAssertEqual(byAction["cliphistory"]?.mods, 0)
+        XCTAssertEqual(byAction["dictate"]?.keycode, 115)
+        XCTAssertEqual(byAction["dictate"]?.mods, 0)
+        XCTAssertEqual(byAction["dictateadd"]?.keycode, 115)
+        XCTAssertEqual(byAction["dictateadd"]?.mods, 2048)
+    }
+
+    func testNewUserDefaultsDoNotCollideWhenBound() {
+        var seen = Set<String>()
+        for binding in DEFAULT_BINDINGS where binding.keycode != 0 {
+            let key = "\(binding.keycode):\(binding.mods)"
+            XCTAssertFalse(seen.contains(key), "Duplicate default shortcut \(key)")
+            seen.insert(key)
+        }
+    }
+
+    func testAutoSubmitDefaultsStayUnboundForNewUsers() {
+        let byAction = Dictionary(uniqueKeysWithValues: DEFAULT_BINDINGS.map { ($0.action, (keycode: $0.keycode, mods: $0.mods)) })
+        XCTAssertEqual(byAction["go"]?.keycode, 0)
+        XCTAssertEqual(byAction["shotgo"]?.keycode, 0)
+    }
+
     // ---- HotkeyBinding.human -------------------------------------------------
 
     func testUnboundHotkeyDisplaysAsDash() {
@@ -126,7 +159,7 @@ final class ActionModelsTests: XCTestCase {
     }
 
     func testBoundHotkeyDisplaysShortcut() {
-        let b = HotkeyBinding(action: "add", keycode: 100, mods: 0, enabled: true)
-        XCTAssertEqual(b.human, "F8")
+        let b = HotkeyBinding(action: "add", keycode: 100, mods: 2048, enabled: true)
+        XCTAssertEqual(b.human, "⌥F8")
     }
 }

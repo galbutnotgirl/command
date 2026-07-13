@@ -48,6 +48,14 @@
       <header class="doc-hero">
         <h1>Changelog</h1>
         <p class="lead">User-facing release notes for alpha builds.</p>
+        <h2>1.2.0-alpha.8</h2>
+        <ul>
+          <li>Added first-class Claude and ChatGPT / Codex selection globally, per Custom Action, and per trigger.</li>
+          <li>Added ChatGPT general-chat and workspace-aware Codex destinations with global, action, and trigger inheritance.</li>
+          <li>Routed ChatGPT new sessions through Quick Chat and Codex new sessions through workspace-aware deep links.</li>
+          <li>Fixed foreground failures that could report success after workspace validation or task creation failed.</li>
+          <li>Added Codex foreground tasks, workspace routing, background <code>codex exec -</code>, image attachments, safe execution presets, provider-tagged history, and compatible settings migration.</li>
+        </ul>
       </header>
       <section id="alpha6">
         <h2>1.2.0-alpha.6</h2>
@@ -73,15 +81,15 @@
         <table>
           <thead><tr><th>Built-in combination</th><th>Default</th></tr></thead>
           <tbody>
-            <tr><td>Selected text -> Existing chat</td><td><kbd>F8</kbd></td></tr>
-            <tr><td>Selected text -> New chat</td><td><kbd>Option-F8</kbd></td></tr>
+            <tr><td>Selected text -> Existing chat</td><td><kbd>Option-F8</kbd></td></tr>
+            <tr><td>Selected text -> New chat</td><td><kbd>F8</kbd></td></tr>
             <tr><td>Selected text -> New chat + auto-submit</td><td>Unbound</td></tr>
-            <tr><td>Screenshot -> Existing chat</td><td><kbd>F7</kbd></td></tr>
-            <tr><td>Screenshot -> New chat</td><td><kbd>Option-F7</kbd></td></tr>
+            <tr><td>Screenshot -> Existing chat</td><td><kbd>Option-F7</kbd></td></tr>
+            <tr><td>Screenshot -> New chat</td><td><kbd>F7</kbd></td></tr>
             <tr><td>Screenshot -> New chat + auto-submit</td><td>Unbound</td></tr>
             <tr><td>Clipboard History</td><td><kbd>F6</kbd></td></tr>
-            <tr><td>Dictate -> Insert</td><td><kbd>F5</kbd></td></tr>
-            <tr><td>Dictate -> Claude</td><td><kbd>Option-F5</kbd></td></tr>
+            <tr><td>Dictate -> Insert</td><td><kbd>Home</kbd></td></tr>
+            <tr><td>Dictate -> Assistant</td><td><kbd>Option-Home</kbd></td></tr>
           </tbody>
         </table>
       </section>

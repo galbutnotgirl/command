@@ -11,9 +11,42 @@ import ClaudeCommandCore
 // Repo URL lives in Updater.swift (GITHUB_REPO_URL) as the single source of truth.
 
 enum SettingsTab: Equatable {
-    case setup, shortcuts, history, templates, handoffs
+    case setup, shortcuts, history, templates, handoffs, background
     case dictHistory, dictCorrections, dictVocabulary, dictSettings
     case about
+
+    var storageValue: String {
+        switch self {
+        case .setup: return "setup"
+        case .shortcuts: return "shortcuts"
+        case .history: return "history"
+        case .templates: return "templates"
+        case .handoffs: return "handoffs"
+        case .background: return "background"
+        case .dictHistory: return "dictHistory"
+        case .dictCorrections: return "dictCorrections"
+        case .dictVocabulary: return "dictVocabulary"
+        case .dictSettings: return "dictSettings"
+        case .about: return "about"
+        }
+    }
+
+    init?(storageValue: String) {
+        switch storageValue {
+        case "setup": self = .setup
+        case "shortcuts": self = .shortcuts
+        case "history": self = .history
+        case "templates": self = .templates
+        case "handoffs": self = .handoffs
+        case "background": self = .background
+        case "dictHistory": self = .dictHistory
+        case "dictCorrections": self = .dictCorrections
+        case "dictVocabulary": self = .dictVocabulary
+        case "dictSettings": self = .dictSettings
+        case "about": self = .about
+        default: return nil
+        }
+    }
 }
 
 // Single shared model (the local key monitor in main.swift also talks to it
@@ -86,11 +119,15 @@ final class SettingsModel: ObservableObject {
     @Published var customActions: [CustomAction] = []
     @Published var recordingAction: String? = nil
     @Published var bindingConflict: String? = nil
-    @Published var claudeDestination: String = UserDefaults.standard.string(forKey: "claudeDestination") ?? "code"
-    @Published var soundsEnabled: Bool = (UserDefaults.standard.object(forKey: "soundsEnabled") as? Bool) ?? true
-    @Published var soundVolume: Double = (UserDefaults.standard.object(forKey: "soundVolume") as? Double) ?? 0.35
-    @Published var startSound: String = UserDefaults.standard.string(forKey: "startSound") ?? "Tink"
-    @Published var stopSound: String = UserDefaults.standard.string(forKey: "stopSound") ?? "Tink"
+    @Published var claudeDestination: String = UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent"
+    @Published var codexDestination: String = UserDefaults.standard.string(forKey: "codexDestination") ?? "code"
+    @Published var defaultProvider: String = UserDefaults.standard.string(forKey: "defaultProvider") ?? "claude"
+    @Published var codexWorkspace: String = UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory()
+    @Published var soundsEnabled: Bool = (UserDefaults.standard.object(forKey: VoiceSettingsKeys.soundsEnabled) as? Bool) ?? VoiceSettingsDefaults.soundsEnabled
+    @Published var soundVolume: Double = (UserDefaults.standard.object(forKey: VoiceSettingsKeys.soundVolume) as? Double) ?? VoiceSettingsDefaults.soundVolume
+    @Published var startSound: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.startSound) ?? VoiceSettingsDefaults.startSound
+    @Published var stopSound: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.stopSound) ?? VoiceSettingsDefaults.stopSound
+    @Published var dictationAssistantProvider: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.dictationAssistantProvider) ?? VoiceSettingsDefaults.dictationAssistantProvider
 
     func refresh() {
         perms = permissionChecks()
@@ -227,6 +264,18 @@ final class SettingsModel: ObservableObject {
         }
         saveCustomActions(customActions)
     }
+    func setTriggerProvider(triggerID: String, provider: AIProviderChoice?) {
+        for i in customActions.indices {
+            if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
+                customActions[i].triggers[j].providerOverride = provider
+                if provider?.provider == .codex && customActions[i].triggers[j].destinationOverride == .cowork {
+                    customActions[i].triggers[j].destinationOverride = nil
+                }
+                break
+            }
+        }
+        saveCustomActions(customActions)
+    }
     func setTriggerAutoSubmit(triggerID: String, autoSubmit: Bool?) {
         for i in customActions.indices {
             if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
@@ -255,20 +304,37 @@ final class SettingsModel: ObservableObject {
     }
 }
 
+// NSSound does not retain itself while playing. Keep active cues alive until
+// their delegate callback so short start/stop sounds are not clipped.
+private final class UISoundPlayer: NSObject, NSSoundDelegate {
+    static let shared = UISoundPlayer()
+    private var activeSounds: [NSSound] = []
+
+    func play(_ name: String, volume: Float) {
+        let url = URL(fileURLWithPath: "/System/Library/Sounds/\(name).aiff")
+        guard let sound = NSSound(contentsOf: url, byReference: true) else { return }
+        sound.volume = volume
+        sound.delegate = self
+        activeSounds.append(sound)
+        if !sound.play() { activeSounds.removeAll { $0 === sound } }
+    }
+
+    func sound(_ sound: NSSound, didFinishPlaying flag: Bool) {
+        activeSounds.removeAll { $0 === sound }
+    }
+}
+
 // Global helper — respects soundsEnabled + soundVolume from settingsModel.
 func playUISound(_ name: String) {
     guard settingsModel.soundsEnabled else { return }
-    let url = URL(fileURLWithPath: "/System/Library/Sounds/\(name).aiff")
-    if let s = NSSound(contentsOf: url, byReference: true) {
-        s.volume = Float(settingsModel.soundVolume)
-        s.play()
-    }
+    UISoundPlayer.shared.play(name, volume: Float(settingsModel.soundVolume))
 }
 
 // ---- window controller ------------------------------------------------------
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var tabObserver: AnyCancellable?
+    private let frameAutosaveName = "CommandSettingsWindowFrame"
 
     var isVisible: Bool { window?.isVisible ?? false }
 
@@ -289,18 +355,19 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         w.isReleasedWhenClosed = false
         w.minSize = NSSize(width: 960, height: 600)
+        w.setFrameAutosaveName(frameAutosaveName)
         w.delegate = self
         window = w
-        // Resize to fit each tab (up to the screen) whenever the tab changes.
         tabObserver = settingsModel.$tab
             .receive(on: RunLoop.main)
-            .sink { [weak self] t in self?.sizeWindow(for: t) }
+            .sink { t in UserDefaults.standard.set(t.storageValue, forKey: "lastSettingsTab") }
     }
 
     // Size once on first show — large enough for all tabs without resizing on switch.
     // All tabs use ScrollView, so any overflow scrolls gracefully.
     private func sizeWindow(for tab: SettingsTab) {
         guard let w = window, !w.isVisible else { return }
+        if UserDefaults.standard.object(forKey: "NSWindow Frame \(frameAutosaveName)") != nil { return }
         let cap = ((w.screen ?? NSScreen.main)?.visibleFrame.height ?? 900) - 40
         let h = min(860, cap)
         w.setContentSize(NSSize(width: 1040, height: h))
@@ -336,10 +403,20 @@ struct SettingsRootView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 4) {
             tabButton(.setup, "Set Up", "checklist")
-            tabButton(.shortcuts, "Shortcuts", "keyboard")
-            tabButton(.templates, "Context", "doc.text.below.ecg")
-            tabButton(.handoffs, "Command History", "paperplane.circle")
+            tabButton(.about, "About", "info.circle")
             tabButton(.history, "Clipboard History", "clock.arrow.circlepath")
+
+            Divider().padding(.vertical, 4)
+
+            Text("SHORTCUTS")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 2)
+            tabButton(.shortcuts, "Shortcut Settings", "keyboard")
+            tabButton(.templates, "Context", "doc.text.below.ecg")
+            tabButton(.background, "Background", "terminal")
+            tabButton(.handoffs, "History", "paperplane.circle")
 
             Divider().padding(.vertical, 4)
 
@@ -348,14 +425,10 @@ struct SettingsRootView: View {
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 8)
                 .padding(.bottom, 2)
-            tabButton(.dictHistory,     "History",     "clock")
-            tabButton(.dictCorrections, "Corrections", "text.badge.checkmark")
+            tabButton(.dictSettings,    "Settings",    "gear")
             tabButton(.dictVocabulary,  "Vocabulary",  "character.book.closed")
-            tabButton(.dictSettings,    "Dictation Settings", "gear")
-
-            Divider().padding(.vertical, 4)
-
-            tabButton(.about, "About", "info.circle")
+            tabButton(.dictCorrections, "Corrections", "text.badge.checkmark")
+            tabButton(.dictHistory,     "History",     "clock")
             Spacer()
         }
         .padding(14)
@@ -389,6 +462,7 @@ struct SettingsRootView: View {
         case .templates:       TemplatesView()
         case .history:         HistoryView()
         case .handoffs:        HandoffsView()
+        case .background:      HandoffSettingsView()
         case .dictHistory:     DictHistoryView()
         case .dictCorrections: DictCorrectionsView()
         case .dictVocabulary:  DictVocabularyView()
@@ -454,7 +528,7 @@ struct SetupView: View {
                         .font(.caption).foregroundColor(.secondary)
                     Text("If macOS asks again after a rebuild, re-grant permissions for Command.")
                         .font(.caption).foregroundColor(.secondary)
-                    Text("F5–F8 don't fire? Enable standard function keys in macOS Keyboard settings, or bind dictation to Home, End, PgUp, or PgDn in Dictation Settings.")
+                    Text("Function-key shortcuts don't fire? Enable standard function keys in macOS Keyboard settings, or rebind prompt and dictation shortcuts.")
                         .font(.caption).foregroundColor(.secondary)
                 }
             }
@@ -495,8 +569,32 @@ struct SetupView: View {
                 stopClipwatch(); startClipwatch()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { model.refresh() }
             }
+        case "Background service":
+            return CheckAction(label: "Restart") { restartApp() }
         case "Hotkeys configured":
             return CheckAction(label: "Shortcuts →") { model.tab = .shortcuts }
+        case "Claude app":
+            return CheckAction(label: "Install Help") { openHelpDoc(named: "install") }
+        case "Claude CLI":
+            return CheckAction(label: "Log In Help") { openHelpDoc(named: "troubleshooting", fragment: "claude-cli") }
+        case "ChatGPT app":
+            return CheckAction(label: "Install Help") { openHelpDoc(named: "install") }
+        case "Codex CLI":
+            return CheckAction(label: "Log In Help") { openHelpDoc(named: "troubleshooting", fragment: "codex-cli") }
+        case "Codex workspace":
+            return CheckAction(label: "Choose…") {
+                let panel = NSOpenPanel()
+                panel.title = "Choose Codex Workspace"
+                panel.canChooseFiles = false
+                panel.canChooseDirectories = true
+                panel.allowsMultipleSelection = false
+                panel.directoryURL = URL(fileURLWithPath: model.codexWorkspace)
+                if panel.runModal() == .OK, let url = panel.url {
+                    model.codexWorkspace = url.path
+                    UserDefaults.standard.set(url.path, forKey: "codexWorkspace")
+                    model.refresh()
+                }
+            }
         case "Right-click actions":
             return CheckAction(label: "Learn") {
                 openHelpDoc(named: "install", fragment: "source")
@@ -579,22 +677,36 @@ struct PermStep: View {
 struct CompRow: View {
     let check: StatusCheck
     let action: CheckAction?
+    @State private var expanded = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: statusIcon)
-                .font(.system(size: 13))
-                .foregroundColor(statusColor)
-                .frame(width: 20)
-            Text(check.title).font(.callout)
-            Spacer()
-            if check.state != .ok, let a = action {
-                Button(a.label) { a.run() }
-                    .buttonStyle(.bordered).controlSize(.small)
-            } else if check.state == .ok {
-                Text("OK").font(.caption).foregroundColor(.secondary)
-            } else {
-                Text("—").font(.caption).foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Image(systemName: statusIcon)
+                    .font(.system(size: 13))
+                    .foregroundColor(statusColor)
+                    .frame(width: 20)
+                Text(check.title).font(.callout)
+                Spacer()
+                Button(expanded ? "Hide" : "Details") { expanded.toggle() }
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                if check.state != .ok, let a = action {
+                    Button(a.label) { a.run() }
+                        .buttonStyle(.bordered).controlSize(.small)
+                } else if check.state == .ok {
+                    Text("OK").font(.caption).foregroundColor(.secondary)
+                } else {
+                    Text("—").font(.caption).foregroundColor(.secondary)
+                }
+            }
+            if expanded {
+                Text(check.detail)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 30)
             }
         }
         .padding(.vertical, 8).padding(.horizontal, 14)
@@ -624,6 +736,24 @@ struct ShortcutsView: View {
             set: { model.claudeDestination = $0; UserDefaults.standard.set($0, forKey: "claudeDestination") }
         )
     }
+    private var codexDestBinding: Binding<String> {
+        Binding(
+            get: { model.codexDestination },
+            set: { model.codexDestination = $0; UserDefaults.standard.set($0, forKey: "codexDestination") }
+        )
+    }
+    private var providerBinding: Binding<String> {
+        Binding(
+            get: { model.defaultProvider },
+            set: { model.defaultProvider = $0; UserDefaults.standard.set($0, forKey: "defaultProvider") }
+        )
+    }
+    private var workspaceBinding: Binding<String> {
+        Binding(
+            get: { model.codexWorkspace },
+            set: { model.codexWorkspace = $0; UserDefaults.standard.set($0, forKey: "codexWorkspace") }
+        )
+    }
 
     var body: some View {
         ScrollView {
@@ -631,20 +761,46 @@ struct ShortcutsView: View {
                 HStack {
                     Text("Shortcuts").font(.title2).bold()
                     Spacer()
+                    Button(action: { exportGlobalBundle(sections: Set(GlobalBundleSection.allCases)) }) {
+                        Label("Export", systemImage: "square.and.arrow.up")
+                    }
+                    .help("Export all Command settings. Import later lets you choose what to keep or overwrite.")
                 }
 
-                // Destination — where every hotkey and custom action opens Claude.
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Default Claude destination").font(.headline)
+                    Text("Default assistant").font(.headline)
+                    Picker("", selection: providerBinding) {
+                        Text("Claude").tag("claude")
+                        Text("ChatGPT").tag("codex")
+                    }
+                    .pickerStyle(.segmented).frame(maxWidth: 240)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(model.defaultProvider == "codex" ? "Default ChatGPT destination" : "Default Claude destination").font(.headline)
                     Text("Used unless a prompt or individual trigger overrides it.")
                         .font(.caption).foregroundColor(.secondary)
-                    Picker("", selection: destBinding) {
-                        Text("Chat").tag("chat")
-                        Text("Cowork").tag("cowork")
-                        Text("Code").tag("code")
+                    if model.defaultProvider == "codex" {
+                        Picker("", selection: codexDestBinding) {
+                            Text("Chat").tag("chat")
+                            Text("Codex").tag("code")
+                        }
+                        .pickerStyle(.segmented).frame(maxWidth: 240)
+                        if model.codexDestination == "code" {
+                            Text("Default Codex workspace").font(.caption).bold()
+                            TextField("Workspace path", text: workspaceBinding).textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 520)
+                        }
+                    } else {
+                        Picker("", selection: destBinding) {
+                            Text("Recent").tag("recent")
+                            Text("Chat").tag("chat")
+                            Text("Cowork").tag("cowork")
+                            Text("Code").tag("code")
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 340)
                     }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 240)
                 }
                 .padding(.bottom, 8)
 
@@ -811,10 +967,17 @@ struct BuiltInComposeSheet: View {
     @State private var prompt = ""
     @State private var defaultAutoSubmit = false
     @State private var overrides: [String: Bool] = [:]
+    @State private var confirmingReset = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Edit Compose").font(.headline)
+            HStack {
+                Text("Edit Compose").font(.headline)
+                Spacer()
+                Button("Reset") { confirmingReset = true }
+                    .buttonStyle(.bordered)
+                    .help("Restore original built-in Compose prompt and row behavior.")
+            }
 
             Toggle("Default auto-submit", isOn: $defaultAutoSubmit)
                 .help("Used unless a row overrides it.")
@@ -864,6 +1027,19 @@ struct BuiltInComposeSheet: View {
         }
         .padding(24)
         .frame(minWidth: 620, minHeight: 420)
+        .alert("Reset built-in Compose?", isPresented: $confirmingReset) {
+            Button("Cancel", role: .cancel) {}
+            Button("Reset", role: .destructive) {
+                templates.resetBuiltInComposeTemplates()
+                let defaults = DEFAULT_BUILTIN_COMPOSE_SETTINGS
+                saveBuiltInComposeSettings(defaults)
+                prompt = templates.builtInComposeTemplate
+                defaultAutoSubmit = defaults.autoSubmitDefault
+                overrides = defaults.autoSubmitOverrides
+            }
+        } message: {
+            Text("This restores original built-in prompt variants, auto-submit defaults, and row overrides.")
+        }
         .onAppear {
             let settings = loadBuiltInComposeSettings()
             prompt = templates.builtInComposeTemplate
@@ -886,14 +1062,14 @@ struct EditableBuiltInComposeRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: def.icon).foregroundColor(appPurple).frame(width: 16)
-            Text(def.inputLabel).font(.caption).frame(width: 110, alignment: .leading)
-            Text(def.behaviorLabel).font(.caption).frame(width: 96, alignment: .leading)
+                .help(def.inputLabel)
+            Text(def.behaviorLabel).font(.caption).frame(width: 120, alignment: .leading)
             Picker("", selection: $autoSubmitChoice) {
                 ForEach(AutoSubmitChoice.allCases) { choice in
                     Text(choice.label).tag(choice)
                 }
             }
-            .labelsHidden().frame(width: 130)
+            .labelsHidden().frame(width: 150)
             Spacer()
             KeyBindingField(action: binding.action, binding: binding, model: model)
         }
@@ -908,6 +1084,10 @@ struct CustomActionRow: View {
     let ca: CustomAction
     @ObservedObject var model: SettingsModel
     @State private var showingEdit = false
+    @State private var confirmingDelete = false
+    private var resolvedProvider: AIProvider {
+        ca.provider.resolve(default: AIProvider(rawValue: model.defaultProvider) ?? .claude)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -920,9 +1100,14 @@ struct CustomActionRow: View {
                         Text(ca.delivery.label)
                             .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
                             .background(Color.secondary.opacity(0.12)).cornerRadius(4)
-                        Text(ca.destination.label)
+                        Text(resolvedProvider.label)
                             .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
                             .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+                        if resolvedProvider.supportsDestinations {
+                            Text(ca.destination.label(for: resolvedProvider))
+                                .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+                        }
                         if !ca.includeSource && ca.delivery != .background {
                             Text("no src").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
                                 .background(Color.secondary.opacity(0.12)).cornerRadius(4)
@@ -940,7 +1125,7 @@ struct CustomActionRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Edit action")
-                Button(action: { model.deleteCustomAction(id: ca.id) }) {
+                Button(action: { confirmingDelete = true }) {
                     Image(systemName: "trash").foregroundColor(.red)
                 }
                 .buttonStyle(.plain)
@@ -948,12 +1133,19 @@ struct CustomActionRow: View {
             }
 
             ForEach(ca.triggers) { trig in
-                TriggerSummaryRow(trigger: trig, action: ca)
+                TriggerSummaryRow(trigger: trig, action: ca,
+                                  provider: ca.effectiveProvider(for: trig, default: AIProvider(rawValue: model.defaultProvider) ?? .claude))
             }
         }
         .settingsCard()
         .sheet(isPresented: $showingEdit) {
             CustomActionSheet(isPresented: $showingEdit, model: model, editing: ca)
+        }
+        .alert("Delete \"\(ca.name)\"?", isPresented: $confirmingDelete) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) { model.deleteCustomAction(id: ca.id) }
+        } message: {
+            Text("This removes the action, its prompt, and all of its triggers.")
         }
     }
 }
@@ -961,6 +1153,7 @@ struct CustomActionRow: View {
 struct TriggerSummaryRow: View {
     let trigger: ActionTrigger
     let action: CustomAction
+    let provider: AIProvider
 
     private var kindIcon: String {
         switch trigger.kind {
@@ -981,8 +1174,13 @@ struct TriggerSummaryRow: View {
                     .font(.caption2).padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Color.secondary.opacity(0.12)).cornerRadius(4)
             }
+            if let provider = trigger.providerOverride {
+                Text(provider.label)
+                    .font(.caption2).padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+            }
             if let destination = trigger.destinationOverride {
-                Text(destination.label)
+                Text(destination.label(for: provider))
                     .font(.caption2).padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Color.secondary.opacity(0.12)).cornerRadius(4)
             }
@@ -1041,8 +1239,12 @@ struct CustomActionSheet: View {
     @State private var includeSource: Bool = true
     @State private var delivery: ActionDelivery = .newChat
     @State private var destination: ClaudeDestination = .default
+    @State private var provider: AIProviderChoice = .default
     @State private var skill: String = ""
     @State private var actionTriggers: [ActionTrigger] = []
+    private var resolvedProvider: AIProvider {
+        provider.resolve(default: AIProvider(rawValue: model.defaultProvider) ?? .claude)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1068,33 +1270,59 @@ struct CustomActionSheet: View {
 
                     HStack(alignment: .top, spacing: 18) {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text("Delivery").font(.caption).bold()
+                            Text("Assistant").font(.caption).bold()
+                            Picker("", selection: $provider) {
+                                ForEach(AIProviderChoice.allCases, id: \.self) { Text($0.label).tag($0) }
+                            }
+                            .labelsHidden().pickerStyle(.segmented)
+                            .onChange(of: provider) { _, _ in
+                                if resolvedProvider == .codex && destination == .cowork { destination = .default }
+                            }
+                        }
+                        .frame(width: CustomActionSheetLayout.fieldColumn, alignment: .leading)
+
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(spacing: 5) {
+                                Text("Delivery").font(.caption).bold()
+                                Image(systemName: "questionmark.circle")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .help("Existing session pastes into open assistant. New session opens a fresh composer. Background runs a local CLI without opening assistant app.")
+                            }
                             Picker("", selection: $delivery) {
                                 ForEach(ActionDelivery.allCases, id: \.self) { d in Text(d.label).tag(d) }
                             }
                             .labelsHidden()
                             .pickerStyle(.segmented)
-                            .help("Existing chat pastes into the open Claude chat. New chat opens a fresh Claude session. Background pipes to `claude -p`.")
+                                .help("Existing session pastes into selected assistant. New session opens a fresh composer. Background runs selected local CLI.")
                         }
                         .frame(width: CustomActionSheetLayout.fieldColumn, alignment: .leading)
 
+                    }
+
+                    if resolvedProvider.supportsDestinations {
                         VStack(alignment: .leading, spacing: 5) {
                             Text("Destination").font(.caption).bold()
                             Picker("", selection: $destination) {
-                                ForEach(ClaudeDestination.allCases, id: \.self) { d in
-                                    Text(d == .default ? "—" : d.label).tag(d)
+                                ForEach(ClaudeDestination.available(for: resolvedProvider), id: \.self) { d in
+                                    Text(d.label(for: resolvedProvider)).tag(d)
                                 }
                             }
                             .labelsHidden()
                             .pickerStyle(.segmented)
-                            .help("Default uses the global setting at the top of Shortcuts. Chat, Cowork, and Code override it for this prompt.")
+                            .help(resolvedProvider == .claude ? "Default uses global Claude destination. Chat, Cowork, and Code override it." : "Default uses global ChatGPT destination. Chat and Codex override it.")
                         }
-                        .frame(width: CustomActionSheetLayout.fieldColumn, alignment: .leading)
+                        .frame(maxWidth: CustomActionSheetLayout.fieldColumn, alignment: .leading)
                     }
 
                     if delivery == .background {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text("Background skill").font(.caption).bold()
+                            HStack {
+                                Text("Background skill").font(.caption).bold()
+                                Button("Setup guide") { openHelpDoc(named: "background") }
+                                    .buttonStyle(.link)
+                                    .font(.caption)
+                            }
                             TextField("triage-capture (empty = claude -p)", text: $skill)
                                 .textFieldStyle(.roundedBorder)
                         }
@@ -1103,7 +1331,7 @@ struct CustomActionSheet: View {
                             Toggle("Include source app", isOn: $includeSource)
                                 .help("Prepend \"from: AppName — URL\" before the prompt. Default for triggers that don't override it.")
                             Toggle("Auto-submit", isOn: $isAutoSubmit)
-                                .help("Press Return automatically after pasting the prompt into Claude. Default for triggers that don't override it.")
+                                .help("Press Return automatically after pasting prompt into selected assistant. Default for triggers without override.")
                             Spacer()
                         }
                     }
@@ -1163,7 +1391,7 @@ struct CustomActionSheet: View {
             if let e = editing {
                 name = e.name; prompt = e.prompt
                 isAutoSubmit = e.isAutoSubmit
-                delivery = e.delivery; destination = e.destination
+                delivery = e.delivery; destination = e.destination; provider = e.provider
                 sessionMode = e.sessionMode; includeSource = e.includeSource
                 skill = e.skill
                 actionTriggers = e.triggers
@@ -1183,7 +1411,7 @@ struct CustomActionSheet: View {
             var updated = existing
             updated.name = trimName; updated.prompt = prompt
             updated.isAutoSubmit = isAutoSubmit
-            updated.delivery = delivery; updated.destination = destination
+            updated.delivery = delivery; updated.destination = destination; updated.provider = provider
             updated.sessionMode = delivery.sessionMode; updated.includeSource = includeSource
             updated.isHandoff = delivery == .background; updated.skill = trimSkill
             model.updateCustomAction(updated)
@@ -1191,7 +1419,7 @@ struct CustomActionSheet: View {
             var ca = CustomAction.makeNew(name: trimName, prompt: prompt, kind: .text,
                                            isHandoff: delivery == .background, skill: trimSkill)
             ca.isAutoSubmit = isAutoSubmit
-            ca.delivery = delivery; ca.destination = destination
+            ca.delivery = delivery; ca.destination = destination; ca.provider = provider
             ca.sessionMode = delivery.sessionMode; ca.includeSource = includeSource
             model.addCustomAction(ca)
         }
@@ -1204,6 +1432,12 @@ struct EditableTriggerRow: View {
     let trigger: ActionTrigger
     @ObservedObject var model: SettingsModel
     let canRemove: Bool
+
+    private var effectiveProvider: AIProvider {
+        let global = AIProvider(rawValue: model.defaultProvider) ?? .claude
+        guard let action = model.customActions.first(where: { $0.id == actionID }) else { return global }
+        return action.effectiveProvider(for: trigger, default: global)
+    }
 
     private var kindIcon: String {
         switch trigger.kind {
@@ -1237,6 +1471,17 @@ struct EditableTriggerRow: View {
             }
 
             HStack(spacing: 12) {
+                LabeledPicker(caption: "Assistant") {
+                    Picker("", selection: Binding(
+                        get: { trigger.providerOverride },
+                        set: { model.setTriggerProvider(triggerID: trigger.id, provider: $0) }
+                    )) {
+                        Text("—").tag(Optional<AIProviderChoice>.none)
+                        Text("Claude").tag(Optional(AIProviderChoice.claude))
+                        Text("ChatGPT").tag(Optional(AIProviderChoice.codex))
+                    }
+                }
+
                 LabeledPicker(caption: "Delivery") {
                     Picker("", selection: Binding(
                         get: { trigger.deliveryOverride },
@@ -1247,19 +1492,20 @@ struct EditableTriggerRow: View {
                             Text(d.label).tag(Optional(d))
                         }
                     }
+                    .help("Existing session pastes into open assistant. New session opens a fresh composer. Background runs a local CLI.")
                 }
 
-                LabeledPicker(caption: "Destination") {
+                if effectiveProvider.supportsDestinations { LabeledPicker(caption: "Destination") {
                     Picker("", selection: Binding(
                         get: { trigger.destinationOverride },
                         set: { model.setTriggerDestination(triggerID: trigger.id, destination: $0) }
                     )) {
                         Text("—").tag(Optional<ClaudeDestination>.none)
-                        ForEach(ClaudeDestination.allCases.filter { $0 != .default }, id: \.self) { d in
-                            Text(d.label).tag(Optional(d))
+                        ForEach(ClaudeDestination.available(for: effectiveProvider, includeDefault: false), id: \.self) { d in
+                            Text(d.label(for: effectiveProvider)).tag(Optional(d))
                         }
                     }
-                }
+                } }
 
                 LabeledPicker(caption: "Submit") {
                     Picker("", selection: Binding(
@@ -1655,7 +1901,7 @@ private func writeJSONObject(_ obj: Any, to path: String) {
 
 @MainActor
 private func globalBundle(sections: Set<GlobalBundleSection>) -> [String: Any] {
-    var bundle: [String: Any] = ["version": 2, "exportedAt": ISO8601DateFormatter().string(from: Date())]
+    var bundle: [String: Any] = ["version": 4, "exportedAt": ISO8601DateFormatter().string(from: Date())]
     if sections.contains(.shortcuts) {
         bundle["shortcuts"] = [
             "hotkeys": jsonObject(at: CFG, fallback: []),
@@ -1680,14 +1926,21 @@ private func globalBundle(sections: Set<GlobalBundleSection>) -> [String: Any] {
     }
     if sections.contains(.appPreferences) {
         bundle["appPreferences"] = [
-            "claudeDestination": UserDefaults.standard.string(forKey: "claudeDestination") ?? "code",
+            "defaultProvider": UserDefaults.standard.string(forKey: "defaultProvider") ?? "claude",
+            "claudeDestination": UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent",
+            "codexDestination": UserDefaults.standard.string(forKey: "codexDestination") ?? "code",
+            "codexWorkspace": UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory(),
             "clipRetentionDays": readRetentionDays(),
             "commandRetentionDays": readCommandRetentionDays(),
             "handoffRetentionDays": readHandoffRetentionDays(),
-            "soundsEnabled": settingsModel.soundsEnabled,
-            "soundVolume": settingsModel.soundVolume,
-            "startSound": settingsModel.startSound,
-            "stopSound": settingsModel.stopSound
+            VoiceSettingsKeys.soundsEnabled: settingsModel.soundsEnabled,
+            VoiceSettingsKeys.soundVolume: settingsModel.soundVolume,
+            VoiceSettingsKeys.startSound: settingsModel.startSound,
+            VoiceSettingsKeys.stopSound: settingsModel.stopSound,
+            VoiceSettingsKeys.dictationAssistantProvider: settingsModel.dictationAssistantProvider,
+            VoiceSettingsKeys.fillerRemoval: UserDefaults.standard.object(forKey: VoiceSettingsKeys.fillerRemoval) as? Bool ?? VoiceSettingsDefaults.fillerRemoval,
+            VoiceSettingsKeys.smartFormatting: UserDefaults.standard.object(forKey: VoiceSettingsKeys.smartFormatting) as? Bool ?? VoiceSettingsDefaults.smartFormatting,
+            VoiceSettingsKeys.aiCleanup: UserDefaults.standard.object(forKey: VoiceSettingsKeys.aiCleanup) as? Bool ?? VoiceSettingsDefaults.aiCleanup
         ]
     }
     return bundle
@@ -1757,13 +2010,32 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
             UserDefaults.standard.set(v, forKey: "claudeDestination")
             model.claudeDestination = v
         }
+        if let v = prefs["codexDestination"] as? String, v == "chat" || v == "code" {
+            UserDefaults.standard.set(v, forKey: "codexDestination")
+            model.codexDestination = v
+        }
+        if let v = prefs["defaultProvider"] as? String, AIProvider(rawValue: v) != nil {
+            UserDefaults.standard.set(v, forKey: "defaultProvider")
+            model.defaultProvider = v
+        }
+        if let v = prefs["codexWorkspace"] as? String {
+            UserDefaults.standard.set(v, forKey: "codexWorkspace")
+            model.codexWorkspace = v
+        }
         if let v = prefs["clipRetentionDays"] as? Int { writeRetentionDays(v) }
         if let v = prefs["commandRetentionDays"] as? Int { writeCommandRetentionDays(v) }
         if let v = prefs["handoffRetentionDays"] as? Int { writeHandoffRetentionDays(v) }
-        if let v = prefs["soundsEnabled"] as? Bool { UserDefaults.standard.set(v, forKey: "soundsEnabled"); model.soundsEnabled = v }
-        if let v = prefs["soundVolume"] as? Double { UserDefaults.standard.set(v, forKey: "soundVolume"); model.soundVolume = v }
-        if let v = prefs["startSound"] as? String { UserDefaults.standard.set(v, forKey: "startSound"); model.startSound = v }
-        if let v = prefs["stopSound"] as? String { UserDefaults.standard.set(v, forKey: "stopSound"); model.stopSound = v }
+        if let v = prefs[VoiceSettingsKeys.soundsEnabled] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.soundsEnabled); model.soundsEnabled = v }
+        if let v = prefs[VoiceSettingsKeys.soundVolume] as? Double { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.soundVolume); model.soundVolume = v }
+        if let v = prefs[VoiceSettingsKeys.startSound] as? String { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.startSound); model.startSound = v }
+        if let v = prefs[VoiceSettingsKeys.stopSound] as? String { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.stopSound); model.stopSound = v }
+        if let v = prefs[VoiceSettingsKeys.dictationAssistantProvider] as? String, AIProviderChoice(rawValue: v) != nil {
+            UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.dictationAssistantProvider)
+            model.dictationAssistantProvider = v
+        }
+        if let v = prefs[VoiceSettingsKeys.fillerRemoval] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.fillerRemoval) }
+        if let v = prefs[VoiceSettingsKeys.smartFormatting] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.smartFormatting) }
+        if let v = prefs[VoiceSettingsKeys.aiCleanup] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.aiCleanup) }
     }
     reregisterHotkeys()
     model.refresh()
@@ -1983,7 +2255,7 @@ struct TroubleshootingView: View {
                 Text("Other common issues").font(.headline)
 
                 tipRow("Hotkeys need fn key",
-                       "If F5–F8 don't fire, enable standard function keys in macOS Keyboard settings, or bind dictation to Home, End, PgUp, or PgDn in Dictation Settings.")
+                       "Function-key shortcuts don't fire? Enable standard function keys in macOS Keyboard settings, or rebind prompt and dictation shortcuts.")
                 tipRow("Browser URL not captured",
                        "First Go from each browser (Chrome, Safari, Arc…) prompts for Automation — approve it once per browser.")
                 tipRow("Logs",
@@ -2125,6 +2397,7 @@ struct HistoryView: View {
                             .onChange(of: enabled) { _, v in
                                 UserDefaults.standard.set(v, forKey: "cliphistoryEnabled")
                                 if v { startClipwatch() } else { stopClipwatch() }
+                                reregisterHotkeys()
                             }
                     }
                     .padding(10)
@@ -2246,6 +2519,8 @@ struct HandoffsView: View {
         let q = query.lowercased()
         return out.filter {
             ($0.skill ?? "").lowercased().contains(q) ||
+            $0.provider.rawValue.contains(q) ||
+            ($0.workspace ?? "").lowercased().contains(q) ||
             $0.source.lowercased().contains(q) ||
             ($0.prompt ?? "").lowercased().contains(q)
         }
@@ -2260,6 +2535,8 @@ struct HandoffsView: View {
             $0.action.lowercased().contains(q) ||
             $0.source.lowercased().contains(q) ||
             $0.destination.lowercased().contains(q) ||
+            $0.provider.rawValue.contains(q) ||
+            ($0.workspace ?? "").lowercased().contains(q) ||
             ($0.prompt ?? "").lowercased().contains(q)
         }
     }
@@ -2270,10 +2547,6 @@ struct HandoffsView: View {
                 HStack {
                     Text("Command History").font(.title2).bold()
                     Spacer()
-                    Button("Reveal in Finder") {
-                        NSWorkspace.shared.open(URL(fileURLWithPath: HANDOFF_BASE))
-                    }
-                    Button("Background Settings…") { HandoffSettingsWindowController.shared.show() }
                     Button(action: refresh) { Image(systemName: "arrow.clockwise") }
                         .help("Reload from disk")
                 }
@@ -2382,7 +2655,10 @@ struct ForegroundCommandRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(actionName(record.action)).bold()
-                        Text(record.destination)
+                        Text(record.provider.label)
+                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+                        Text(ClaudeDestination.displayLabel(rawValue: record.destination, provider: record.provider))
                             .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
                             .background(Color.secondary.opacity(0.12)).cornerRadius(4)
                         Text("from \(record.source)").font(.caption).foregroundColor(.secondary)
@@ -2433,7 +2709,11 @@ struct HandoffSubmissionRow: View {
                 Text(submission.statusGlyph).foregroundColor(statusColor).bold().frame(width: 16)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(submission.skill?.isEmpty == false ? "/\(submission.skill!)" : "claude -p").bold()
+                        Text(submission.skill?.isEmpty == false ? submission.provider.skillInvocation(submission.skill!) :
+                             (submission.provider == .claude ? "claude -p" : "codex exec")).bold()
+                        Text(submission.provider.label)
+                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
                         Text(submission.kind == "image" ? "image" : "text")
                             .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
                             .background(Color.secondary.opacity(0.12)).cornerRadius(4)
@@ -2521,6 +2801,169 @@ struct ChannelPicker: View {
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.3), lineWidth: 1))
     }
+}
+
+// Tail of each log, not the whole file — enough to actually see what just
+// happened without dumping megabytes of history into the clipboard.
+@MainActor
+func copyCommandDiagnosticInfo(
+    model: SettingsModel = settingsModel,
+    channel: UpdateChannel = currentChannel(),
+    available: UpdateInfo? = nil,
+    updateStatus: String = "",
+    launchAtLogin: Bool = launchAtLoginEnabled(),
+    showIcon: Bool = !UserDefaults.standard.bool(forKey: "hideMenuBarIcon"),
+    showDock: Bool = showDockIcon()
+) {
+    func oneLinePreview(_ text: String, limit: Int = 220) -> String {
+        let compact = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return compact.count > limit ? String(compact.prefix(limit)) + "…" : compact
+    }
+    func stateLabel(_ state: CheckState) -> String {
+        switch state {
+        case .ok: return "ok"
+        case .missing: return "missing"
+        case .unknown: return "unknown"
+        }
+    }
+    func modelStatusLabel(_ status: Recorder.ModelStatus) -> String {
+        switch status {
+        case .notDownloaded: return "not downloaded"
+        case .downloading(let progress): return "downloading \(Int(progress * 100))%"
+        case .ready: return "ready"
+        case .error(let message): return "error: \(oneLinePreview(message, limit: 120))"
+        }
+    }
+
+    let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
+    let gitBranch = (Bundle.main.infoDictionary?["ClaudeCommandGitBranch"] as? String) ?? ""
+    let dateFormatter = ISO8601DateFormatter()
+    let os = ProcessInfo.processInfo.operatingSystemVersion
+    var out = "Command \(version)\(gitBranch.isEmpty ? "" : " (\(gitBranch))")\n"
+    out += "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)\n"
+    out += "App path: \(Bundle.main.bundlePath)\n"
+    out += "Bundle ID: \(Bundle.main.bundleIdentifier ?? "unknown")\n"
+    out += "Minimum macOS: \((Bundle.main.infoDictionary?["LSMinimumSystemVersion"] as? String) ?? "unknown")\n"
+    out += "Update channel: \(channel.label)\n"
+    if let available {
+        out += "Update check: v\(available.latestVersion) available\n"
+        out += "Update download asset: \(available.downloadURL == nil ? "missing" : "present")\n"
+    } else if updateStatus.isEmpty {
+        out += "Update check: not checked this session\n"
+    } else {
+        out += "Update check: \(oneLinePreview(updateStatus, limit: 160))\n"
+    }
+    out += "Default assistant: \(model.defaultProvider)\n"
+    out += "Default Claude destination: \(model.claudeDestination)\n"
+    out += "Default ChatGPT destination: \(model.codexDestination == "chat" ? "Chat" : "Codex")\n"
+    out += "Default Codex workspace: \(model.codexWorkspace)\n"
+    let background = HandoffConfig.load()
+    out += "Claude CLI: \(background.claudeCommand), cwd=\(background.claudeCwd.isEmpty ? "home" : background.claudeCwd), extraArgs=\(background.claudeExtraArgs.count)\n"
+    out += "Codex CLI: \(background.codexCommand), cwd=\(background.codexCwd.isEmpty ? "home" : background.codexCwd), extraArgs=\(background.codexExtraArgs.count)\n"
+    out += "Launch at login: \(launchAtLogin ? "on" : "off")\n"
+    out += "Menu bar icon: \(showIcon ? "shown" : "hidden")\n"
+    out += "Dock icon: \(showDock ? "shown" : "hidden")\n\n"
+
+    out += "--- Shortcut bindings ---\n"
+    for binding in loadBindings() {
+        out += "\(binding.name): \(binding.enabled ? "enabled" : "disabled") \(binding.human)\n"
+    }
+    let customActions = loadCustomActions()
+    if customActions.isEmpty {
+        out += "Custom actions: (none)\n"
+    } else {
+        out += "Custom actions:\n"
+        for action in customActions {
+            let resolvedProvider = action.provider.resolve(default: AIProvider(rawValue: model.defaultProvider) ?? .claude)
+            out += "\(action.name): \(action.enabled ? "enabled" : "disabled") provider=\(action.provider.label) delivery=\(action.delivery.label) destination=\(action.destination.label(for: resolvedProvider)) autoSubmit=\(action.isAutoSubmit ? "on" : "off")\n"
+            for trigger in action.triggers {
+                out += "  - \(trigger.kind.label): \(trigger.enabled ? "enabled" : "disabled") \(trigger.human)"
+                if let delivery = trigger.deliveryOverride { out += " delivery=\(delivery.label)" }
+                if let destination = trigger.destinationOverride {
+                    let triggerProvider = action.effectiveProvider(for: trigger, default: AIProvider(rawValue: model.defaultProvider) ?? .claude)
+                    out += " destination=\(destination.label(for: triggerProvider))"
+                }
+                if let provider = trigger.providerOverride { out += " provider=\(provider.label)" }
+                if let autoSubmit = trigger.isAutoSubmitOverride { out += " autoSubmit=\(autoSubmit ? "on" : "off")" }
+                out += "\n"
+            }
+        }
+    }
+    out += "\n"
+
+    out += "--- Set Up status ---\n"
+    for check in permissionChecks() {
+        out += "\(check.title): \(stateLabel(check.state))\n"
+    }
+    for check in componentChecks() {
+        out += "\(check.title): \(stateLabel(check.state))\n"
+    }
+    out += "Dictation model: \(modelStatusLabel(recorder.modelStatus))\n\n"
+
+    let logs = [
+        "\(HOME)/Library/Logs/claude-command.log",
+        "\(HOME)/.claude/logs/command-agent.err",
+        "\(HOME)/.claude/logs/clipwatch.err",
+        "\(HOME)/.claude/logs/attribution.log",
+    ]
+    for path in logs {
+        out += "--- \(path) ---\n"
+        if let data = FileManager.default.contents(atPath: path), let text = String(data: data, encoding: .utf8) {
+            out += text.split(separator: "\n").suffix(40).joined(separator: "\n")
+        } else {
+            out += "(not found)"
+        }
+        out += "\n\n"
+    }
+
+    out += "--- Recent command history (last 5 each, summaries only) ---\n"
+    let foregroundRecords = loadForegroundCommandHistory(limit: 5)
+    if foregroundRecords.isEmpty {
+        out += "Foreground: (none)\n"
+    } else {
+        out += "Foreground:\n"
+        for record in foregroundRecords {
+            out += "\(dateFormatter.string(from: record.createdAt)) provider=\(record.provider.rawValue) status=\(record.status) action=\(actionName(record.action)) destination=\(record.destination) source=\(record.source)"
+            if let error = record.error, !error.isEmpty {
+                out += " error=\(oneLinePreview(error, limit: 120))"
+            }
+            out += "\n"
+        }
+    }
+    let backgroundRecords = loadHandoffSubmissions(limit: 5)
+    if backgroundRecords.isEmpty {
+        out += "Background: (none)\n"
+    } else {
+        out += "Background:\n"
+        for record in backgroundRecords {
+            out += "\(dateFormatter.string(from: record.createdAt)) provider=\(record.provider.rawValue) status=\(record.status) kind=\(record.kind) source=\(record.source)"
+            if let skill = record.skill, !skill.isEmpty { out += " skill=\(record.provider.skillInvocation(skill))" }
+            if let result = record.result, !result.isEmpty { out += " result=\(oneLinePreview(result, limit: 120))" }
+            if let error = record.error, !error.isEmpty { out += " error=\(oneLinePreview(error, limit: 120))" }
+            if let logFile = record.logFile, !logFile.isEmpty { out += " log=\(logFile)" }
+            out += "\n"
+        }
+    }
+    out += "\n"
+
+    out += "--- Recent dictation entries (last 3, truncated) ---\n"
+    let dictationRecords = Array(HistoryStore.shared.records.prefix(3))
+    if dictationRecords.isEmpty {
+        out += "(none)\n"
+    } else {
+        for record in dictationRecords {
+            out += "\(dateFormatter.string(from: record.timestamp)) mode=\(record.mode)\n"
+            out += "raw: \(oneLinePreview(record.raw))\n"
+            out += "processed: \(oneLinePreview(record.processed))\n"
+        }
+    }
+    out += "\n"
+
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(out, forType: .string)
 }
 
 // ---- About ------------------------------------------------------------------
@@ -2747,7 +3190,15 @@ struct AboutView: View {
                     Text("Support & Reporting").font(.headline)
                     HStack(spacing: 10) {
                         Button("Copy Diagnostic Info") {
-                            copyDiagnosticInfo()
+                            copyCommandDiagnosticInfo(
+                                model: model,
+                                channel: channel,
+                                available: available,
+                                updateStatus: updateStatus,
+                                launchAtLogin: launchAtLogin,
+                                showIcon: showIcon,
+                                showDock: showDock
+                            )
                             diagCopied = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { diagCopied = false }
                         }
@@ -2851,7 +3302,13 @@ struct AboutView: View {
         } else {
             out += "Update check: \(oneLinePreview(updateStatus, limit: 160))\n"
         }
+        out += "Default assistant: \(model.defaultProvider)\n"
         out += "Default Claude destination: \(model.claudeDestination)\n"
+        out += "Default ChatGPT destination: \(model.codexDestination == "chat" ? "Chat" : "Codex")\n"
+        out += "Default Codex workspace: \(model.codexWorkspace)\n"
+        let background = HandoffConfig.load()
+        out += "Claude CLI: \(background.claudeCommand), cwd=\(background.claudeCwd.isEmpty ? "home" : background.claudeCwd), extraArgs=\(background.claudeExtraArgs.count)\n"
+        out += "Codex CLI: \(background.codexCommand), cwd=\(background.codexCwd.isEmpty ? "home" : background.codexCwd), extraArgs=\(background.codexExtraArgs.count)\n"
         out += "Launch at login: \(launchAtLogin ? "on" : "off")\n"
         out += "Menu bar icon: \(showIcon ? "shown" : "hidden")\n"
         out += "Dock icon: \(showDock ? "shown" : "hidden")\n\n"
@@ -2866,11 +3323,16 @@ struct AboutView: View {
         } else {
             out += "Custom actions:\n"
             for action in customActions {
-                out += "\(action.name): \(action.enabled ? "enabled" : "disabled") delivery=\(action.delivery.label) destination=\(action.destination.label) autoSubmit=\(action.isAutoSubmit ? "on" : "off")\n"
+                let resolvedProvider = action.provider.resolve(default: AIProvider(rawValue: model.defaultProvider) ?? .claude)
+                out += "\(action.name): \(action.enabled ? "enabled" : "disabled") provider=\(action.provider.label) delivery=\(action.delivery.label) destination=\(action.destination.label(for: resolvedProvider)) autoSubmit=\(action.isAutoSubmit ? "on" : "off")\n"
                 for trigger in action.triggers {
                     out += "  - \(trigger.kind.label): \(trigger.enabled ? "enabled" : "disabled") \(trigger.human)"
                     if let delivery = trigger.deliveryOverride { out += " delivery=\(delivery.label)" }
-                    if let destination = trigger.destinationOverride { out += " destination=\(destination.label)" }
+                    if let destination = trigger.destinationOverride {
+                        let triggerProvider = action.effectiveProvider(for: trigger, default: AIProvider(rawValue: model.defaultProvider) ?? .claude)
+                        out += " destination=\(destination.label(for: triggerProvider))"
+                    }
+                    if let provider = trigger.providerOverride { out += " provider=\(provider.label)" }
                     if let autoSubmit = trigger.isAutoSubmitOverride { out += " autoSubmit=\(autoSubmit ? "on" : "off")" }
                     out += "\n"
                 }
@@ -2910,7 +3372,7 @@ struct AboutView: View {
         } else {
             out += "Foreground:\n"
             for record in foregroundRecords {
-                out += "\(dateFormatter.string(from: record.createdAt)) status=\(record.status) action=\(actionName(record.action)) destination=\(record.destination) source=\(record.source)"
+                out += "\(dateFormatter.string(from: record.createdAt)) provider=\(record.provider.rawValue) status=\(record.status) action=\(actionName(record.action)) destination=\(record.destination) source=\(record.source)"
                 if let error = record.error, !error.isEmpty {
                     out += " error=\(oneLinePreview(error, limit: 120))"
                 }
@@ -2923,8 +3385,8 @@ struct AboutView: View {
         } else {
             out += "Background:\n"
             for record in backgroundRecords {
-                out += "\(dateFormatter.string(from: record.createdAt)) status=\(record.status) kind=\(record.kind) source=\(record.source)"
-                if let skill = record.skill, !skill.isEmpty { out += " skill=/\(skill)" }
+                out += "\(dateFormatter.string(from: record.createdAt)) provider=\(record.provider.rawValue) status=\(record.status) kind=\(record.kind) source=\(record.source)"
+                if let skill = record.skill, !skill.isEmpty { out += " skill=\(record.provider.skillInvocation(skill))" }
                 if let result = record.result, !result.isEmpty { out += " result=\(oneLinePreview(result, limit: 120))" }
                 if let error = record.error, !error.isEmpty { out += " error=\(oneLinePreview(error, limit: 120))" }
                 if let logFile = record.logFile, !logFile.isEmpty { out += " log=\(logFile)" }
@@ -3403,14 +3865,14 @@ struct SoundRow: View {
 
             Button("→ Start") {
                 model.startSound = name
-                UserDefaults.standard.set(name, forKey: "startSound")
+                UserDefaults.standard.set(name, forKey: VoiceSettingsKeys.startSound)
             }
             .buttonStyle(.bordered).controlSize(.mini)
             .disabled(isStart)
 
             Button("→ Stop") {
                 model.stopSound = name
-                UserDefaults.standard.set(name, forKey: "stopSound")
+                UserDefaults.standard.set(name, forKey: VoiceSettingsKeys.stopSound)
             }
             .buttonStyle(.bordered).controlSize(.mini)
             .disabled(isStop)
@@ -3433,6 +3895,15 @@ struct DictSettingsView: View {
     @ObservedObject private var proc:  ProcessingSettings = .shared
     @ObservedObject private var model: SettingsModel      = settingsModel
     @State private var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    private var dictationAssistantBinding: Binding<String> {
+        Binding(
+            get: { model.dictationAssistantProvider },
+            set: {
+                model.dictationAssistantProvider = $0
+                UserDefaults.standard.set($0, forKey: VoiceSettingsKeys.dictationAssistantProvider)
+            }
+        )
+    }
 
     var body: some View {
         ScrollView {
@@ -3485,6 +3956,16 @@ struct DictSettingsView: View {
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 Spacer()
+                                if b.action == "dictateadd" {
+                                    Picker("", selection: dictationAssistantBinding) {
+                                        Text("Default").tag("default")
+                                        Text("Claude").tag("claude")
+                                        Text("ChatGPT").tag("codex")
+                                    }
+                                    .labelsHidden()
+                                    .frame(width: 190)
+                                    .help("Default follows Shortcuts -> Default assistant. Claude or ChatGPT overrides assistant dictation only.")
+                                }
                                 KeyBindingField(action: b.action, binding: b, model: model)
                             }
                             .settingsCard()
@@ -3508,7 +3989,7 @@ struct DictSettingsView: View {
                         HStack {
                             Toggle("Sound effects", isOn: Binding(
                                 get: { model.soundsEnabled },
-                                set: { model.soundsEnabled = $0; UserDefaults.standard.set($0, forKey: "soundsEnabled") }
+                                set: { model.soundsEnabled = $0; UserDefaults.standard.set($0, forKey: VoiceSettingsKeys.soundsEnabled) }
                             ))
                             Spacer()
                         }
@@ -3517,7 +3998,7 @@ struct DictSettingsView: View {
                                 Text("Volume").font(.callout).frame(width: 56, alignment: .leading)
                                 Slider(value: Binding(
                                     get: { model.soundVolume },
-                                    set: { model.soundVolume = $0; UserDefaults.standard.set($0, forKey: "soundVolume") }
+                                    set: { model.soundVolume = $0; UserDefaults.standard.set($0, forKey: VoiceSettingsKeys.soundVolume) }
                                 ), in: 0...1)
                                 Text("\(Int(model.soundVolume * 100))%")
                                     .font(.caption).foregroundColor(.secondary).frame(width: 34, alignment: .trailing)

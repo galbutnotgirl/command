@@ -17,15 +17,15 @@ public struct CommandAction {
 }
 
 public let COMMAND_ACTIONS: [CommandAction] = [
-    CommandAction(id: "add",         name: "Add",                detail: "Paste the selection into the already-open Claude chat."),
+    CommandAction(id: "add",         name: "Add",                detail: "Paste selection into already-open assistant session."),
     CommandAction(id: "comment",     name: "New",                detail: "New session pre-filled; stays foreground so you add a note and send."),
-    CommandAction(id: "go",          name: "Go",                 detail: "New Claude session, auto-submit, then return focus to where you were."),
+    CommandAction(id: "go",          name: "Go",                 detail: "New assistant session, auto-submit, then restore focus."),
     CommandAction(id: "shotadd",     name: "Screenshot Add",     detail: "Capture → paste image into the already-open Claude chat."),
     CommandAction(id: "shotcomment", name: "Screenshot New",     detail: "Capture → new session; you add a note."),
     CommandAction(id: "shotgo",      name: "Screenshot Go",      detail: "Capture → new session, auto-submit."),
     CommandAction(id: "cliphistory", name: "Clipboard History",  detail: "Floating picker of recent clips."),
     CommandAction(id: "dictate",     name: "Dictate → Insert",   detail: "Speak → on-device Parakeet transcription → paste at cursor."),
-    CommandAction(id: "dictateadd",  name: "Dictate → Claude",   detail: "Speak → on-device Parakeet transcription → send to Claude."),
+    CommandAction(id: "dictateadd",  name: "Dictate → Assistant", detail: "Speak → on-device Parakeet transcription → send to selected assistant."),
 ]
 
 public func actionName(_ id: String) -> String { COMMAND_ACTIONS.first { $0.id == id }?.name ?? id }
@@ -50,18 +50,18 @@ public struct HotkeyBinding: Identifiable {
 }
 
 // Built-in defaults — active when command-hotkeys.json is absent.
-// keycodes: F6=97, F7=98, F8=100; mods: none=0, option=2048
+// keycodes: F6=97, F7=98, F8=100, Home=115; mods: option=2048, command=256
 // User saves any binding → file is written → user values take over permanently.
 public let DEFAULT_BINDINGS: [(action: String, keycode: UInt32, mods: UInt32)] = [
-    ("add",         100,  0),      // F8  — paste selection into open Claude
-    ("comment",     100,  2048),   // ⌥F8 — new session, you add note
+    ("add",         100,  2048),   // ⌥F8 — paste selection into current assistant session
+    ("comment",     100,  0),      // F8  — new session, you add note
     ("go",          0,    0),      // unbound
-    ("shotadd",     98,   0),      // F7  — screenshot → open Claude
-    ("shotcomment", 98,   2048),   // ⌥F7 — screenshot → new session
+    ("shotadd",     98,   2048),   // ⌥F7 — screenshot → current assistant session
+    ("shotcomment", 98,   0),      // F7 — screenshot → new session
     ("shotgo",      0,    0),      // unbound
-    ("cliphistory", 97,   0),      // F6  — clipboard history picker
-    ("dictate",     96,   0),      // F5  — dictate → insert at cursor
-    ("dictateadd",  96,   2048),   // ⌥F5 — dictate → send to Claude
+    ("cliphistory", 97,   0),      // F6   — clipboard history picker (only registered when enabled)
+    ("dictate",     115,  0),      // Home  — dictate → insert at cursor
+    ("dictateadd",  115,  2048),   // ⌥Home — dictate → send to assistant
 ]
 
 // ---- custom actions ---------------------------------------------------------
@@ -90,11 +90,12 @@ public enum ActionKind: String, CaseIterable, Codable, Sendable {
 }
 
 public enum ClaudeDestination: String, CaseIterable, Codable, Sendable {
-    case `default`, chat, cowork, code
+    case `default`, recent, chat, cowork, code
 
     public var label: String {
         switch self {
         case .default: return "Default"
+        case .recent: return "Recent"
         case .chat: return "Chat"
         case .cowork: return "Cowork"
         case .code: return "Code"
@@ -102,6 +103,26 @@ public enum ClaudeDestination: String, CaseIterable, Codable, Sendable {
     }
 
     public var envValue: String? { self == .default ? nil : rawValue }
+
+    public func label(for provider: AIProvider) -> String {
+        guard provider == .codex else { return label }
+        switch self {
+        case .default: return "Default"
+        case .recent: return "Recent"
+        case .chat: return "Chat"
+        case .code: return "Codex"
+        case .cowork: return "Unsupported"
+        }
+    }
+
+    public static func displayLabel(rawValue: String, provider: AIProvider) -> String {
+        ClaudeDestination(rawValue: rawValue)?.label(for: provider) ?? rawValue
+    }
+
+    public static func available(for provider: AIProvider, includeDefault: Bool = true) -> [ClaudeDestination] {
+        let destinations: [ClaudeDestination] = provider == .claude ? [.recent, .chat, .cowork, .code] : [.chat, .code]
+        return includeDefault ? [.default] + destinations : destinations
+    }
 }
 
 public enum ActionDelivery: String, CaseIterable, Codable, Sendable {
@@ -109,8 +130,8 @@ public enum ActionDelivery: String, CaseIterable, Codable, Sendable {
 
     public var label: String {
         switch self {
-        case .existingChat: return "Existing chat"
-        case .newChat: return "New chat"
+        case .existingChat: return "Existing session"
+        case .newChat: return "New session"
         case .background: return "Background"
         }
     }
@@ -139,19 +160,21 @@ public struct ActionTrigger: Identifiable, Sendable {
     public var includeSourceOverride: Bool?
     public var deliveryOverride: ActionDelivery?
     public var destinationOverride: ClaudeDestination?
+    public var providerOverride: AIProviderChoice?
 
     public var human: String { keycode == 0 ? "—" : humanShortcut(keycode: keycode, mods: mods) }
 
     public init(id: String = UUID().uuidString, kind: ActionKind, keycode: UInt32 = 0, mods: UInt32 = 0,
                 enabled: Bool = true, isAutoSubmitOverride: Bool? = nil, sessionModeOverride: String? = nil,
                 includeSourceOverride: Bool? = nil, deliveryOverride: ActionDelivery? = nil,
-                destinationOverride: ClaudeDestination? = nil) {
+                destinationOverride: ClaudeDestination? = nil, providerOverride: AIProviderChoice? = nil) {
         self.id = id; self.kind = kind; self.keycode = keycode; self.mods = mods; self.enabled = enabled
         self.isAutoSubmitOverride = isAutoSubmitOverride
         self.sessionModeOverride = sessionModeOverride
         self.includeSourceOverride = includeSourceOverride
         self.deliveryOverride = deliveryOverride
         self.destinationOverride = destinationOverride
+        self.providerOverride = providerOverride
     }
 }
 
@@ -180,6 +203,7 @@ public struct CustomAction: Identifiable, Sendable {
     public var skill: String = ""      // only used when isHandoff; target skill for the background run
     public var delivery: ActionDelivery
     public var destination: ClaudeDestination
+    public var provider: AIProviderChoice
     // One shared body (name/prompt/skill/delivery), any number of ways to
     // fire it — a popup binding and a voice binding of the same action reuse
     // one prompt instead of duplicating it across separate custom actions.
@@ -188,12 +212,13 @@ public struct CustomAction: Identifiable, Sendable {
     public init(id: String, name: String, prompt: String, isAutoSubmit: Bool,
                 sessionMode: String, includeSource: Bool, enabled: Bool,
                 isHandoff: Bool = false, skill: String = "", delivery: ActionDelivery? = nil,
-                destination: ClaudeDestination = .default, triggers: [ActionTrigger]) {
+                destination: ClaudeDestination = .default, provider: AIProviderChoice = .default,
+                triggers: [ActionTrigger]) {
         self.id = id; self.name = name; self.prompt = prompt
         self.isAutoSubmit = isAutoSubmit; self.sessionMode = sessionMode; self.includeSource = includeSource
         self.enabled = enabled; self.isHandoff = isHandoff; self.skill = skill
         self.delivery = delivery ?? ActionDelivery.fromLegacy(isHandoff: isHandoff, sessionMode: sessionMode)
-        self.destination = destination; self.triggers = triggers
+        self.destination = destination; self.provider = provider; self.triggers = triggers
     }
 
     public static func makeNew(name: String, prompt: String, kind: ActionKind, isHandoff: Bool = false, skill: String = "") -> CustomAction {
@@ -201,7 +226,7 @@ public struct CustomAction: Identifiable, Sendable {
                      sessionMode: "new", includeSource: true, enabled: true,
                      isHandoff: isHandoff, skill: skill,
                      delivery: isHandoff ? .background : .newChat,
-                     destination: .default, triggers: [ActionTrigger(kind: kind)])
+                     destination: .default, provider: .default, triggers: [ActionTrigger(kind: kind)])
     }
 
     public func actionID(for trigger: ActionTrigger) -> String { triggerActionID(actionID: id, triggerID: trigger.id) }
@@ -215,5 +240,8 @@ public struct CustomAction: Identifiable, Sendable {
     public func shouldIncludeSource(for t: ActionTrigger) -> Bool { t.includeSourceOverride ?? includeSource }
     public func effectiveDestination(for t: ActionTrigger) -> ClaudeDestination {
         t.destinationOverride ?? destination
+    }
+    public func effectiveProvider(for t: ActionTrigger, default defaultProvider: AIProvider) -> AIProvider {
+        (t.providerOverride ?? provider).resolve(default: defaultProvider)
     }
 }

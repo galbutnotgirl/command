@@ -11,6 +11,7 @@ const {
   saveSettings,
   mergeSettings,
   resolveCwd,
+  settingsForProvider,
 } = require('../src/settings');
 
 function tmpDir() {
@@ -53,10 +54,41 @@ test('mergeSettings keeps nested overrides', () => {
   assert.deepStrictEqual(merged.cli.baseArgs, ['-p']);
 });
 
+test('mergeSettings preserves unknown top-level and nested provider keys', () => {
+  const merged = mergeSettings(DEFAULT_SETTINGS, {
+    futureTopLevel: { enabled: true },
+    providers: { codex: { futureOption: 'kept' } },
+  });
+  assert.deepStrictEqual(merged.futureTopLevel, { enabled: true });
+  assert.strictEqual(merged.providers.codex.futureOption, 'kept');
+  assert.strictEqual(merged.providers.codex.command, 'codex');
+});
+
 test('resolveCwd falls back to home and expands ~', () => {
   assert.strictEqual(resolveCwd(''), os.homedir());
   assert.strictEqual(resolveCwd('  '), os.homedir());
   assert.strictEqual(resolveCwd('~'), os.homedir());
   assert.strictEqual(resolveCwd('~/projects'), path.join(os.homedir(), 'projects'));
   assert.strictEqual(resolveCwd('/abs/path'), '/abs/path');
+});
+
+test('legacy cli migrates into Claude provider without changing Codex defaults', () => {
+  const dir = tmpDir();
+  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({
+    cli: { command: '/legacy/claude', extraArgs: ['--legacy'] },
+  }));
+  const loaded = loadSettings(dir);
+  assert.strictEqual(loaded.providers.claude.command, '/legacy/claude');
+  assert.deepStrictEqual(loaded.providers.claude.extraArgs, ['--legacy']);
+  assert.strictEqual(loaded.providers.codex.command, 'codex');
+});
+
+test('settingsForProvider selects provider-specific command and workspace', () => {
+  const settings = mergeSettings(DEFAULT_SETTINGS, {
+    providers: { codex: { command: '/bin/codex', cwd: '/repo' } },
+  });
+  const selected = settingsForProvider(settings, 'codex');
+  assert.strictEqual(selected.provider, 'codex');
+  assert.strictEqual(selected.cli.command, '/bin/codex');
+  assert.strictEqual(selected.workspace, '/repo');
 });

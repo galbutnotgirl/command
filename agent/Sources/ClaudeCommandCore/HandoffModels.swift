@@ -22,14 +22,19 @@ public struct HandoffSubmission: Identifiable {
     // for one (see runner.js's extractResult) — nil until the run finishes, and
     // stays nil if the CLI never printed a matching line.
     public let result: String?
+    public let provider: AIProvider
+    public let workspace: String?
+    public let attachments: [String]
 
     public init(id: String, createdAt: Date, finishedAt: Date?, source: String, kind: String,
                 skill: String?, status: String, exitCode: Int?, error: String?, prompt: String?,
-                contentFile: String?, logFile: String?, result: String? = nil) {
+                contentFile: String?, logFile: String?, result: String? = nil,
+                provider: AIProvider = .claude, workspace: String? = nil, attachments: [String] = []) {
         self.id = id; self.createdAt = createdAt; self.finishedAt = finishedAt
         self.source = source; self.kind = kind; self.skill = skill; self.status = status
         self.exitCode = exitCode; self.error = error; self.prompt = prompt
         self.contentFile = contentFile; self.logFile = logFile; self.result = result
+        self.provider = provider; self.workspace = workspace; self.attachments = attachments
     }
 
     // A record can stay "running" forever if the CLI (or the machine) died
@@ -38,7 +43,8 @@ public struct HandoffSubmission: Identifiable {
     public var statusGlyph: String { handoffStatusGlyph(status: status, isStalled: isStalled) }
     public var age: String { handoffAgeString(createdAt: createdAt) }
     public var menuTitle: String {
-        handoffMenuTitle(statusGlyph: statusGlyph, source: source, skill: skill, age: age, isStalled: isStalled, result: result)
+        handoffMenuTitle(statusGlyph: statusGlyph, source: source, skill: skill, age: age,
+                         isStalled: isStalled, result: result, provider: provider)
     }
 }
 
@@ -63,8 +69,10 @@ public func handoffAgeString(createdAt: Date, now: Date = Date()) -> String {
 }
 
 public func handoffMenuTitle(statusGlyph: String, source: String, skill: String?, age: String,
-                              isStalled: Bool, result: String? = nil) -> String {
-    let target = (skill?.isEmpty == false) ? "/\(skill!)" : "claude -p"
+                              isStalled: Bool, result: String? = nil,
+                              provider: AIProvider = .claude) -> String {
+    let target = (skill?.isEmpty == false) ? provider.skillInvocation(skill!) :
+        (provider == .claude ? "claude -p" : "codex exec")
     let base = "\(statusGlyph) \(source) → \(target) — \(age)\(isStalled ? " (stalled?)" : "")"
     guard let result, !result.isEmpty else { return base }
     return "\(base) — \(result)"
@@ -88,9 +96,12 @@ public struct ForegroundCommandRecord: Identifiable {
     public let status: String
     public let prompt: String?
     public let error: String?
+    public let provider: AIProvider
+    public let workspace: String?
 
     public init(id: String, createdAt: Date, action: String, source: String, destination: String,
-                status: String, prompt: String?, error: String?) {
+                status: String, prompt: String?, error: String?, provider: AIProvider = .claude,
+                workspace: String? = nil) {
         self.id = id
         self.createdAt = createdAt
         self.action = action
@@ -99,6 +110,8 @@ public struct ForegroundCommandRecord: Identifiable {
         self.status = status
         self.prompt = prompt
         self.error = error
+        self.provider = provider
+        self.workspace = workspace
     }
 
     public var age: String { foregroundCommandAgeString(createdAt: createdAt) }
@@ -117,7 +130,8 @@ public func isForegroundCommandPruneEligible(createdAt: Date, cutoff: Date) -> B
 // CustomAction's doc comment): inline if present, otherwise appended below.
 // Screenshot mode has no window to paste an image into, so the file path is
 // inlined the same way — via {file}, or appended if the template omits it.
-public func renderCustomActionHandoffPrompt(_ ca: CustomAction, content: String?, file: String?) -> String {
+public func renderCustomActionHandoffPrompt(_ ca: CustomAction, content: String?, file: String?,
+                                             provider: AIProvider = .claude) -> String {
     var body = ca.prompt
     if let content {
         if body.contains("{selection}") {
@@ -134,6 +148,6 @@ public func renderCustomActionHandoffPrompt(_ ca: CustomAction, content: String?
         }
     }
     let skill = ca.skill.trimmingCharacters(in: .whitespaces)
-    if !skill.isEmpty { body = "/\(skill)\n\n\(body)" }
+    if !skill.isEmpty { body = "\(provider.skillInvocation(skill))\n\n\(body)" }
     return body
 }

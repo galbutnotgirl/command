@@ -4,15 +4,15 @@
 
 | Built-in combination | Default | Result |
 |---|---:|---|
-| Selected text -> Existing chat | F8 | Send selected text into current Claude chat. |
-| Selected text -> New chat | Option-F8 | Open new Claude chat and wait. |
+| Selected text -> Existing chat | Option-F8 | Send selected text into current Claude chat. |
+| Selected text -> New chat | F8 | Open new Claude chat and wait. |
 | Selected text -> New chat + auto-submit | Unbound | Open new Claude chat, submit, restore focus. |
-| Screenshot -> Existing chat | F7 | Capture screenshot and add to current chat. |
-| Screenshot -> New chat | Option-F7 | Capture screenshot and open new chat. |
+| Screenshot -> Existing chat | Option-F7 | Capture screenshot and add to current chat. |
+| Screenshot -> New chat | F7 | Capture screenshot and open new chat. |
 | Screenshot -> New chat + auto-submit | Unbound | Capture screenshot, open new chat, submit. |
 | Clipboard History | F6 | Open searchable clipboard picker. |
-| Dictate -> Insert | F5 | Speak and paste transcript at cursor. |
-| Dictate -> Claude | Option-F5 | Speak and send transcript to Claude. |
+| Dictate -> Insert | Home | Speak and paste transcript at cursor. |
+| Dictate -> Assistant | Option-Home | Speak and send transcript to selected assistant. |
 
 Change prompt/action shortcuts in **Settings -> Shortcuts**. Dictation shortcuts live in **Settings -> Dictation Settings**. Open the relevant editor or trigger row, click a key field, press a combo. Delete clears. Esc cancels.
 
@@ -22,8 +22,8 @@ The menu-bar menu only shows prompt/action shortcuts that are enabled and bound 
 
 | Case | Guidance |
 |---|---|
-| Home, End, PgUp, PgDn | Good choices for press-and-hold dictation because they avoid F-key media behavior on many keyboards. Rebind in **Dictation Settings**. |
-| F5-F8 | Default alpha choices, but macOS or hardware keyboards may treat them as media/brightness keys unless standard function keys are enabled. |
+| Home, End, PgUp, PgDn | Good choices for press-and-hold dictation because they avoid F-key media behavior on many keyboards. rebind dictation shortcuts in Dictation Settings. |
+| F6/F7/F8 and Home | Default alpha choices. F6/F7/F8 can still conflict with app shortcuts, and Home can conflict with navigation-heavy workflows. |
 | Press-and-hold voice | Hold to record, release after the last word. The stop sound confirms release; the active menu-bar chip can stay visible while tail capture, transcription, cleanup, and dispatch finish. |
 | Double-tap voice | Double-tap to lock recording on when holding is awkward; stop from the menu or dictation control. |
 
@@ -46,7 +46,7 @@ Unbound combinations, disabled triggers, and auto-submit combinations with no sh
 | Action | A named prompt setup, with defaults and one or more triggers. |
 | Trigger | The way content is captured: selected text, screenshot, popup, or voice. |
 | Delivery | Where the rendered prompt goes: existing chat, new chat, or background. |
-| Destination | Which Claude surface opens: Default, Chat, Cowork, or Code. |
+| Destination | Claude: Default, Chat, Cowork, or Code. ChatGPT: Default, Chat, or Codex. |
 | Auto-submit | Whether Command presses Return after filling a new chat. |
 | Background | A local `claude -p` run with no Claude window. |
 
@@ -56,7 +56,7 @@ Unbound combinations, disabled triggers, and auto-submit combinations with no sh
 |---|---|
 | Trigger | Selected text, Screenshot, Popup, Voice |
 | Delivery | Existing chat, New chat, Background |
-| Destination | Default, Chat, Cowork, Code |
+| Destination | Claude: Default, Chat, Cowork, Code. ChatGPT: Default, Chat, Codex. |
 
 `—` means inherit from prompt/action.
 
@@ -148,7 +148,7 @@ Background actions run local Claude CLI. Review prompts and CLI extra args befor
 | Problem | Fix |
 |---|---|
 | Hotkeys do nothing | Grant Accessibility, then restart Command. |
-| F-keys control media/brightness | Enable standard function keys, rebind prompt shortcuts in Shortcuts, or rebind dictation shortcuts in Dictation Settings. |
+| Shortcut conflicts | Rebind prompt shortcuts in Shortcuts; rebind dictation shortcuts in Dictation Settings. |
 | Screenshot fails | Grant Screen Recording, then restart Command. |
 | Dictation fails | Grant Microphone; download model in Dictation Settings. |
 | Claude opens wrong mode | Check global destination, action destination, trigger override. |

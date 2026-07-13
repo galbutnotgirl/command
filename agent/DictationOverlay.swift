@@ -30,6 +30,7 @@ final class DictationOverlay: NSObject {
             hide()
             return
         }
+        playUISound(settingsModel.startSound)
         startLevelUpdates()
     }
 
@@ -112,9 +113,13 @@ final class DictationOverlay: NSObject {
             postKey(kV, cmd: true)
 
         case .claude:
-            activate(CLAUDE_BUNDLE)
-            usleep(300_000)
-            postKey(kV, cmd: true)
+            let front = prevBundle
+            DispatchQueue.global().async {
+                let provider = dictationAssistantProvider()
+                runWorker("custom", source: front, captured: text, customPrompt: "{selection}",
+                          customSession: "add", customIncludeSource: false,
+                          provider: provider)
+            }
 
         case .customAction(let actionID, let triggerID):
             dispatchCustomAction(actionID: actionID, triggerID: triggerID, text: text)
@@ -136,11 +141,12 @@ final class DictationOverlay: NSObject {
             DispatchQueue.global().async { runCustomHandoff(ca, trigger: trig, capturedText: text) }
         } else {
             let dest = ca.effectiveDestination(for: trig).envValue
+            let provider = ca.effectiveProvider(for: trig, default: selectedProvider())
             DispatchQueue.global().async {
                 runWorker("custom", source: front, captured: text,
                           customPrompt: ca.prompt, customSubmit: ca.autoSubmit(for: trig),
                           customSession: delivery.sessionMode, customIncludeSource: ca.shouldIncludeSource(for: trig),
-                          claudeDestination: dest)
+                          destination: dest, provider: provider)
             }
         }
     }

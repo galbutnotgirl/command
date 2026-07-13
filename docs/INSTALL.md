@@ -61,9 +61,9 @@ Then test:
 
 | Test | Expected |
 |---|---|
-| Select text and press `F10` | Selected text sends to existing Claude session. |
-| Press `Option-F10` | New Claude session opens with captured text. |
-| Press `F8` | Clipboard History picker opens when enabled. |
+| Select text and press `Option-F8` | Selected text sends to existing Claude session. |
+| Press `F8` | New Claude session opens with captured text. |
+| Press `F6` | Clipboard History picker opens when enabled. |
 
 If F-keys control brightness, media, or dictation instead of Command, enable standard function keys in macOS Keyboard settings, rebind prompt shortcuts in **Settings -> Shortcuts**, or rebind dictation shortcuts in **Settings -> Dictation Settings**.
 

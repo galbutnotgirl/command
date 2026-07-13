@@ -21,9 +21,12 @@ struct HandoffConfig {
     var skill = ""
     var promptTemplate = ""
     var imagePromptTemplate = ""
-    var cliCommand = "claude"
-    var cliCwd = ""
-    var cliExtraArgs: [String] = []
+    var claudeCommand = "claude"
+    var claudeCwd = ""
+    var claudeExtraArgs: [String] = []
+    var codexCommand = codexExecutablePath() ?? "codex"
+    var codexCwd = UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory()
+    var codexExtraArgs: [String] = CodexExecutionPreset.readOnly.arguments
     var notifications = true
 
     static var settingsFile: String { "\(HANDOFF_BASE)/settings.json" }
@@ -41,10 +44,17 @@ struct HandoffConfig {
         c.promptTemplate = d["promptTemplate"] as? String ?? c.promptTemplate
         c.imagePromptTemplate = d["imagePromptTemplate"] as? String ?? c.imagePromptTemplate
         c.notifications = d["notifications"] as? Bool ?? c.notifications
-        if let cli = d["cli"] as? [String: Any] {
-            c.cliCommand = cli["command"] as? String ?? c.cliCommand
-            c.cliCwd = cli["cwd"] as? String ?? c.cliCwd
-            c.cliExtraArgs = cli["extraArgs"] as? [String] ?? c.cliExtraArgs
+        let providers = d["providers"] as? [String: Any]
+        let claude = providers?["claude"] as? [String: Any] ?? d["cli"] as? [String: Any]
+        if let claude {
+            c.claudeCommand = claude["command"] as? String ?? c.claudeCommand
+            c.claudeCwd = claude["cwd"] as? String ?? c.claudeCwd
+            c.claudeExtraArgs = claude["extraArgs"] as? [String] ?? c.claudeExtraArgs
+        }
+        if let codex = providers?["codex"] as? [String: Any] {
+            c.codexCommand = codex["command"] as? String ?? c.codexCommand
+            c.codexCwd = codex["cwd"] as? String ?? c.codexCwd
+            c.codexExtraArgs = codex["extraArgs"] as? [String] ?? c.codexExtraArgs
         }
         return c
     }
@@ -61,15 +71,31 @@ struct HandoffConfig {
         d["promptTemplate"] = promptTemplate
         d["imagePromptTemplate"] = imagePromptTemplate
         d["notifications"] = notifications
-        var cli = d["cli"] as? [String: Any] ?? [:]
-        cli["command"] = cliCommand
-        cli["cwd"] = cliCwd
-        cli["extraArgs"] = cliExtraArgs
-        if cli["baseArgs"] == nil { cli["baseArgs"] = ["-p"] }
-        d["cli"] = cli
+        d["schemaVersion"] = 2
+        d["defaultProvider"] = UserDefaults.standard.string(forKey: "defaultProvider") ?? "claude"
+        var legacyCLI = d["cli"] as? [String: Any] ?? [:]
+        legacyCLI["command"] = claudeCommand
+        legacyCLI["cwd"] = claudeCwd
+        legacyCLI["extraArgs"] = claudeExtraArgs
+        if legacyCLI["baseArgs"] == nil { legacyCLI["baseArgs"] = ["-p"] }
+        d["cli"] = legacyCLI
+        var providers = d["providers"] as? [String: Any] ?? [:]
+        var claude = providers["claude"] as? [String: Any] ?? [:]
+        claude["command"] = claudeCommand
+        claude["baseArgs"] = claude["baseArgs"] ?? ["-p"]
+        claude["extraArgs"] = claudeExtraArgs
+        claude["cwd"] = claudeCwd
+        providers["claude"] = claude
+        var codex = providers["codex"] as? [String: Any] ?? [:]
+        codex["command"] = codexCommand
+        codex["baseArgs"] = codex["baseArgs"] ?? ["exec"]
+        codex["extraArgs"] = codexExtraArgs
+        codex["cwd"] = codexCwd
+        providers["codex"] = codex
+        d["providers"] = providers
         guard let out = try? JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted, .sortedKeys]) else { return }
         try? FileManager.default.createDirectory(atPath: HANDOFF_BASE, withIntermediateDirectories: true)
-        try? out.write(to: URL(fileURLWithPath: Self.settingsFile))
+        try? out.write(to: URL(fileURLWithPath: Self.settingsFile), options: .atomic)
     }
 }
 
@@ -107,7 +133,10 @@ func loadHandoffSubmissions(limit: Int? = 8) -> [HandoffSubmission] {
             prompt: d["prompt"] as? String,
             contentFile: d["contentFile"] as? String,
             logFile: d["logFile"] as? String,
-            result: d["result"] as? String
+            result: d["result"] as? String,
+            provider: (d["provider"] as? String).flatMap(AIProvider.init(rawValue:)) ?? .claude,
+            workspace: d["workspace"] as? String,
+            attachments: d["attachments"] as? [String] ?? []
         ))
     }
     let sorted = records.sorted { $0.createdAt > $1.createdAt }
@@ -139,7 +168,7 @@ func markHandoffSubmissionFailed(_ s: HandoffSubmission, reason: String = "Marke
     d["error"] = reason
     d["finishedAt"] = handoffISO.string(from: Date())
     guard let out = try? JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted]) else { return }
-    try? out.write(to: URL(fileURLWithPath: path))
+    try? out.write(to: URL(fileURLWithPath: path), options: .atomic)
 }
 
 // ---- retention (mirrors the clipboard-history retentionDays model) ----------
@@ -193,7 +222,8 @@ func pruneHandoffSubmissions() -> Int {
 private var foregroundISO: ISO8601DateFormatter { handoffISO }
 
 func appendForegroundCommandHistory(action: String, source: String, destination: String,
-                                    status: String, prompt: String?, error: String?) {
+                                    status: String, prompt: String?, error: String?,
+                                    provider: AIProvider = .claude, workspace: String? = nil) {
     let dir = "\(HANDOFF_BASE)/command-history"
     try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     let id = UUID().uuidString.lowercased()
@@ -203,12 +233,14 @@ func appendForegroundCommandHistory(action: String, source: String, destination:
         "action": action,
         "source": source,
         "destination": destination,
+        "provider": provider.rawValue,
         "status": status
     ]
     if let prompt, !prompt.isEmpty { d["prompt"] = prompt }
     if let error, !error.isEmpty { d["error"] = error }
+    if let workspace, !workspace.isEmpty { d["workspace"] = workspace }
     guard let data = try? JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted]) else { return }
-    try? data.write(to: URL(fileURLWithPath: "\(dir)/\(id).json"))
+    try? data.write(to: URL(fileURLWithPath: "\(dir)/\(id).json"), options: .atomic)
 }
 
 func loadForegroundCommandHistory(limit: Int? = nil) -> [ForegroundCommandRecord] {
@@ -227,7 +259,9 @@ func loadForegroundCommandHistory(limit: Int? = nil) -> [ForegroundCommandRecord
             destination: d["destination"] as? String ?? "code",
             status: d["status"] as? String ?? "?",
             prompt: d["prompt"] as? String,
-            error: d["error"] as? String
+            error: d["error"] as? String,
+            provider: (d["provider"] as? String).flatMap(AIProvider.init(rawValue:)) ?? .claude,
+            workspace: d["workspace"] as? String
         ))
     }
     let sorted = records.sorted { $0.createdAt > $1.createdAt }
@@ -256,7 +290,9 @@ func retryHandoffSubmission(_ s: HandoffSubmission) {
         notify("Retry failed", "No stored prompt for this submission.")
         return
     }
-    submitHandoffPrompt(prompt, source: s.source, kind: s.kind, skill: s.skill, failureTitle: "Retry failed")
+    submitHandoffPrompt(prompt, source: s.source, kind: s.kind, skill: s.skill,
+                        provider: s.provider, attachment: s.attachments.first ?? s.contentFile,
+                        failureTitle: "Retry failed")
 }
 
 private func which(_ name: String) -> String? {
@@ -270,7 +306,24 @@ private func which(_ name: String) -> String? {
 // Shared submit path for retryHandoffSubmission and runCustomHandoff — both hand
 // an already-rendered prompt to submit-cli.js's --retry-prompt mode, skipping
 // buildPrompt() (which would need a matching global settings.json skill/template).
-private func submitHandoffPrompt(_ prompt: String, source: String, kind: String, skill: String?, failureTitle: String) {
+private func submitHandoffPrompt(_ prompt: String, source: String, kind: String, skill: String?,
+                                 provider: AIProvider, attachment: String? = nil,
+                                 failureTitle: String) {
+    if provider == .codex {
+        var config = HandoffConfig.load()
+        if config.codexCwd.isEmpty { config.codexCwd = settingsModel.codexWorkspace }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: config.codexCwd, isDirectory: &isDirectory), isDirectory.boolValue else {
+            notify(failureTitle, "Codex workspace not found: \(config.codexCwd). Update it in Shortcuts or Background Settings.")
+            return
+        }
+        let hasGit = runShell("/usr/bin/git", ["-C", config.codexCwd, "rev-parse", "--is-inside-work-tree"]).code == 0
+        guard hasGit || config.codexExtraArgs.contains("--skip-git-repo-check") else {
+            notify(failureTitle, "Codex workspace is not a Git repository. Choose a repository or add --skip-git-repo-check explicitly.")
+            return
+        }
+        config.save()
+    }
     let scriptDir = (bundledResource("capture-handoff.sh") as NSString).deletingLastPathComponent
     var core = (scriptDir as NSString).appendingPathComponent("claude-command-capture")
     if !FileManager.default.fileExists(atPath: core) {
@@ -287,8 +340,10 @@ private func submitHandoffPrompt(_ prompt: String, source: String, kind: String,
     }
     let p = Process()
     p.executableURL = URL(fileURLWithPath: node)
-    p.arguments = [shim, "--base-dir", HANDOFF_BASE, "--retry-prompt", "--source", source, "--kind", kind]
+    p.arguments = [shim, "--base-dir", HANDOFF_BASE, "--retry-prompt", "--source", source,
+                   "--kind", kind, "--provider", provider.rawValue]
         + (skill.map { ["--skill", $0] } ?? [])
+        + (attachment.map { ["--file", $0] } ?? [])
     let stdin = Pipe()
     p.standardInput = stdin
     do {
@@ -323,13 +378,29 @@ private func writeClipboardImageFile() -> String? {
 func runCustomHandoff(_ ca: CustomAction, trigger: ActionTrigger, capturedText: String = "") {
     guard ca.enabled, trigger.enabled else { return }
     let skill = ca.skill.isEmpty ? nil : ca.skill
+    let provider = ca.effectiveProvider(for: trigger, default: selectedProvider())
     if trigger.kind == .screenshot {
+        guard screenRecordingOK() else {
+            DispatchQueue.main.async {
+                requestScreenRecording()
+                settingsWindow.show(tab: .setup)
+                notify("Screen Recording needed", "Enable Command, then restart Command to apply it.")
+            }
+            return
+        }
+        let before = NSPasteboard.general.changeCount
+        let capture = runShell("/usr/sbin/screencapture", ["-i", "-c"])
+        guard capture.code == 0, NSPasteboard.general.changeCount != before else {
+            appendLog("[handoff] screenshot cancelled or failed")
+            return
+        }
         guard let file = writeClipboardImageFile() else {
             notify("Background action failed", "No image on the clipboard.")
             return
         }
-        let prompt = renderCustomActionHandoffPrompt(ca, content: nil, file: file)
-        submitHandoffPrompt(prompt, source: "screenshot", kind: "image", skill: skill, failureTitle: "Background action failed")
+        let prompt = renderCustomActionHandoffPrompt(ca, content: nil, file: file, provider: provider)
+        submitHandoffPrompt(prompt, source: "screenshot", kind: "image", skill: skill,
+                            provider: provider, attachment: file, failureTitle: "Background action failed")
     } else {
         // popup/voice always arrive with definitive content (typed or spoken);
         // plain text falls back to the clipboard if nothing was captured.
@@ -340,8 +411,9 @@ func runCustomHandoff(_ ca: CustomAction, trigger: ActionTrigger, capturedText: 
             return
         }
         let source = trigger.kind == .popup ? "popup" : (trigger.kind == .voice ? "voice" : "selection")
-        let prompt = renderCustomActionHandoffPrompt(ca, content: text, file: nil)
-        submitHandoffPrompt(prompt, source: source, kind: "text", skill: skill, failureTitle: "Background action failed")
+        let prompt = renderCustomActionHandoffPrompt(ca, content: text, file: nil, provider: provider)
+        submitHandoffPrompt(prompt, source: source, kind: "text", skill: skill,
+                            provider: provider, failureTitle: "Background action failed")
     }
 }
 
@@ -355,7 +427,7 @@ final class HandoffSettingsWindowController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         if let w = window { w.makeKeyAndOrderFront(nil); return }
         let w = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 620),
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 720),
             styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.title = "Background Settings"
         w.contentViewController = NSHostingController(rootView: HandoffSettingsView())
@@ -369,11 +441,25 @@ final class HandoffSettingsWindowController: NSObject, NSWindowDelegate {
 
 struct HandoffSettingsView: View {
     @State private var config = HandoffConfig.load()
-    @State private var extraArgsText = ""
+    @State private var claudeArgsText = ""
+    @State private var codexArgsText = ""
+    @State private var codexPreset: CodexExecutionPreset = .readOnly
     @State private var saved = false
+    @State private var testStatus = ""
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Background").font(.title2).bold()
+                Spacer()
+                Button("Setup Guide") { openHelpDoc(named: "background") }
+                Button {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: HANDOFF_BASE))
+                } label: {
+                    Label("Reveal in Finder", systemImage: "folder")
+                }
+            }
             Text("Shared CLI settings for Background delivery. Custom Actions use their own prompt text; legacy settings below support older background capture flows.")
                 .font(.system(size: 11)).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -385,11 +471,25 @@ struct HandoffSettingsView: View {
                     .font(.system(size: 10)).foregroundColor(.secondary)
             }
 
-            Group {
-                Text("Claude CLI").font(.headline)
-                TextField("command (claude, or absolute path)", text: $config.cliCommand)
-                TextField("working directory (decides whose skills are available)", text: $config.cliCwd)
-                TextField("extra args, one per line ok (e.g. --permission-mode acceptEdits)", text: $extraArgsText)
+            GroupBox("Claude CLI") {
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField("command (claude, or absolute path)", text: $config.claudeCommand)
+                    TextField("working directory", text: $config.claudeCwd)
+                    TextField("extra args, one argument per line", text: $claudeArgsText, axis: .vertical)
+                    Button("Test Claude CLI") { testCLI(command: config.claudeCommand, cwd: config.claudeCwd, label: "Claude") }
+                }.padding(4)
+            }
+
+            GroupBox("Codex CLI") {
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField("command (codex, or absolute path)", text: $config.codexCommand)
+                    TextField("working directory / default workspace", text: $config.codexCwd)
+                    Picker("Execution", selection: $codexPreset) {
+                        ForEach(CodexExecutionPreset.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }.onChange(of: codexPreset) { _, preset in codexArgsText = preset.arguments.joined(separator: "\n") }
+                    TextField("extra args, one argument per line", text: $codexArgsText, axis: .vertical)
+                    Button("Test Codex CLI") { testCLI(command: config.codexCommand, cwd: config.codexCwd, label: "Codex") }
+                }.padding(4)
             }
 
             Group {
@@ -404,13 +504,14 @@ struct HandoffSettingsView: View {
             }
 
             Toggle("Desktop notifications on submit/finish", isOn: $config.notifications)
+            if !testStatus.isEmpty { Text(testStatus).font(.caption).foregroundColor(.secondary) }
 
             HStack {
                 Spacer()
                 if saved { Text("Saved").foregroundColor(.secondary) }
                 Button("Save") {
-                    config.cliExtraArgs = extraArgsText
-                        .split(whereSeparator: { $0 == "\n" || $0 == " " }).map(String.init)
+                    config.claudeExtraArgs = claudeArgsText.split(separator: "\n").map(String.init)
+                    config.codexExtraArgs = codexArgsText.split(separator: "\n").map(String.init)
                     config.save()
                     saved = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { saved = false }
@@ -418,9 +519,37 @@ struct HandoffSettingsView: View {
                 .keyboardShortcut("s", modifiers: .command)
             }
         }
-        .padding(18)
-        .frame(width: 560)
-        .onAppear { extraArgsText = config.cliExtraArgs.joined(separator: " ") }
+        .padding(24)
+        .onAppear {
+            claudeArgsText = config.claudeExtraArgs.joined(separator: "\n")
+            codexArgsText = config.codexExtraArgs.joined(separator: "\n")
+            codexPreset = config.codexExtraArgs.contains("workspace-write") ? .workspaceWrite : .readOnly
+        }
+        }
+    }
+
+    private func testCLI(command: String, cwd: String, label: String) {
+        testStatus = "Testing \(label)…"
+        DispatchQueue.global().async {
+            let p = Process(); let pipe = Pipe()
+            if command.hasPrefix("/") {
+                p.executableURL = URL(fileURLWithPath: command); p.arguments = ["--version"]
+            } else {
+                p.executableURL = URL(fileURLWithPath: "/usr/bin/env"); p.arguments = [command, "--version"]
+            }
+            p.standardOutput = pipe; p.standardError = pipe
+            if !cwd.isEmpty, FileManager.default.fileExists(atPath: cwd) {
+                p.currentDirectoryURL = URL(fileURLWithPath: cwd)
+            }
+            do {
+                try p.run(); p.waitUntilExit()
+                let text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                DispatchQueue.main.async { testStatus = p.terminationStatus == 0 ? "\(label) ready: \(text)" : "\(label) failed: \(text)" }
+            } catch {
+                DispatchQueue.main.async { testStatus = "\(label) failed: \(error.localizedDescription)" }
+            }
+        }
     }
 }
 
@@ -506,11 +635,12 @@ final class CustomActionTextEntryPanel: NSObject, NSWindowDelegate {
             DispatchQueue.global().async { runCustomHandoff(ca, trigger: trig, capturedText: text) }
         } else {
             let dest = ca.effectiveDestination(for: trig).envValue
+            let provider = ca.effectiveProvider(for: trig, default: selectedProvider())
             DispatchQueue.global().async {
                 runWorker("custom", source: front, captured: text,
                           customPrompt: ca.prompt, customSubmit: ca.autoSubmit(for: trig),
                           customSession: delivery.sessionMode, customIncludeSource: ca.shouldIncludeSource(for: trig),
-                          claudeDestination: dest)
+                          destination: dest, provider: provider)
             }
         }
         tv.string = ""

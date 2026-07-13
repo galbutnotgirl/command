@@ -23,7 +23,7 @@ For binary installs, quit and reopen `~/Applications/Command.app`. From a repo c
 | Symptom | Fix |
 |---|---|
 | Hotkeys do nothing | Grant Accessibility, then restart Command. Confirm shortcut row is enabled and bound in **Settings -> Shortcuts** or **Dictation Settings**. |
-| F5-F8 do system functions | Open macOS **System Settings -> Keyboard** and enable standard function keys, rebind prompt shortcuts in **Settings -> Shortcuts**, or rebind dictation shortcuts in **Settings -> Dictation Settings**. |
+| Shortcut keys do system functions | Rebind prompt shortcuts in **Settings -> Shortcuts**, or rebind dictation shortcuts in **Settings -> Dictation Settings**. |
 | Home or another non-F-key shortcut does not start dictation | Rebind it in **Settings -> Dictation Settings**, not **Shortcuts**. Dictate shortcuts use the press-and-hold/double-tap recorder path; prompt voice triggers live under **Shortcuts**. |
 | Screenshot capture fails | Grant Screen Recording, then restart Command. If macOS still blocks capture, quit and relaunch Command. |
 | Screenshot -> New chat shortcut does nothing | Confirm the **Screenshot -> New chat** combination is bound and enabled in **Settings -> Shortcuts**. Confirm Screen Recording is granted. |

@@ -5,7 +5,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/galbutnotgirl/command?include_prereleases&label=latest%20release)](https://github.com/galbutnotgirl/command/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Native macOS menu-bar shortcuts for Claude. Capture selected text, screenshots, typed popups, or voice; choose whether each prompt goes to an existing chat, a new chat, or a background `claude -p` run.
+Native macOS menu-bar shortcuts for Claude, ChatGPT, and Codex. Capture selected text, screenshots, typed popups, or voice; choose whether each prompt goes to an existing session, a new session, or a background CLI run.
 
 Documentation site: [galbutnotgirl.github.io/command](https://galbutnotgirl.github.io/command/)
 
@@ -43,6 +43,8 @@ Repo: [github.com/galbutnotgirl/command](https://github.com/galbutnotgirl/comman
 Command is organized around prompts:
 
 - Built-in Compose: one shared prompt with selected-text and screenshot combinations.
+- Assistants: Claude or ChatGPT / Codex globally, per Custom Action, or per trigger.
+- ChatGPT destinations: Chat for general chat, Codex for workspace coding. Stored `codex` provider keys remain backward compatible.
 - Custom actions: one prompt, many triggers.
 - Triggers: selected text, screenshot, popup, voice.
 - Delivery: existing chat, new chat, background.
@@ -54,15 +56,15 @@ Command is organized around prompts:
 
 | Built-in combination | Default | Result |
 |---|---:|---|
-| Selected text -> Existing chat | F8 | Send selected text into current Claude chat. |
-| Selected text -> New chat | Option-F8 | Open new Claude chat and wait. |
+| Selected text -> Existing chat | Option-F8 | Send selected text into current Claude chat. |
+| Selected text -> New chat | F8 | Open new Claude chat and wait. |
 | Selected text -> New chat + auto-submit | Unbound | Open new Claude chat, submit, restore focus. |
-| Screenshot -> Existing chat | F7 | Capture screenshot and add to current chat. |
-| Screenshot -> New chat | Option-F7 | Capture screenshot and open new chat. |
+| Screenshot -> Existing chat | Option-F7 | Capture screenshot and add to current chat. |
+| Screenshot -> New chat | F7 | Capture screenshot and open new chat. |
 | Screenshot -> New chat + auto-submit | Unbound | Capture screenshot, open new chat, submit. |
 | Clipboard History | F6 | Open searchable clipboard picker. |
-| Dictate -> Insert | F5 | Speak and paste transcript at cursor. |
-| Dictate -> Claude | Option-F5 | Speak and send transcript to Claude. |
+| Dictate -> Insert | Home | Speak and paste transcript at cursor. |
+| Dictate -> Assistant | Option-Home | Speak and send transcript to selected assistant. |
 
 Change prompt/action shortcuts in **Settings -> Shortcuts**. Dictation shortcuts live in **Settings -> Dictation Settings**.
 
@@ -71,7 +73,7 @@ Change prompt/action shortcuts in **Settings -> Shortcuts**. Dictation shortcuts
 Quick start for most users:
 
 1. Download the latest `Command-*.zip` from the [latest GitHub Release](https://github.com/galbutnotgirl/command/releases/latest).
-2. Unzip it, move `Command.app` to `~/Applications`, and launch it.
+2. Unzip and launch `Command.app`. Choose **Move to Applications** when prompted, or move it to `~/Applications` manually.
 3. Open **Settings -> Set Up**, grant required permissions, then verify **Accessibility** is green.
 
 For alpha builds, use the [latest GitHub Release](https://github.com/galbutnotgirl/command/releases/latest) and download the latest `Command-*.zip`. The matching `.zip.sha256` file is available for checksum verification when kept beside the matching zip. See [docs/INSTALL.md](docs/INSTALL.md) for first launch, permissions, setup checks, and source install.
@@ -123,7 +125,7 @@ Full tab-by-tab details: [docs/SETTINGS_REFERENCE.md](docs/SETTINGS_REFERENCE.md
 | Tab | Use |
 |---|---|
 | Set Up | Permissions and live component checks. |
-| Shortcuts | Built-in prompts, default Claude destination, custom actions, trigger overrides. |
+| Shortcuts | Default assistant, Claude destination or Codex workspace, built-in prompts, custom actions, trigger overrides. |
 | Context | App/site context rules and prompt preview. |
 | Command History | Foreground sends, background runs, retries, retention. |
 | Clipboard History | Picker shortcut, retention, theme, clear controls. |
@@ -145,13 +147,14 @@ Open **Settings -> About** to pick Alpha or Beta, check for updates, and install
 
 ## Background Actions
 
-Background delivery renders the prompt and sends it to:
+Background delivery renders prompt and sends it to selected local CLI:
 
 ```bash
-claude -p
+claude -p       # Claude
+codex exec -    # Codex, prompt on stdin
 ```
 
-No Claude window opens. Results and logs appear in **Command History -> Background**. If the last non-empty output line is `KEY=value`, Command displays it in notifications and history.
+No assistant window opens. Results and logs appear in **Command History -> Background**. Codex screenshots use `-i <file>`. Claude skills render as `/skill`; Codex skills render as `$skill`. If last non-empty output line is `KEY=value`, Command displays it in notifications and history.
 
 ## Privacy
 
@@ -159,7 +162,7 @@ No Claude window opens. Results and logs appear in **Command History -> Backgrou
 - Dictation runs on-device.
 - App settings and histories are local files.
 - Command itself does not upload history.
-- Background actions use local `claude -p`; network/tool behavior depends on Claude CLI and prompt instructions.
+- Background actions use selected local Claude or Codex CLI; ChatGPT foreground actions never silently replace Codex background execution.
 
 See [docs/USER_GUIDE.md](docs/USER_GUIDE.md#privacy-and-local-files) for exact local file locations.
 

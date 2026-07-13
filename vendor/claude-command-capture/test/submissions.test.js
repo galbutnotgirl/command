@@ -61,3 +61,17 @@ test('listSubmissions on empty/missing dir returns []', () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-command-test-'));
   assert.deepStrictEqual(listSubmissions(appDirs(base)), []);
 });
+
+test('submission metadata is additive and defaults legacy records to Claude', () => {
+  const dirs = tmpDirs();
+  const legacy = createSubmission(dirs, { source: 'text', kind: 'text', prompt: 'p' });
+  assert.strictEqual(legacy.provider, 'claude');
+  assert.deepStrictEqual(legacy.attachments, []);
+  const codex = createSubmission(dirs, {
+    source: 'screenshot', kind: 'image', prompt: 'p', provider: 'codex',
+    workspace: '/repo', attachments: ['/tmp/a.png'],
+  });
+  assert.strictEqual(codex.provider, 'codex');
+  assert.strictEqual(codex.workspace, '/repo');
+  assert.deepStrictEqual(codex.attachments, ['/tmp/a.png']);
+});

@@ -4,7 +4,7 @@ Running log of what's been built, current state, and what's next. Written so a f
 agent (human or AI — Codex, Claude, whoever) can pick up this project cold. Update this
 file at the end of any substantial work session; don't let it go stale.
 
-Repo: `galbutnotgirl/command`. Current version: **1.2.0-alpha.6**
+Repo: `galbutnotgirl/command`. Current version: **1.2.0-alpha.8**
 (`git checkout checkpoint-before-trigger-refactor` rolls back to just before the biggest
 recent change if something in there needs undoing).
 
@@ -103,14 +103,29 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
     prefix explosion with one prefix, dispatch reads `trigger.kind` off the loaded record.
     `checkpoint-before-trigger-refactor` tag marks the commit right before this — a clean
     rollback point since it touched the hotkey dispatch code path everything else depends on.
+14. **Claude and ChatGPT / Codex provider parity** (branch `codex/codex-support`) — added provider resolution
+    at global, Custom Action, and trigger levels while preserving Claude as migration/default
+    behavior. Foreground delivery routes to Claude Chat/Cowork/Code, ChatGPT general chat,
+    or configured Codex workspace; background delivery selects `claude -p` or `codex exec -`, including Codex
+    image attachments, `$skill` syntax, read-only/workspace-write presets, provider-tagged
+    history, retries, diagnostics, Set Up probes, and schema-v2 settings. Existing bundle ID,
+    support paths, legacy `cli` block, provider-less actions, and provider-less history remain
+    compatible. Runtime paste and submit target the assistant process directly so backgrounded
+    Electron windows cannot send keystrokes into the wrong app. ChatGPT uses the unified app's
+    Quick Chat command; Codex uses `codex://threads/new` with a validated workspace `path`.
+    New-task failures propagate nonzero status instead of logging success.
 
-## Current state (alpha.6)
+## Current state (alpha.8)
 
-- **Test suites**: 80 Swift (`cd agent && swift test`), 48 Node
-  (`cd vendor/claude-command-capture && node --test`), 21 shell (`./test/test-shell.sh`),
+- **Test suites**: 100 Swift (`cd agent && swift test`), 56 Node
+  (`cd vendor/claude-command-capture && node --test`), 41 shell (`./test/test-shell.sh`),
   plus docs link validation (`python3 ./test/test-docs.py`). All green. CI runs those
   checks plus a macOS release-asset smoke test (`./release.sh --skip-checks` and
   `./test/test-release-asset.sh`) on push/PR (`.github/workflows/test.yml`).
+- **Provider parity**: Claude and Codex share selected-text, screenshot, popup, voice,
+  dictation, Clipboard History, existing/new task, auto-submit, Context, Custom Action,
+  background, history, retry, import/export, diagnostics, and Set Up paths. Claude-specific
+  Chat/Cowork/Code controls stay capability-gated; Codex shows workspace instead.
 - **Custom Actions** (Settings ▸ Shortcuts ▸ Custom Actions): each is now centered on a
   prompt/action body with default delivery (`Existing chat`, `New chat`, `Background`) and
   default destination (`Default`, `Chat`, `Cowork`, `Code`). Each trigger (text,

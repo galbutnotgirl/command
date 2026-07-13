@@ -8,18 +8,18 @@
 #
 # HOTKEYS table format:  "action | <tokens>"
 #   modifiers: cmd|command  opt|option|alt  ctrl|control  shift   (any order)
-#   key:       a letter (a), digit (4), or function key (F1..F12)
+#   key:       a letter (a), digit (4), function key (F1..F12), or navigation key (home)
 emulate -L zsh
 set -uo pipefail
 
 # action(worker ACTION) | "Service menu name" | hotkey tokens
 # Tip: you can also rebind these visually in the menu-bar window (Shortcuts tab).
 HOTKEYS=(
-  "add|Claude - Add|F8"
-  "comment|Claude - New|opt F8"
-  "shotadd|Claude - Screenshot Add|F7"
-  "shotcomment|Claude - Screenshot New|opt F7"
-  "cliphistory|Claude - Clipboard History|F6"
+  "add|Command - Add|opt F8"
+  "comment|Command - New|F8"
+  "shotadd|Command - Screenshot Add|opt F7"
+  "shotcomment|Command - Screenshot New|F7"
+  "cliphistory|Command - Clipboard History|F6"
   # Go and Screenshot Go default to unbound in the app to avoid F-key conflicts.
   # Bind them visually in Settings → Shortcuts if you want one-key submit.
   # Custom prompt actions (selected text, screenshot, popup, voice) also live in
@@ -39,7 +39,7 @@ FKEY = {1:122,2:120,3:99,4:118,5:96,6:97,7:98,8:100,9:101,10:109,11:103,12:111}
 KEY  = {'a':0,'b':11,'c':8,'d':2,'e':14,'f':3,'g':5,'h':4,'i':34,'j':38,'k':40,
         'l':37,'m':46,'n':45,'o':31,'p':35,'q':12,'r':15,'s':1,'t':17,'u':32,
         'v':9,'w':13,'x':7,'y':16,'z':6,'1':18,'2':19,'3':20,'4':21,'5':23,
-        '6':22,'7':26,'8':28,'9':25,'0':29,'space':49}
+        '6':22,'7':26,'8':28,'9':25,'0':29,'space':49,'home':115}
 
 def parse(tokens):
     mods, keycode = 0, None

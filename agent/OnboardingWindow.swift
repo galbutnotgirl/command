@@ -7,6 +7,7 @@ import Cocoa
 import SwiftUI
 import Combine
 import AVFoundation
+import ClaudeCommandCore
 
 let onboardingWindow = OnboardingWindowController()
 
@@ -17,8 +18,10 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
     func showIfNeeded() {
         guard !UserDefaults.standard.bool(forKey: "onboardingCompleted") else { return }
-        // Permissions already in place (prior install or update) — mark done, stay silent.
-        guard !axTrusted() || !screenRecordingOK() else {
+        let providerSelected = UserDefaults.standard.bool(forKey: "onboardingPrimaryAssistantSelected")
+        // Permissions already in place (prior install or update) and provider
+        // already chosen — mark done, stay silent.
+        guard !providerSelected || !axTrusted() || !screenRecordingOK() else {
             UserDefaults.standard.set(true, forKey: "onboardingCompleted")
             return
         }
@@ -56,7 +59,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
 // ---- step enum --------------------------------------------------------------
 
-enum OnbStep { case welcome, accessibility, screenRecording, microphone, done }
+enum OnbStep { case welcome, assistant, accessibility, screenRecording, microphone, clipboard, done }
 
 // ---- root view --------------------------------------------------------------
 
@@ -80,7 +83,16 @@ struct OnboardingView: View {
 
             switch step {
             case .welcome:
-                WelcomeStepView { withAnimation(.easeInOut(duration: 0.3)) { step = .accessibility } }
+                WelcomeStepView { withAnimation(.easeInOut(duration: 0.3)) { step = .assistant } }
+                    .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
+
+            case .assistant:
+                PrimaryAssistantStepView(
+                    onChoose: { preference in
+                        applyPrimaryAssistantPreference(preference)
+                        withAnimation(.easeInOut(duration: 0.3)) { advanceAfterAssistant() }
+                    }
+                )
                     .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
 
             case .accessibility:
@@ -103,10 +115,19 @@ struct OnboardingView: View {
                 MicrophoneStepView(
                     onEnable: { requestMic() },
                     onContinue: {
-                        countdown = 3
-                        withAnimation(.easeInOut(duration: 0.3)) { step = .done }
+                        withAnimation(.easeInOut(duration: 0.3)) { step = .clipboard }
                     }
                 )
+                .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
+
+            case .clipboard:
+                ClipboardOptInStepView { enabled in
+                    UserDefaults.standard.set(enabled, forKey: "cliphistoryEnabled")
+                    if enabled { startClipwatch() } else { stopClipwatch() }
+                    reregisterHotkeys()
+                    countdown = 3
+                    withAnimation(.easeInOut(duration: 0.3)) { step = .done }
+                }
                 .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
 
             case .done:
@@ -120,18 +141,40 @@ struct OnboardingView: View {
         .onReceive(ticker) { _ in tick() }
     }
 
-    // ── numbered step header (1 · 2 · 3)
+    // Compact progress header stays readable at every window width.
     private var stepHeader: some View {
-        HStack(spacing: 0) {
-            stepChip(n: 1, label: "Accessibility",    active: step == .accessibility,
-                     done: step == .screenRecording || step == .microphone || step == .done)
-            connector(done: step == .screenRecording || step == .microphone || step == .done)
-            stepChip(n: 2, label: "Screen Recording", active: step == .screenRecording,
-                     done: step == .microphone || step == .done)
-            connector(done: step == .microphone || step == .done)
-            stepChip(n: 3, label: "Microphone",       active: step == .microphone,      done: step == .done)
-            connector(done: step == .done)
-            stepChip(n: 4, label: "All set",          active: step == .done,            done: false)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(stepTitle).font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text("Step \(stepNumber) of 6").font(.caption).foregroundColor(.secondary)
+            }
+            ProgressView(value: Double(stepNumber), total: 6)
+                .progressViewStyle(.linear)
+        }
+    }
+
+    private var stepNumber: Int {
+        switch step {
+        case .assistant: return 1
+        case .accessibility: return 2
+        case .screenRecording: return 3
+        case .microphone: return 4
+        case .clipboard: return 5
+        case .done: return 6
+        case .welcome: return 0
+        }
+    }
+
+    private var stepTitle: String {
+        switch step {
+        case .assistant: return "Primary assistant"
+        case .accessibility: return "Accessibility"
+        case .screenRecording: return "Screen Recording"
+        case .microphone: return "Microphone"
+        case .clipboard: return "Clipboard History"
+        case .done: return "Ready"
+        case .welcome: return "Welcome"
         }
     }
 
@@ -176,12 +219,19 @@ struct OnboardingView: View {
             countdown -= 1
             if countdown <= 0 {
                 UserDefaults.standard.set(true, forKey: "onboardingCompleted")
+                UserDefaults.standard.set(true, forKey: "postOnboardingOpenShortcuts")
                 onDismiss()
                 restartApp()
             }
         default:
             break
         }
+    }
+
+    private func advanceAfterAssistant() {
+        if !axTrusted() { step = .accessibility }
+        else if !screenRecordingOK() { step = .screenRecording }
+        else { step = .microphone }
     }
 
     private func advanceFromAccessibility() {
@@ -192,6 +242,21 @@ struct OnboardingView: View {
     }
 }
 
+private func applyPrimaryAssistantPreference(_ preference: PrimaryAssistantPreference) {
+    UserDefaults.standard.set(preference.provider.rawValue, forKey: "defaultProvider")
+    UserDefaults.standard.set(preference.rawValue, forKey: "primaryAssistant")
+    UserDefaults.standard.set(true, forKey: "onboardingPrimaryAssistantSelected")
+    switch preference.provider {
+    case .claude:
+        UserDefaults.standard.set(preference.destination.rawValue, forKey: "claudeDestination")
+    case .codex:
+        UserDefaults.standard.set(preference.destination.rawValue, forKey: "codexDestination")
+    }
+    settingsModel.defaultProvider = preference.provider.rawValue
+    settingsModel.claudeDestination = UserDefaults.standard.string(forKey: "claudeDestination") ?? settingsModel.claudeDestination
+    settingsModel.codexDestination = UserDefaults.standard.string(forKey: "codexDestination") ?? settingsModel.codexDestination
+}
+
 // ---- welcome slide ----------------------------------------------------------
 
 struct WelcomeStepView: View {
@@ -199,15 +264,15 @@ struct WelcomeStepView: View {
 
     @State private var keysAppeared = false
 
-    private let previewKeys = ["F8", "⌥F8", "F7", "⌥F7", "F6", "F5", "⌥F5"]
+    private let previewKeys = ["F8", "⌥F8", "F7", "⌥F7", "F6", "Home", "⌥Home"]
 
     private let features: [(icon: String, color: Color, label: String, detail: String)] = [
         ("bolt.fill",              .orange, "Prompt Shortcuts",
-         "Select text in any app. Press F8 to add it to Claude, or Option-F8 to open a new chat."),
+         "Select text in any app. Press Option-F8 to add it to selected assistant, or F8 to open a new session."),
         ("camera.on.rectangle",    .purple, "Screenshot to Claude",
          "Drag to capture or press Space for a window. Send screenshots to existing chat, new chat, or a custom action."),
         ("clock.arrow.circlepath", .blue,   "Clipboard History",
-         "When enabled, copies stay local. Press F6 for a searchable picker — paste into Claude or anywhere."),
+         "When enabled, copies stay local. Press F6 for a searchable picker — paste into assistant or anywhere."),
     ]
 
     var body: some View {
@@ -231,7 +296,7 @@ struct WelcomeStepView: View {
             VStack(spacing: 3) {
                 Text("Your Mac.")
                     .font(.system(size: 27, weight: .bold))
-                Text("Direct line to Claude.")
+                Text("Direct line to Claude, ChatGPT, or Codex.")
                     .font(.system(size: 27, weight: .bold))
                     .foregroundColor(.secondary)
             }
@@ -291,6 +356,105 @@ struct WelcomeStepView: View {
     }
 }
 
+// ---- primary assistant step -------------------------------------------------
+
+struct PrimaryAssistantStepView: View {
+    let onChoose: (PrimaryAssistantPreference) -> Void
+
+    private let icons: [PrimaryAssistantPreference: String] = [
+        .claude: "sparkles",
+        .chatgpt: "bubble.left.and.bubble.right",
+        .codex: "chevron.left.forwardslash.chevron.right",
+    ]
+
+    var body: some View {
+        VStack(spacing: 18) {
+            ZStack {
+                Circle().fill(appPurple.opacity(0.12)).frame(width: 72, height: 72)
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+                    .font(.system(size: 30))
+                    .foregroundColor(appPurple)
+            }
+
+            VStack(spacing: 6) {
+                Text("Choose your primary AI").font(.title2).bold()
+                Text("Choose where built-in shortcuts go by default. ChatGPT includes Chat and Codex destinations.")
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 420)
+            }
+
+            VStack(spacing: 10) {
+                ForEach(PrimaryAssistantPreference.allCases, id: \.self) { preference in
+                    Button {
+                        onChoose(preference)
+                    } label: {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle().fill(appPurple.opacity(0.12)).frame(width: 34, height: 34)
+                                Image(systemName: icons[preference] ?? "sparkles")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(appPurple)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(preference.label)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                Text(preference.detail)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(12)
+                        .background(Color(NSColor.controlBackgroundColor).opacity(0.75))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(maxWidth: 420)
+        }
+        .padding(.horizontal, 40)
+    }
+}
+
+struct ClipboardOptInStepView: View {
+    let onContinue: (Bool) -> Void
+    @State private var enabled = false
+
+    var body: some View {
+        VStack(spacing: 20) {
+            ZStack {
+                Circle().fill(Color.blue.opacity(0.12)).frame(width: 72, height: 72)
+                Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundColor(.blue)
+            }
+            VStack(spacing: 7) {
+                Text("Keep a clipboard history?").font(.title2).bold()
+                Text("Optional. Command can save copied text and images locally for seven days. Nothing is uploaded by Command.")
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Toggle("Enable Clipboard History", isOn: $enabled)
+                .toggleStyle(.switch)
+            Button("Continue") { onContinue(enabled) }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+        }
+        .padding(.horizontal, 40)
+    }
+}
+
 // ---- keyboard key cap -------------------------------------------------------
 
 struct KeyCapView: View {
@@ -331,7 +495,7 @@ struct AccessibilityStepView: View {
 
             Text("Allow Accessibility").font(.title2).bold()
 
-            Text("Command uses Accessibility to copy selected text, paste into Claude, submit when requested, restore focus, and run global shortcuts from any app.")
+            Text("Command uses Accessibility to copy selected text, paste into selected assistant, submit when requested, restore focus, and run global shortcuts from any app.")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -386,7 +550,7 @@ struct ScreenRecordingStepView: View {
 
             Text("Allow Screen Recording").font(.title2).bold()
 
-            Text("Screenshot actions (F7 / Option-F7) capture your screen for Claude prompts. macOS requires Screen Recording access for this.")
+            Text("Screenshot actions (F7 / Option-F7) capture your screen for assistant prompts. macOS requires Screen Recording access for this.")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)

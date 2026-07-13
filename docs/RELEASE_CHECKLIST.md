@@ -8,7 +8,7 @@ Use this before cutting an alpha, beta, or stable release.
 
 | Channel | Tag shape | GitHub Release |
 |---|---|---|
-| Alpha | `v1.2.0-alpha.7` | Prerelease |
+| Alpha | `v1.2.0-alpha.8` | Prerelease |
 | Beta | `v1.2.0-beta.1` | Prerelease |
 | Stable | `v1.2.0` | Release |
 

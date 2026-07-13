@@ -168,4 +168,13 @@ final class HandoffModelsTests: XCTestCase {
         XCTAssertEqual(out, "hi")
         XCTAssertFalse(out.hasPrefix("/"))
     }
+
+    func testCodexSkillAndMenuTitleUseCodexSyntax() {
+        let ca = makeAction(prompt: "{selection}", skill: "triage-capture")
+        XCTAssertEqual(renderCustomActionHandoffPrompt(ca, content: "hi", file: nil, provider: .codex),
+                       "$triage-capture\n\nhi")
+        XCTAssertEqual(handoffMenuTitle(statusGlyph: "✓", source: "selection", skill: nil,
+                                        age: "1m ago", isStalled: false, provider: .codex),
+                       "✓ selection → codex exec — 1m ago")
+    }
 }
