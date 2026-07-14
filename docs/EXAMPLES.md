@@ -170,4 +170,3 @@ On new Mac:
 - [User Guide](USER_GUIDE.md)
 - [Settings Reference](SETTINGS_REFERENCE.md)
 - [Quick Reference](QUICK_REFERENCE.md)
-- [Background Architecture](BACKGROUND_TRIGGER_INTEGRATION.md)

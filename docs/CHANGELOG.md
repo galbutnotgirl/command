@@ -45,6 +45,7 @@ Current alpha line. Major changes:
 | Clipboard History | F6 |
 | Dictate -> Insert | Home |
 | Dictate -> Assistant | Option-Home |
+| Dictate -> Assistant 2 | Unbound |
 
 ## Alpha Notes
 

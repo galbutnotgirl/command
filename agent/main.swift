@@ -353,6 +353,12 @@ func dictationAssistantProvider() -> AIProvider {
     return choice.resolve(default: selectedProvider())
 }
 
+func dictationAssistant2Provider() -> AIProvider {
+    let raw = UserDefaults.standard.string(forKey: VoiceSettingsKeys.dictationAssistant2Provider) ?? VoiceSettingsDefaults.dictationAssistant2Provider
+    guard let choice = AIProviderChoice(rawValue: raw) else { return selectedProvider() }
+    return choice.resolve(default: selectedProvider())
+}
+
 func selectedProviderBundle() -> String { selectedProvider().appBundleIdentifier }
 
 func codexExecutablePath() -> String? {
@@ -1103,7 +1109,7 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
     if kind == UInt32(kEventHotKeyReleased) {
         _carbonDictHeld.remove(hkID.id)
         if let action = hotkeyActions[hkID.id] {
-            let isVoice = action == "dictate" || action == "dictateadd" || resolveTrigger(action)?.1.kind == .voice
+            let isVoice = isBuiltInVoiceAction(action) || resolveTrigger(action)?.1.kind == .voice
             if isVoice {
                 Task { @MainActor in
                     if _dictTrigMode == .pushToTalk {
@@ -1123,12 +1129,12 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             DispatchQueue.main.async { if picker.isVisible { picker.hide() } else { picker.show(prev: front) } }
         } else if action == "settings" {
             DispatchQueue.main.async { settingsWindow.show(tab: .setup) }
-        } else if action == "dictate" || action == "dictateadd" {
+        } else if isBuiltInVoiceAction(action) {
             // Suppress Carbon key-repeat: kEventHotKeyPressed fires on every repeat.
             // Only act on the first press; kEventHotKeyReleased clears the held state.
             if _carbonDictHeld.contains(hkID.id) { return noErr }
             _carbonDictHeld.insert(hkID.id)
-            let m: DictMode = action == "dictate" ? .insert : .claude
+            let m: DictMode = dictMode(forBuiltInVoiceAction: action)
             Task { @MainActor in triggerDictation(mode: m, keycode: nil, pollForRelease: false) }
         } else if let (ca, trig) = resolveTrigger(action) {
             if trig.kind == .voice {
@@ -1267,12 +1273,18 @@ private enum VoiceHotkeyTarget {
 }
 
 private func isBuiltInVoiceAction(_ action: String) -> Bool {
-    action == "dictate" || action == "dictateadd"
+    action == "dictate" || action == "dictateadd" || action == "dictateadd2"
+}
+
+private func dictMode(forBuiltInVoiceAction action: String) -> DictMode {
+    if action == "dictate" { return .insert }
+    if action == "dictateadd2" { return .claude2 }
+    return .claude
 }
 
 private func voiceHotkeyTarget(keycode: UInt32, mods: UInt32) -> VoiceHotkeyTarget? {
     if let hk = loadHotkeys().first(where: { $0.keycode == keycode && $0.mods == mods && isBuiltInVoiceAction($0.action) }) {
-        return .builtIn(hk.action == "dictate" ? .insert : .claude)
+        return .builtIn(dictMode(forBuiltInVoiceAction: hk.action))
     }
     if let (ca, trig) = triggerMatching(keycode: keycode, mods: mods), trig.kind == .voice {
         return .custom(actionID: ca.id, triggerID: trig.id)
@@ -1315,6 +1327,30 @@ private func physicalModifierMask(cgFlags f: CGEventFlags) -> UInt32 {
     if f.contains(.maskAlternate) { cm |= 2048 }
     if f.contains(.maskControl) { cm |= 4096 }
     return cm
+}
+
+private func isModifierKeyDown(keycode: UInt32, flags: CGEventFlags) -> Bool {
+    switch keycode {
+    case 54, 55: return flags.contains(.maskCommand) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
+    case 56, 60: return flags.contains(.maskShift) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
+    case 58, 61: return flags.contains(.maskAlternate) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
+    case 59, 62: return flags.contains(.maskControl) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
+    default: return false
+    }
+}
+
+private func releaseVoiceHotkey(keycode: UInt32) {
+    _voiceHeldKeycodes.remove(keycode)
+    appendLog("[eventTap] voice up kc=\(keycode)")
+    DispatchQueue.main.async {
+        Task { @MainActor in
+            if _dictTrigMode == .pushToTalk {
+                _dictPTTimer?.invalidate(); _dictPTTimer = nil
+                _dictTrigMode = .idle
+                if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
+            }
+        }
+    }
 }
 
 // ---- Dictation trigger state machine (matches DictationLab v2) ----------------
@@ -1387,10 +1423,8 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
             if picker.isVisible { picker.hide() } else { picker.show(prev: front) }
         } else if hk.action == "settings" {
             settingsWindow.show(tab: .setup)
-        } else if hk.action == "dictate" {
-            Task { @MainActor in triggerDictation(mode: .insert, keycode: CGKeyCode(carbon)) }
-        } else if hk.action == "dictateadd" {
-            Task { @MainActor in triggerDictation(mode: .claude, keycode: CGKeyCode(carbon)) }
+        } else if isBuiltInVoiceAction(hk.action) {
+            Task { @MainActor in triggerDictation(mode: dictMode(forBuiltInVoiceAction: hk.action), keycode: CGKeyCode(carbon)) }
         } else {
             let sel = hk.action.hasPrefix("shot") ? "" : captureSelectionSync()
             DispatchQueue.global().async { dispatchBuiltInAction(hk.action, source: front, captured: sel) }
@@ -1446,7 +1480,8 @@ func startMediaKeyHook() {
     // use keyUp to end push-to-talk without depending on Carbon release events.
     let eventMask = CGEventMask((1 << 14) |
                                 (1 << CGEventType.keyDown.rawValue) |
-                                (1 << CGEventType.keyUp.rawValue))
+                                (1 << CGEventType.keyUp.rawValue) |
+                                (1 << CGEventType.flagsChanged.rawValue))
     guard let tap = CGEvent.tapCreate(tap: .cghidEventTap, place: .headInsertEventTap,
                                       options: .defaultTap, eventsOfInterest: eventMask,
         callback: { _, type, event, _ -> Unmanaged<CGEvent>? in
@@ -1476,6 +1511,28 @@ func startMediaKeyHook() {
                 return nil
             }
 
+            // --- bare modifier voice hotkeys (Command/Option/etc.) ---
+            if type == .flagsChanged {
+                let kc = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
+                guard MODIFIER_ONLY_KEYCODES.contains(kc) else { return passthrough }
+                let isDown = isModifierKeyDown(keycode: kc, flags: event.flags)
+                if isDown {
+                    guard let voiceTarget = voiceHotkeyTarget(keycode: kc, mods: 0) else { return passthrough }
+                    if _voiceHeldKeycodes.contains(kc) { return nil }
+                    appendLog("[eventTap] modifier voice down kc=\(kc)")
+                    _voiceHeldKeycodes.insert(kc)
+                    DispatchQueue.main.async {
+                        Task { @MainActor in triggerVoiceHotkey(voiceTarget, keycode: CGKeyCode(kc)) }
+                    }
+                    return nil
+                }
+                if _voiceHeldKeycodes.contains(kc) {
+                    releaseVoiceHotkey(keycode: kc)
+                    return nil
+                }
+                return passthrough
+            }
+
             // --- regular keyDown/keyUp path ---
             if type == .keyDown || type == .keyUp {
                 let kc = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
@@ -1503,17 +1560,8 @@ func startMediaKeyHook() {
 
                 let cm = physicalModifierMask(cgFlags: f)
                 if type == .keyUp, _voiceHeldKeycodes.contains(kc) {
-                    _voiceHeldKeycodes.remove(kc)
                     appendLog("[eventTap] voice up kc=\(kc) mods=\(cm)")
-                    DispatchQueue.main.async {
-                        Task { @MainActor in
-                            if _dictTrigMode == .pushToTalk {
-                                _dictPTTimer?.invalidate(); _dictPTTimer = nil
-                                _dictTrigMode = .idle
-                                if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
-                            }
-                        }
-                    }
+                    releaseVoiceHotkey(keycode: kc)
                     return nil
                 }
                 if let voiceTarget = voiceHotkeyTarget(keycode: kc, mods: cm) {
@@ -2027,7 +2075,7 @@ if UserDefaults.standard.bool(forKey: "onboardingCompleted") {
 }
 // Key handling while a window is up: the picker swallows keys while open; the
 // Shortcuts editor swallows the next combo while recording a rebind.
-NSEvent.addLocalMonitorForEvents(matching: .keyDown) { ev in
+NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { ev in
     if picker.handle(ev) { return nil }
     if settingsModel.handleRecording(ev) { return nil }
     return ev

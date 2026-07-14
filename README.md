@@ -7,11 +7,11 @@
 
 Native macOS menu-bar shortcuts for Claude, ChatGPT, and Codex. Capture selected text, screenshots, typed popups, or voice; choose whether each prompt goes to an existing session, a new session, or a background CLI run.
 
-Documentation site: [galbutnotgirl.github.io/command](https://galbutnotgirl.github.io/command/)
+App site: [galbutnotgirl.github.io/command](https://galbutnotgirl.github.io/command/)
 
 Alpha downloads: [Latest GitHub Release](https://github.com/galbutnotgirl/command/releases/latest)
 
-Docs:
+Core docs:
 
 | Doc | Link |
 |---|---|
@@ -22,18 +22,13 @@ Docs:
 | Quick Reference | [docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md) |
 | Examples | [docs/EXAMPLES.md](docs/EXAMPLES.md) |
 | FAQ | [docs/FAQ.md](docs/FAQ.md) |
-| Changelog | [docs/CHANGELOG.md](docs/CHANGELOG.md) |
-| Alpha Limitations | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
-| Updates | [docs/UPDATES.md](docs/UPDATES.md) |
 | Permissions | [docs/PERMISSIONS.md](docs/PERMISSIONS.md) |
 | Privacy | [docs/PRIVACY.md](docs/PRIVACY.md) |
 | Troubleshooting | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
-| Icon Treatments | [docs/ICON_TREATMENTS.md](docs/ICON_TREATMENTS.md) |
-| Background Architecture | [docs/BACKGROUND_TRIGGER_INTEGRATION.md](docs/BACKGROUND_TRIGGER_INTEGRATION.md) |
-| Release Checklist | [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) |
+| Changelog | [docs/CHANGELOG.md](docs/CHANGELOG.md) |
+| Alpha Limitations | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | Support, bugs, and feature requests | [SUPPORT.md](SUPPORT.md) |
 | Security reports | [SECURITY.md](SECURITY.md) |
-| Private security report | [GitHub private advisory](https://github.com/galbutnotgirl/command/security/advisories/new) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 Repo: [github.com/galbutnotgirl/command](https://github.com/galbutnotgirl/command)
@@ -65,6 +60,7 @@ Command is organized around prompts:
 | Clipboard History | F6 | Open searchable clipboard picker. |
 | Dictate -> Insert | Home | Speak and paste transcript at cursor. |
 | Dictate -> Assistant | Option-Home | Speak and send transcript to selected assistant. |
+| Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
 Change prompt/action shortcuts in **Settings -> Shortcuts**. Dictation shortcuts live in **Settings -> Dictation Settings**.
 

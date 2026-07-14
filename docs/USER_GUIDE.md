@@ -33,6 +33,7 @@ Default built-in shortcuts:
 | Clipboard History | F6 | Open searchable clipboard picker. |
 | Dictate -> Insert | Home | Speak and paste transcript at cursor. |
 | Dictate -> Assistant | Option-Home | Speak and send transcript to selected assistant. |
+| Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
 You can change prompt and trigger shortcuts from **Settings -> Shortcuts**. Open the prompt/action editor or trigger row, click a key field, press a combo, press Delete to clear, or Esc to cancel. Dictation shortcuts live in **Settings -> Dictation Settings**.
 
@@ -272,7 +273,7 @@ Tabs:
 | Vocabulary | Proper nouns, product names, filler words. |
 | Dictation Settings | Model, microphone access, shortcuts, processing, sounds. |
 
-Use **Dictation Settings** for Dictate -> Insert and Dictate -> Assistant shortcuts. Use **Shortcuts** for voice triggers tied to prompt actions.
+Use **Dictation Settings** for Dictate -> Insert, Dictate -> Assistant, and Dictate -> Assistant 2 shortcuts. Use **Shortcuts** for voice triggers tied to prompt actions.
 
 Voice custom actions use the same recording engine as built-in Dictate. Configure voice prompt actions in **Shortcuts**, not Dictation Settings.
 

@@ -134,6 +134,8 @@ final class ActionModelsTests: XCTestCase {
         XCTAssertEqual(byAction["dictate"]?.mods, 0)
         XCTAssertEqual(byAction["dictateadd"]?.keycode, 115)
         XCTAssertEqual(byAction["dictateadd"]?.mods, 2048)
+        XCTAssertEqual(byAction["dictateadd2"]?.keycode, 0)
+        XCTAssertEqual(byAction["dictateadd2"]?.mods, 0)
     }
 
     func testNewUserDefaultsDoNotCollideWhenBound() {
@@ -149,6 +151,7 @@ final class ActionModelsTests: XCTestCase {
         let byAction = Dictionary(uniqueKeysWithValues: DEFAULT_BINDINGS.map { ($0.action, (keycode: $0.keycode, mods: $0.mods)) })
         XCTAssertEqual(byAction["go"]?.keycode, 0)
         XCTAssertEqual(byAction["shotgo"]?.keycode, 0)
+        XCTAssertEqual(byAction["dictateadd2"]?.keycode, 0)
     }
 
     // ---- HotkeyBinding.human -------------------------------------------------

@@ -438,7 +438,6 @@ REQUIRED_TEXT = {
         "Full Docs",
         "Help From The App",
         "Settings Reference",
-        "Icon Treatments / Background Architecture / Release Checklist",
         "troubleshooting.html",
         "Copy Diagnostic Info",
         "Request Feature",
@@ -464,18 +463,10 @@ REQUIRED_TEXT = {
         "docs/PRIVACY.md",
         "| Alpha Limitations |",
         "docs/LIMITATIONS.md",
-        "| Icon Treatments |",
-        "docs/ICON_TREATMENTS.md",
-        "| Background Architecture |",
-        "docs/BACKGROUND_TRIGGER_INTEGRATION.md",
-        "| Release Checklist |",
         "Support, bugs, and feature requests",
         "SUPPORT.md",
         "SECURITY.md",
-        "Private security report",
-        "security/advisories/new",
         "CONTRIBUTING.md",
-        "docs/UPDATES.md",
         "https://github.com/galbutnotgirl/command/releases/latest",
         "latest GitHub Release",
         "checksum verification when kept beside the matching zip",
@@ -591,25 +582,16 @@ REQUIRED_TEXT = {
         "<main id=\"content\">",
         "install.html",
         "settings.html",
-        "uninstall.html",
-        "404.html",
         "Anything in. Anywhere out.",
         "Compose once. Trigger your way.",
         "Capture anything",
         "Choose flow",
         "Keep moving",
         "https://github.com/galbutnotgirl/command/releases/latest",
-        "updates.html",
-        "limitations.html",
-        "Alpha Limitations",
         "permissions.html",
         "troubleshooting.html",
-        "security.html",
-        "Security Policy",
-        "Private Security Report",
-        "icon-treatments.html",
         "Local development:",
-        "uninstall.html",
+        "https://github.com/galbutnotgirl/command",
     ],
     "docs/404.html": [
         "<title>Command Docs Not Found</title>",
@@ -686,12 +668,8 @@ REQUIRED_TEXT = {
         "Overwrite",
         "Help &amp; Documentation",
         "Support &amp; Reporting",
-        "View on GitHub",
-        "Documentation / User Guide / Install Guide / Uninstall",
-        "Settings Reference / Quick Reference / Troubleshooting / Permissions / Support / Security Policy",
-        "private-report guidance",
-        "Examples / FAQ / Updates / Privacy / Changelog / Alpha Limitations",
-        "Icon Treatments / Background Architecture / Release Checklist",
+        "App Site",
+        "GitHub",
         "Copy Diagnostic Info",
         "Private Security Report",
         "GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics",
@@ -717,12 +695,8 @@ REQUIRED_TEXT = {
         "Overwrite",
         "Help & Documentation",
         "Support & Reporting",
-        "View on GitHub",
-        "Documentation / User Guide / Install Guide / Uninstall",
-        "Settings Reference / Quick Reference / Troubleshooting / Permissions / Support / Security Policy",
-        "private-report guidance",
-        "Examples / FAQ / Updates / Privacy / Changelog / Alpha Limitations",
-        "Icon Treatments / Background Architecture / Release Checklist",
+        "App Site",
+        "GitHub",
         "Copy Diagnostic Info",
         "Private Security Report",
         "GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics",
@@ -869,16 +843,13 @@ REQUIRED_TEXT = {
         "Settings -> Set Up",
         "Help & Documentation",
         "Support & Reporting",
-        "View on GitHub",
+        "App Site",
+        "GitHub",
         "Copy Diagnostic Info",
         "Report a Bug",
         "Request Feature",
-        "Security Policy",
-        "Private reporting path, supported alpha versions, redaction guidance, and privacy links.",
         "Private Security Report",
         "GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics",
-        "Icon Treatments / Background Architecture / Release Checklist",
-        "Examples / FAQ / Updates / Privacy / Changelog / Alpha Limitations",
         "Quick Reference",
         "Install From Source",
         "Permissions",
@@ -925,14 +896,13 @@ REQUIRED_TEXT = {
         "Settings -> Set Up",
         "Help &amp; Documentation",
         "Support &amp; Reporting",
-        "View on GitHub",
+        "App Site",
+        "GitHub",
         "Copy Diagnostic Info",
         "Report a Bug",
         "Request Feature",
         "Private Security Report",
         "GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics",
-        "Icon Treatments / Background Architecture / Release Checklist",
-        "Examples / FAQ / Updates / Privacy / Changelog / Alpha Limitations",
         "Quick Reference",
         "Install From Source",
         "For local development, use",
@@ -1327,18 +1297,15 @@ REQUIRED_TEXT = {
         "Help From The App",
         "Help & Documentation",
         "Support & Reporting",
-        "View on GitHub",
+        "App Site",
+        "GitHub",
         "final non-empty stdout line",
         "diagnostic summary",
         "Prose containing `TASK_ID=abc123` does not count",
         "No follow-up action runs from that value yet",
-        "Icon Treatments / Background Architecture / Release Checklist",
-        "Security Policy",
-        "Private reporting path, supported alpha versions, redaction guidance, and privacy links.",
         "Private Security Report",
         "GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics",
         "Settings Reference",
-        "Default shortcuts, prompt variables, common fixes, and local data paths.",
         "Install Guide",
         "Uninstall",
         "Updates",
@@ -1346,8 +1313,6 @@ REQUIRED_TEXT = {
         "FAQ",
         "Changelog",
         "Alpha Limitations",
-        "Icon Treatments",
-        "Release Checklist",
         "Permissions",
         "SUPPORT.md",
         "LIMITATIONS.md",
@@ -1387,31 +1352,12 @@ REQUIRED_TEXT = {
         "Removes the run record",
         "Stable is visible but unavailable until the first stable release exists",
         "openHelpDoc(named: \"install\", fragment: \"source\")",
-        "GridItem(.adaptive(minimum: 150)",
+        "GridItem(.adaptive(minimum: 170)",
         "Text(\"Help & Documentation\")",
         "Text(\"Support & Reporting\")",
         "panel.nameFieldStringValue = \"command-export.json\"",
-        "Label(\"Documentation\"",
-        "openHelpDoc(named: \"guide\")",
-        "Label(\"User Guide\"",
-        "openHelpDoc(named: \"install\")",
-        "Label(\"Install Guide\"",
-        "openHelpDoc(named: \"uninstall\")",
-        "openHelpDoc(named: \"settings\")",
-        "openHelpDoc(named: \"quick-reference\")",
-        "openHelpDoc(named: \"troubleshooting\")",
-        "openHelpDoc(named: \"permissions\")",
-        "openHelpDoc(named: \"support\")",
-        "openHelpDoc(named: \"security\")",
-        "openHelpDoc(named: \"examples\")",
-        "openHelpDoc(named: \"faq\")",
-        "openHelpDoc(named: \"updates\")",
-        "openHelpDoc(named: \"privacy\")",
-        "openHelpDoc(named: \"changelog\")",
-        "openHelpDoc(named: \"limitations\")",
-        "openHelpDoc(named: \"icon-treatments\")",
-        "openHelpDoc(named: \"background\")",
-        "openHelpDoc(named: \"release\")",
+        "AboutLinkButton(title: \"App Site\"",
+        "AboutLinkButton(title: \"GitHub\"",
         "--- Shortcut bindings ---",
         "Custom actions:",
         "--- Set Up status ---",
@@ -2192,9 +2138,6 @@ CORE_DOC_NAV_LINKS = [
     "troubleshooting.html",
     "support.html",
     "security.html",
-    "icon-treatments.html",
-    "background.html",
-    "release.html",
 ]
 CORE_DOC_NAV_LABELS = {
     "index.html": "Overview",
@@ -2213,9 +2156,6 @@ CORE_DOC_NAV_LABELS = {
     "troubleshooting.html": "Troubleshooting",
     "support.html": "Support",
     "security.html": "Security Policy",
-    "icon-treatments.html": "Icon Treatments",
-    "background.html": "Background Architecture",
-    "release.html": "Release Checklist",
 }
 CORE_DOC_MARKDOWN_SOURCES = {
     "install.html": "docs/INSTALL.md",
@@ -2233,54 +2173,12 @@ CORE_DOC_MARKDOWN_SOURCES = {
     "troubleshooting.html": "docs/TROUBLESHOOTING.md",
     "support.html": "docs/SUPPORT.md",
     "security.html": "docs/SECURITY.md",
-    "icon-treatments.html": "docs/ICON_TREATMENTS.md",
-    "background.html": "docs/BACKGROUND_TRIGGER_INTEGRATION.md",
-    "release.html": "docs/RELEASE_CHECKLIST.md",
 }
-ABOUT_HELP_DOCS = [
-    "index",
-    "guide",
-    "install",
-    "uninstall",
-    "settings",
-    "quick-reference",
-    "troubleshooting",
-    "permissions",
-    "support",
-    "security",
-    "examples",
-    "faq",
-    "updates",
-    "privacy",
-    "changelog",
-    "limitations",
-    "icon-treatments",
-    "background",
-    "release",
-]
-ABOUT_HELP_DOC_LABELS = {
-    "index": "Documentation",
-    "guide": "User Guide",
-    "install": "Install Guide",
-    "uninstall": "Uninstall",
-    "settings": "Settings Reference",
-    "quick-reference": "Quick Reference",
-    "troubleshooting": "Troubleshooting",
-    "permissions": "Permissions",
-    "support": "Support",
-    "security": "Security Policy",
-    "examples": "Examples",
-    "faq": "FAQ",
-    "updates": "Updates",
-    "privacy": "Privacy",
-    "changelog": "Changelog",
-    "limitations": "Alpha Limitations",
-    "icon-treatments": "Icon Treatments",
-    "background": "Background Architecture",
-    "release": "Release Checklist",
-}
+ABOUT_HELP_DOCS: list[str] = []
+ABOUT_HELP_DOC_LABELS: dict[str, str] = {}
 ABOUT_SUPPORT_LABELS = [
-    "View on GitHub",
+    "App Site",
+    "GitHub",
     "Copy Diagnostic Info",
     "Report a Bug",
     "Request Feature",
@@ -2599,10 +2497,10 @@ def validate_sitemap(failures: list[str]) -> None:
         return
     urls = set(SITEMAP_LOC.findall(sitemap.read_text(encoding="utf-8")))
     expected = {PAGES_BASE_URL}
-    for html in (ROOT / "docs").glob("*.html"):
-        if html.name in {"404.html", "index.html"}:
+    for html in CORE_DOC_NAV_LINKS:
+        if html == "index.html":
             continue
-        expected.add(f"{PAGES_BASE_URL}{html.name}")
+        expected.add(f"{PAGES_BASE_URL}{html}")
     missing = sorted(expected - urls)
     extra = sorted(urls - expected)
     for url in missing:
@@ -2634,18 +2532,16 @@ def validate_release_checklist_doc_label_parity(failures: list[str]) -> None:
 
 def validate_docs_home_coverage(failures: list[str]) -> None:
     home = (ROOT / "docs/index.html").read_text(encoding="utf-8")
-    for html in sorted((ROOT / "docs").glob("*.html")):
-        if html.name == "index.html":
-            continue
-        if f'href="{html.name}"' not in home:
-            failures.append(f"docs/index.html: docs home missing docs page: {html.name}")
+    required_home_links = ["install.html", "guide.html", "settings.html", "quick-reference.html", "permissions.html", "troubleshooting.html", "privacy.html", "support.html"]
+    for html in required_home_links:
+        if f'href="{html}"' not in home:
+            failures.append(f"docs/index.html: docs home missing docs page: {html}")
 
 
 def validate_docs_home_card_label_parity(failures: list[str]) -> None:
     home = (ROOT / "docs/index.html").read_text(encoding="utf-8")
-    for href, label in CORE_DOC_NAV_LABELS.items():
-        if href == "index.html":
-            continue
+    for href in ["install.html", "guide.html", "settings.html", "quick-reference.html", "permissions.html", "troubleshooting.html", "privacy.html", "support.html"]:
+        label = CORE_DOC_NAV_LABELS[href]
         pattern = rf'<a[^>]*href="{re.escape(href)}"[^>]*>\s*(?:<strong>)?{re.escape(label)}'
         if not re.search(pattern, home):
             failures.append(f"docs/index.html: docs home card label missing or mismatched: {href} -> {label}")
@@ -2673,9 +2569,8 @@ def validate_rendered_docs_grid_label_parity(failures: list[str]) -> None:
 def validate_docs_home_repo_trust_routes(failures: list[str]) -> None:
     home = (ROOT / "docs/index.html").read_text(encoding="utf-8")
     required_routes = {
-        "README": "https://github.com/galbutnotgirl/command#readme",
-        "Contributing": "https://github.com/galbutnotgirl/command/blob/main/CONTRIBUTING.md",
-        "Private Security Report": "https://github.com/galbutnotgirl/command/security/advisories/new",
+        "GitHub": "https://github.com/galbutnotgirl/command",
+        "Latest Release": "https://github.com/galbutnotgirl/command/releases/latest",
     }
     for label, href in required_routes.items():
         if label not in home or f'href="{href}"' not in home:
@@ -2686,25 +2581,11 @@ def validate_about_docs_button_coverage(failures: list[str]) -> None:
     settings = (ROOT / "agent/SettingsWindow.swift").read_text(encoding="utf-8")
     found = set(re.findall(r'openHelpDoc\(named:\s*"([^"]+)"', settings))
     missing = [name for name in ABOUT_HELP_DOCS if name not in found]
-    extra = sorted(found - set(ABOUT_HELP_DOCS))
     for name in missing:
         failures.append(f"agent/SettingsWindow.swift: About docs buttons missing openHelpDoc(named: \"{name}\")")
-    for name in extra:
-        if name == "install":
-            continue
-        failures.append(f"agent/SettingsWindow.swift: unexpected About docs target: {name}")
-    button_blocks = re.findall(
-        r'Button\s*\{\s*openHelpDoc\(named:\s*"([^"]+)"\)\s*\}\s*label:\s*\{\s*Label\("([^"]+)"',
-        settings,
-        flags=re.DOTALL,
-    )
-    labels_by_target = {target: label for target, label in button_blocks}
     for target, expected_label in ABOUT_HELP_DOC_LABELS.items():
-        actual_label = labels_by_target.get(target)
-        if actual_label != expected_label:
-            failures.append(
-                f'agent/SettingsWindow.swift: About docs button {target} label {actual_label!r}, expected {expected_label!r}'
-            )
+        if expected_label not in settings:
+            failures.append(f'agent/SettingsWindow.swift: About docs button {target} label missing: {expected_label!r}')
 
 
 def validate_about_docs_reference_parity(failures: list[str]) -> None:
@@ -2722,7 +2603,7 @@ def validate_about_docs_reference_parity(failures: list[str]) -> None:
 
 
 def validate_release_checklist_about_docs_label_parity(failures: list[str]) -> None:
-    labels = list(ABOUT_HELP_DOC_LABELS.values())
+    labels: list[str] = []
     for rel in ["docs/RELEASE_CHECKLIST.md", "docs/release.html"]:
         text = (ROOT / rel).read_text(encoding="utf-8")
         for label in labels:
@@ -2941,9 +2822,18 @@ def validate_required_doc_assets_cover_docs_dir(failures: list[str]) -> None:
 def validate_readme_docs_table_coverage(failures: list[str]) -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     expected = [
-        path.relative_to(ROOT).as_posix()
-        for path in sorted((ROOT / "docs").glob("*.md"))
-        if path.name not in {"STATUS.md", "SUPPORT.md", "SECURITY.md"}
+        "docs/INSTALL.md",
+        "docs/UNINSTALL.md",
+        "docs/USER_GUIDE.md",
+        "docs/SETTINGS_REFERENCE.md",
+        "docs/QUICK_REFERENCE.md",
+        "docs/EXAMPLES.md",
+        "docs/FAQ.md",
+        "docs/PERMISSIONS.md",
+        "docs/PRIVACY.md",
+        "docs/TROUBLESHOOTING.md",
+        "docs/CHANGELOG.md",
+        "docs/LIMITATIONS.md",
     ]
     expected += ["SUPPORT.md", "SECURITY.md", "CONTRIBUTING.md"]
     for rel in expected:
@@ -2954,7 +2844,7 @@ def validate_readme_docs_table_coverage(failures: list[str]) -> None:
 def validate_readme_docs_table_label_parity(failures: list[str]) -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for html, rel in CORE_DOC_MARKDOWN_SOURCES.items():
-        if html in {"support.html", "security.html"}:
+        if html in {"support.html", "security.html", "updates.html"}:
             continue
         label = CORE_DOC_NAV_LABELS[html]
         row = f"| {label} | [{rel}]({rel}) |"

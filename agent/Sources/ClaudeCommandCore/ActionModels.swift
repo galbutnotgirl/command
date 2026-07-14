@@ -26,6 +26,7 @@ public let COMMAND_ACTIONS: [CommandAction] = [
     CommandAction(id: "cliphistory", name: "Clipboard History",  detail: "Floating picker of recent clips."),
     CommandAction(id: "dictate",     name: "Dictate → Insert",   detail: "Speak → on-device Parakeet transcription → paste at cursor."),
     CommandAction(id: "dictateadd",  name: "Dictate → Assistant", detail: "Speak → on-device Parakeet transcription → send to selected assistant."),
+    CommandAction(id: "dictateadd2", name: "Dictate → Assistant 2", detail: "Speak → on-device Parakeet transcription → send to another selected assistant."),
 ]
 
 public func actionName(_ id: String) -> String { COMMAND_ACTIONS.first { $0.id == id }?.name ?? id }
@@ -62,6 +63,7 @@ public let DEFAULT_BINDINGS: [(action: String, keycode: UInt32, mods: UInt32)] =
     ("cliphistory", 97,   0),      // F6   — clipboard history picker (only registered when enabled)
     ("dictate",     115,  0),      // Home  — dictate → insert at cursor
     ("dictateadd",  115,  2048),   // ⌥Home — dictate → send to assistant
+    ("dictateadd2", 0,    0),      // unbound — optional second assistant dictation target
 ]
 
 // ---- custom actions ---------------------------------------------------------

@@ -13,6 +13,7 @@
 | Clipboard History | F6 | Open searchable clipboard picker. |
 | Dictate -> Insert | Home | Speak and paste transcript at cursor. |
 | Dictate -> Assistant | Option-Home | Speak and send transcript to selected assistant. |
+| Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
 Change prompt/action shortcuts in **Settings -> Shortcuts**. Dictation shortcuts live in **Settings -> Dictation Settings**. Open the relevant editor or trigger row, click a key field, press a combo. Delete clears. Esc cancels.
 
@@ -163,18 +164,7 @@ Open **Settings -> About**:
 
 | Button | Use |
 |---|---|
-| Help & Documentation | Repository link plus bundled docs buttons. |
-| View on GitHub | Opens the project repository. |
-| Documentation | Full bundled docs, with GitHub Pages fallback. |
-| User Guide / Install Guide / Uninstall | End-to-end setup, first install, and removal. |
-| Settings Reference | Tab-by-tab Settings map. |
-| Quick Reference | Default shortcuts, prompt variables, common fixes, and local data paths. |
-| Troubleshooting | Symptom-first fixes and log paths. |
-| Permissions | Permission meanings, optional items, and reset commands. |
-| Support | What to include in bug reports, feature requests, and help requests. |
-| Security Policy | Private reporting path, supported alpha versions, redaction guidance, and privacy links. |
-| Examples / FAQ / Updates / Privacy / Changelog / Alpha Limitations | Examples, common questions, update flow, local data, release notes, and alpha expectations. |
-| Icon Treatments / Background Architecture / Release Checklist | Active-state visuals, background-run internals, and maintainer ship gates. |
+| Help & Documentation | App Site and GitHub. |
 | Support & Reporting | Diagnostics, public bug/feature routes, and private security reporting. |
 | Copy Diagnostic Info | App path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews. |
 | Report a Bug | Prefilled GitHub issue template. |
@@ -196,6 +186,3 @@ Open **Settings -> About**:
 - [FAQ](FAQ.md)
 - [Changelog](CHANGELOG.md)
 - [Alpha Limitations](LIMITATIONS.md)
-- [Icon Treatments](ICON_TREATMENTS.md)
-- [Background Architecture](BACKGROUND_TRIGGER_INTEGRATION.md)
-- [Release Checklist](RELEASE_CHECKLIST.md)

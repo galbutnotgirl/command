@@ -112,10 +112,10 @@ final class DictationOverlay: NSObject {
             if !prevBundle.isEmpty { activate(prevBundle); usleep(200_000) }
             postKey(kV, cmd: true)
 
-        case .claude:
+        case .claude, .claude2:
             let front = prevBundle
+            let provider = mode == .claude2 ? dictationAssistant2Provider() : dictationAssistantProvider()
             DispatchQueue.global().async {
-                let provider = dictationAssistantProvider()
                 runWorker("custom", source: front, captured: text, customPrompt: "{selection}",
                           customSession: "add", customIncludeSource: false,
                           provider: provider)

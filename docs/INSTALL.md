@@ -32,7 +32,7 @@ Binary installs do not require Terminal scripts. Global shortcuts, screenshots, 
 
 Command was previously named ClaudeCommand. New installers use `Command.app` and remove the old `~/Applications/ClaudeCommand.app` bundle during source installs. The bundle identifier and local support paths stay compatible (`com.claudecommand` and `~/Library/Application Support/claude-command/`) so macOS permissions, shortcuts, history, and exports keep working across the rename.
 
-For permission details, optional items, and reset commands, see [PERMISSIONS.md](PERMISSIONS.md).
+For permission details, optional items, and reset commands, see [Permissions](PERMISSIONS.md). For a compact shortcut and settings map, see [Quick Reference](QUICK_REFERENCE.md).
 
 ## First Run
 
@@ -73,23 +73,14 @@ Open **Settings -> About**:
 
 | Button | Use |
 |---|---|
-| Help & Documentation | Repository link plus bundled docs buttons. |
-| View on GitHub | Opens the project repository. |
-| Documentation | Opens bundled docs first, GitHub Pages fallback if docs are missing. |
-| User Guide / Install Guide / Uninstall | End-to-end setup, first install, and removal. |
-| Settings Reference | Tab-by-tab Settings map. |
-| Quick Reference | Shortcuts, variables, and common fixes. |
-| Troubleshooting | Symptom-first fixes and log paths. |
-| Permissions | Permission meanings, optional items, and reset commands. |
-| Support | What to include in bug reports, feature requests, and help requests. |
-| Security Policy | Private reporting path, supported alpha versions, redaction guidance, and privacy links. |
-| Examples / FAQ / Updates / Privacy / Changelog / Alpha Limitations | Examples, common questions, update flow, local data, release notes, and alpha expectations. |
-| Icon Treatments / Background Architecture / Release Checklist | Active-state visuals, background-run internals, and maintainer ship gates. |
+| Help & Documentation | App Site and GitHub. |
 | Support & Reporting | Diagnostics, public bug/feature routes, and private security reporting. |
 | Copy Diagnostic Info | App path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews. |
 | Report a Bug | Prefilled GitHub issue template. |
 | Request Feature | Prefilled GitHub feature request template. |
 | Private Security Report | GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics. |
+
+For every Settings tab and About control, see [Settings Reference](SETTINGS_REFERENCE.md).
 
 ## Install From Source
 

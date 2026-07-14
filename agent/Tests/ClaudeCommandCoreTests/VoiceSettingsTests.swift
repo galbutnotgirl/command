@@ -12,6 +12,7 @@ final class VoiceSettingsTests: XCTestCase {
         XCTAssertEqual(VoiceSettingsKeys.startSound, "startSound")
         XCTAssertEqual(VoiceSettingsKeys.stopSound, "stopSound")
         XCTAssertEqual(VoiceSettingsKeys.dictationAssistantProvider, "dictationAssistantProvider")
+        XCTAssertEqual(VoiceSettingsKeys.dictationAssistant2Provider, "dictationAssistant2Provider")
     }
 
     func testProcessingSettingsArePartOfVoicePersistenceContract() {
@@ -30,6 +31,7 @@ final class VoiceSettingsTests: XCTestCase {
         XCTAssertEqual(VoiceSettingsDefaults.startSound, "Purr")
         XCTAssertEqual(VoiceSettingsDefaults.stopSound, "Purr")
         XCTAssertEqual(VoiceSettingsDefaults.dictationAssistantProvider, "default")
+        XCTAssertEqual(VoiceSettingsDefaults.dictationAssistant2Provider, "codex")
     }
 
     func testDictationDefaultsUseHomeAndOptionHome() {
@@ -38,8 +40,11 @@ final class VoiceSettingsTests: XCTestCase {
         XCTAssertEqual(byAction["dictate"]?.mods, 0)
         XCTAssertEqual(byAction["dictateadd"]?.keycode, 115)
         XCTAssertEqual(byAction["dictateadd"]?.mods, 2048)
+        XCTAssertEqual(byAction["dictateadd2"]?.keycode, 0)
+        XCTAssertEqual(byAction["dictateadd2"]?.mods, 0)
         XCTAssertEqual(HotkeyBinding(action: "dictate", keycode: 115, mods: 0, enabled: true).human, "Home")
         XCTAssertEqual(HotkeyBinding(action: "dictateadd", keycode: 115, mods: 2048, enabled: true).human, "⌥Home")
+        XCTAssertEqual(HotkeyBinding(action: "dictateadd2", keycode: 0, mods: 0, enabled: true).human, "—")
     }
 
     func testDictationStopTailPolicyKeepsFastQuietStopsAndLongerActiveTail() {

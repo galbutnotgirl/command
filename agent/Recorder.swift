@@ -8,7 +8,7 @@ import ClaudeCommandCore
 
 // ─── Mode ──────────────────────────────────────────────────────────────────────
 
-enum DictMode: Equatable { case insert, claude, customAction(actionID: String, triggerID: String) }
+enum DictMode: Equatable { case insert, claude, claude2, customAction(actionID: String, triggerID: String) }
 
 // ─── Global recorder singleton ─────────────────────────────────────────────────
 // @MainActor: Recorder is @MainActor-isolated; annotation ensures init runs on main actor.

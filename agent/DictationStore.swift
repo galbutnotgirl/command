@@ -194,6 +194,7 @@ final class HistoryStore: ObservableObject {
         switch mode {
         case .insert: modeLabel = "insert"
         case .claude: modeLabel = "claude"
+        case .claude2: modeLabel = "claude2"
         case .customAction: modeLabel = "custom"
         }
         let r = Record(timestamp: Date(), raw: raw, processed: processed, mode: modeLabel)

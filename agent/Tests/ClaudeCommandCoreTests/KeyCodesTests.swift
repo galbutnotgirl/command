@@ -25,6 +25,13 @@ final class KeyCodesTests: XCTestCase {
         XCTAssertEqual(humanShortcut(keycode: 98, mods: 2048), "⌥F7")
     }
 
+    func testModifierOnlyKeysDisplayByName() {
+        XCTAssertEqual(humanShortcut(keycode: 55, mods: 0), "Command")
+        XCTAssertEqual(humanShortcut(keycode: 58, mods: 0), "Option")
+        XCTAssertTrue(MODIFIER_ONLY_KEYCODES.contains(55))
+        XCTAssertTrue(MODIFIER_ONLY_KEYCODES.contains(58))
+    }
+
     func testCarbonModsFromCocoaFlagsRoundTrips() {
         let flags: NSEvent.ModifierFlags = [.command, .shift]
         XCTAssertEqual(carbonMods(from: flags), 256 | 512)

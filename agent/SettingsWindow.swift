@@ -128,6 +128,7 @@ final class SettingsModel: ObservableObject {
     @Published var startSound: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.startSound) ?? VoiceSettingsDefaults.startSound
     @Published var stopSound: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.stopSound) ?? VoiceSettingsDefaults.stopSound
     @Published var dictationAssistantProvider: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.dictationAssistantProvider) ?? VoiceSettingsDefaults.dictationAssistantProvider
+    @Published var dictationAssistant2Provider: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.dictationAssistant2Provider) ?? VoiceSettingsDefaults.dictationAssistant2Provider
 
     func refresh() {
         perms = permissionChecks()
@@ -172,8 +173,21 @@ final class SettingsModel: ObservableObject {
     // don't have one shared key to record against — each one does).
     func handleRecording(_ ev: NSEvent) -> Bool {
         guard let action = recordingAction else { return false }
-        if ev.keyCode == 53 { cancelRecording(); return true }              // esc cancels
         let isCustomTrigger = customActions.contains { $0.triggers.contains { $0.id == action } }
+        if ev.type == .flagsChanged {
+            guard canRecordModifierOnly(action: action, isCustomTrigger: isCustomTrigger),
+                  let key = activeModifierOnlyKeycode(from: ev) else { return true }
+            recordingAction = nil
+            if isCustomTrigger {
+                setTriggerBinding(triggerID: action, keycode: key, mods: 0)
+            } else {
+                setBinding(action: action, keycode: key, mods: 0)
+            }
+            checkConflict(forAction: action, keycode: key, mods: 0)
+            reregisterHotkeys()
+            return true
+        }
+        if ev.keyCode == 53 { cancelRecording(); return true }              // esc cancels
         if ev.keyCode == 51 || ev.keyCode == 117 {                         // delete / fwd-delete = clear
             recordingAction = nil
             if isCustomTrigger { clearTriggerBinding(triggerID: action) } else { clearBinding(action) }
@@ -192,6 +206,26 @@ final class SettingsModel: ObservableObject {
         checkConflict(forAction: action, keycode: key, mods: carbonM)
         reregisterHotkeys()
         return true
+    }
+
+    private func canRecordModifierOnly(action: String, isCustomTrigger: Bool) -> Bool {
+        if ["dictate", "dictateadd", "dictateadd2"].contains(action) { return true }
+        guard isCustomTrigger else { return false }
+        return customActions.contains { ca in
+            ca.triggers.contains { $0.id == action && $0.kind == .voice }
+        }
+    }
+
+    private func activeModifierOnlyKeycode(from ev: NSEvent) -> UInt32? {
+        let key = UInt32(ev.keyCode)
+        guard MODIFIER_ONLY_KEYCODES.contains(key) else { return nil }
+        switch key {
+        case 54, 55: return ev.modifierFlags.contains(.command) ? key : nil
+        case 56, 60: return ev.modifierFlags.contains(.shift) ? key : nil
+        case 58, 61: return ev.modifierFlags.contains(.option) ? key : nil
+        case 59, 62: return ev.modifierFlags.contains(.control) ? key : nil
+        default: return nil
+        }
     }
 
     // ---- custom action CRUD ----
@@ -1938,6 +1972,7 @@ private func globalBundle(sections: Set<GlobalBundleSection>) -> [String: Any] {
             VoiceSettingsKeys.startSound: settingsModel.startSound,
             VoiceSettingsKeys.stopSound: settingsModel.stopSound,
             VoiceSettingsKeys.dictationAssistantProvider: settingsModel.dictationAssistantProvider,
+            VoiceSettingsKeys.dictationAssistant2Provider: settingsModel.dictationAssistant2Provider,
             VoiceSettingsKeys.fillerRemoval: UserDefaults.standard.object(forKey: VoiceSettingsKeys.fillerRemoval) as? Bool ?? VoiceSettingsDefaults.fillerRemoval,
             VoiceSettingsKeys.smartFormatting: UserDefaults.standard.object(forKey: VoiceSettingsKeys.smartFormatting) as? Bool ?? VoiceSettingsDefaults.smartFormatting,
             VoiceSettingsKeys.aiCleanup: UserDefaults.standard.object(forKey: VoiceSettingsKeys.aiCleanup) as? Bool ?? VoiceSettingsDefaults.aiCleanup
@@ -2032,6 +2067,10 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
         if let v = prefs[VoiceSettingsKeys.dictationAssistantProvider] as? String, AIProviderChoice(rawValue: v) != nil {
             UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.dictationAssistantProvider)
             model.dictationAssistantProvider = v
+        }
+        if let v = prefs[VoiceSettingsKeys.dictationAssistant2Provider] as? String, AIProviderChoice(rawValue: v) != nil {
+            UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.dictationAssistant2Provider)
+            model.dictationAssistant2Provider = v
         }
         if let v = prefs[VoiceSettingsKeys.fillerRemoval] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.fillerRemoval) }
         if let v = prefs[VoiceSettingsKeys.smartFormatting] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.smartFormatting) }
@@ -3079,107 +3118,16 @@ struct AboutView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Help & Documentation").font(.headline)
-                    Button {
-                        if let u = URL(string: GITHUB_REPO_URL) { NSWorkspace.shared.open(u) }
-                    } label: {
-                        Label("View on GitHub", systemImage: "link")
-                    }
-                }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 10)], alignment: .leading, spacing: 10) {
-                    Button {
-                        openHelpDoc(named: "index")
-                    } label: {
-                        Label("Documentation", systemImage: "book")
-                    }
-                    Button {
-                        openHelpDoc(named: "guide")
-                    } label: {
-                        Label("User Guide", systemImage: "book.pages")
-                    }
-                    Button {
-                        openHelpDoc(named: "install")
-                    } label: {
-                        Label("Install Guide", systemImage: "arrow.down.app")
-                    }
-                    Button {
-                        openHelpDoc(named: "uninstall")
-                    } label: {
-                        Label("Uninstall", systemImage: "trash")
-                    }
-                    Button {
-                        openHelpDoc(named: "settings")
-                    } label: {
-                        Label("Settings Reference", systemImage: "list.bullet.rectangle")
-                    }
-                    Button {
-                        openHelpDoc(named: "quick-reference")
-                    } label: {
-                        Label("Quick Reference", systemImage: "bolt")
-                    }
-                    Button {
-                        openHelpDoc(named: "troubleshooting")
-                    } label: {
-                        Label("Troubleshooting", systemImage: "wrench.and.screwdriver")
-                    }
-                    Button {
-                        openHelpDoc(named: "permissions")
-                    } label: {
-                        Label("Permissions", systemImage: "lock.shield")
-                    }
-                    Button {
-                        openHelpDoc(named: "support")
-                    } label: {
-                        Label("Support", systemImage: "questionmark.circle")
-                    }
-                    Button {
-                        openHelpDoc(named: "security")
-                    } label: {
-                        Label("Security Policy", systemImage: "lock.shield")
-                    }
-                    Button {
-                        openHelpDoc(named: "examples")
-                    } label: {
-                        Label("Examples", systemImage: "sparkles")
-                    }
-                    Button {
-                        openHelpDoc(named: "faq")
-                    } label: {
-                        Label("FAQ", systemImage: "questionmark.bubble")
-                    }
-                    Button {
-                        openHelpDoc(named: "updates")
-                    } label: {
-                        Label("Updates", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    Button {
-                        openHelpDoc(named: "privacy")
-                    } label: {
-                        Label("Privacy", systemImage: "hand.raised")
-                    }
-                    Button {
-                        openHelpDoc(named: "changelog")
-                    } label: {
-                        Label("Changelog", systemImage: "clock")
-                    }
-                    Button {
-                        openHelpDoc(named: "limitations")
-                    } label: {
-                        Label("Alpha Limitations", systemImage: "exclamationmark.triangle")
-                    }
-                    Button {
-                        openHelpDoc(named: "icon-treatments")
-                    } label: {
-                        Label("Icon Treatments", systemImage: "waveform.path.ecg")
-                    }
-                    Button {
-                        openHelpDoc(named: "background")
-                    } label: {
-                        Label("Background Architecture", systemImage: "terminal")
-                    }
-                    Button {
-                        openHelpDoc(named: "release")
-                    } label: {
-                        Label("Release Checklist", systemImage: "checklist")
+                    Text("Open the app site for install, permissions, shortcuts, troubleshooting, updates, and support.")
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10)], alignment: .leading, spacing: 10) {
+                        AboutLinkButton(title: "App Site", systemImage: "safari") {
+                            if let u = URL(string: "https://galbutnotgirl.github.io/command/") { NSWorkspace.shared.open(u) }
+                        }
+                        AboutLinkButton(title: "GitHub", systemImage: "link") {
+                            if let u = URL(string: GITHUB_REPO_URL) { NSWorkspace.shared.open(u) }
+                        }
                     }
                 }
                 Text(GITHUB_REPO_URL).font(.caption).foregroundColor(.secondary).textSelection(.enabled)
@@ -3410,6 +3358,31 @@ struct AboutView: View {
 
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(out, forType: .string)
+    }
+}
+
+struct AboutLinkButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .foregroundColor(.secondary)
+                    .frame(width: 16)
+                Text(title)
+                    .foregroundColor(.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+            .cornerRadius(7)
+            .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.gray.opacity(0.15), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -3904,6 +3877,15 @@ struct DictSettingsView: View {
             }
         )
     }
+    private var dictationAssistant2Binding: Binding<String> {
+        Binding(
+            get: { model.dictationAssistant2Provider },
+            set: {
+                model.dictationAssistant2Provider = $0
+                UserDefaults.standard.set($0, forKey: VoiceSettingsKeys.dictationAssistant2Provider)
+            }
+        )
+    }
 
     var body: some View {
         ScrollView {
@@ -3948,7 +3930,7 @@ struct DictSettingsView: View {
                         Text("Recommendation: keep dictation hotkeys here. They control recording behavior; voice-based prompt actions live under Shortcuts as custom voice triggers.")
                             .font(.caption).foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        ForEach(model.bindings.filter { ["dictate", "dictateadd"].contains($0.action) }) { b in
+                        ForEach(model.bindings.filter { ["dictate", "dictateadd", "dictateadd2"].contains($0.action) }) { b in
                             HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(b.name)
@@ -3956,15 +3938,8 @@ struct DictSettingsView: View {
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 Spacer()
-                                if b.action == "dictateadd" {
-                                    Picker("", selection: dictationAssistantBinding) {
-                                        Text("Default").tag("default")
-                                        Text("Claude").tag("claude")
-                                        Text("ChatGPT").tag("codex")
-                                    }
-                                    .labelsHidden()
-                                    .frame(width: 190)
-                                    .help("Default follows Shortcuts -> Default assistant. Claude or ChatGPT overrides assistant dictation only.")
+                                if b.action == "dictateadd" || b.action == "dictateadd2" {
+                                    assistantProviderPicker(selection: b.action == "dictateadd2" ? dictationAssistant2Binding : dictationAssistantBinding)
                                 }
                                 KeyBindingField(action: b.action, binding: b, model: model)
                             }
@@ -4018,6 +3993,17 @@ struct DictSettingsView: View {
         .onAppear {
             micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         }
+    }
+
+    private func assistantProviderPicker(selection: Binding<String>) -> some View {
+        Picker("", selection: selection) {
+            Text("Default").tag("default")
+            Text("Claude").tag("claude")
+            Text("ChatGPT").tag("codex")
+        }
+        .labelsHidden()
+        .frame(width: 190)
+        .help("Default follows Shortcuts -> Default assistant. Claude or ChatGPT overrides this assistant dictation row only.")
     }
 
     @ViewBuilder private var modelStatusIcon: some View {

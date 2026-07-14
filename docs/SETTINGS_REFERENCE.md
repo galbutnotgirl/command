@@ -96,12 +96,7 @@ Use **About** for release, help, and portability workflows.
 | Show in Menu Bar | Shows or hides the status item. |
 | Show Dock icon | Switches between menu-bar-only and Dock-visible app behavior. |
 | Import / Export | Move shortcuts, prompt settings, context rules, dictation vocabulary, Background settings, and app preferences. Exports default to `command-export.json`. |
-| Help & Documentation | Repository link plus bundled docs buttons. |
-| View on GitHub | Opens the project repository. |
-| Documentation / User Guide / Install Guide / Uninstall | Main help, end-to-end setup, first install, and removal. |
-| Settings Reference / Quick Reference / Troubleshooting / Permissions / Support / Security Policy | Tab map, shortcut cheat sheet, symptom fixes, permission help, bug-report guidance, feature-request guidance, and private-report guidance. |
-| Examples / FAQ / Updates / Privacy / Changelog / Alpha Limitations | Workflow examples, common questions, update flow, local data, release notes, and alpha expectations. |
-| Icon Treatments / Background Architecture / Release Checklist | Active-state visuals, background-run internals, and maintainer ship gates. |
+| Help & Documentation | Opens the App Site or GitHub. The app site links the full public docs set. |
 | Support & Reporting | Diagnostics, public bug/feature routes, and private security reporting. |
 | Copy Diagnostic Info | Copies app path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews. |
 | Report a Bug | Opens GitHub issue template with key diagnostic fields prefilled. |
