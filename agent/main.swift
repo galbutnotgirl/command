@@ -1566,6 +1566,7 @@ func startMediaKeyHook() {
                 }
                 if let voiceTarget = voiceHotkeyTarget(keycode: kc, mods: cm) {
                     guard type == .keyDown else { return passthrough }
+                    if _voiceHeldKeycodes.contains(kc) { return nil }
                     appendLog("[eventTap] voice down kc=\(kc) mods=\(cm)")
                     let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
                     guard !isRepeat else { return nil }
