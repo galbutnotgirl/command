@@ -55,7 +55,7 @@ Right-click Services prefer highlighted text. Clear the text selection first, th
 
 ## Why does dictation miss final words?
 
-Voice input depends on stop timing and model finalization. In current alpha builds, stop timing is tuned inside the app rather than exposed as a slider. The stop sound means release was accepted; the menu-bar recording chip stays visible until tail capture, model finalization, and dispatch finish. If final words are cut off, release the key after the last word, then check **Dictation History** to see whether the raw transcript or processed transcript lost the tail. Include that detail plus diagnostics in a bug report.
+Voice input depends on stop timing, speech activity, and model finalization. The stop sound means release was accepted; the menu-bar recording chip stays visible until tail capture, model finalization, and dispatch finish. Use **Settings -> Dictation Settings -> Ignore below** to drop accidental taps, tiny bursts, and near-silence hallucinations. If final words are cut off, release the key after the last word, then check **Dictation History** to see whether the raw transcript or processed transcript lost the tail. Include that detail plus diagnostics in a bug report.
 
 ## How do updates work?
 

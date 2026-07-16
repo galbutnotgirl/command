@@ -128,6 +128,7 @@ final class SettingsModel: ObservableObject {
     @Published var startSound: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.startSound) ?? VoiceSettingsDefaults.startSound
     @Published var stopSound: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.stopSound) ?? VoiceSettingsDefaults.stopSound
     @Published var dictationEnabled: Bool = (UserDefaults.standard.object(forKey: VoiceSettingsKeys.dictationEnabled) as? Bool) ?? VoiceSettingsDefaults.dictationEnabled
+    @Published var minDictationDuration: Double = (UserDefaults.standard.object(forKey: VoiceSettingsKeys.minDictationDuration) as? Double) ?? VoiceSettingsDefaults.minDictationDuration
     @Published var dictationAssistantProvider: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.dictationAssistantProvider) ?? VoiceSettingsDefaults.dictationAssistantProvider
     @Published var dictationAssistant2Provider: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.dictationAssistant2Provider) ?? VoiceSettingsDefaults.dictationAssistant2Provider
 
@@ -1993,6 +1994,7 @@ private func globalBundle(sections: Set<GlobalBundleSection>) -> [String: Any] {
             VoiceSettingsKeys.startSound: settingsModel.startSound,
             VoiceSettingsKeys.stopSound: settingsModel.stopSound,
             VoiceSettingsKeys.dictationEnabled: settingsModel.dictationEnabled,
+            VoiceSettingsKeys.minDictationDuration: settingsModel.minDictationDuration,
             VoiceSettingsKeys.dictationAssistantProvider: settingsModel.dictationAssistantProvider,
             VoiceSettingsKeys.dictationAssistant2Provider: settingsModel.dictationAssistant2Provider,
             VoiceSettingsKeys.fillerRemoval: UserDefaults.standard.object(forKey: VoiceSettingsKeys.fillerRemoval) as? Bool ?? VoiceSettingsDefaults.fillerRemoval,
@@ -2091,6 +2093,11 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
         if let v = prefs[VoiceSettingsKeys.dictationEnabled] as? Bool {
             UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.dictationEnabled)
             model.dictationEnabled = v
+        }
+        if let v = prefs[VoiceSettingsKeys.minDictationDuration] as? Double {
+            let clamped = min(max(v, 0), 1.5)
+            UserDefaults.standard.set(clamped, forKey: VoiceSettingsKeys.minDictationDuration)
+            model.minDictationDuration = clamped
         }
         if let v = prefs[VoiceSettingsKeys.dictationAssistantProvider] as? String, AIProviderChoice(rawValue: v) != nil {
             UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.dictationAssistantProvider)
@@ -3979,6 +3986,25 @@ struct DictSettingsView: View {
 
                 GroupBox(label: Text("Processing").font(.subheadline).bold()) {
                     VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "timer")
+                                .foregroundColor(appPurple)
+                                .frame(width: 20)
+                            Text("Ignore below \(model.minDictationDuration, specifier: "%.1f")s")
+                                .frame(width: 130, alignment: .leading)
+                            Slider(value: Binding(
+                                get: { model.minDictationDuration },
+                                set: {
+                                    let rounded = ($0 * 10).rounded() / 10
+                                    model.minDictationDuration = rounded
+                                    UserDefaults.standard.set(rounded, forKey: VoiceSettingsKeys.minDictationDuration)
+                                }
+                            ), in: 0...1.5, step: 0.1)
+                        }
+                        Text("Drops accidental taps and near-silence hallucinations before they reach insert, assistant, or custom voice actions.")
+                            .font(.caption).foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Divider()
                         Toggle("Filler removal (um, uh, you know…)", isOn: $proc.fillerRemoval)
                         Toggle("Smart formatting (punctuation commands, backtrack, lists)", isOn: $proc.smartFormatting)
                         Toggle("AI cleanup — Apple Intelligence, on-device (macOS 26+)", isOn: $proc.aiCleanup)

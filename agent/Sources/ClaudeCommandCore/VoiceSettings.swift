@@ -10,6 +10,7 @@ public enum VoiceSettingsKeys {
     public static let startSound = "startSound"
     public static let stopSound = "stopSound"
     public static let dictationEnabled = "dictationEnabled"
+    public static let minDictationDuration = "minDictationDuration"
     public static let dictationAssistantProvider = "dictationAssistantProvider"
     public static let dictationAssistant2Provider = "dictationAssistant2Provider"
 }
@@ -23,8 +24,33 @@ public enum VoiceSettingsDefaults {
     public static let startSound = "Purr"
     public static let stopSound = "Purr"
     public static let dictationEnabled = false
+    public static let minDictationDuration = 0.2
     public static let dictationAssistantProvider = "default"
     public static let dictationAssistant2Provider = "codex"
+}
+
+public struct DictationActivityGate: Equatable, Sendable {
+    public let minimumDuration: Double
+    public let minimumRMS: Float
+    public let noiseMultiplier: Float
+
+    public init(
+        minimumDuration: Double = VoiceSettingsDefaults.minDictationDuration,
+        minimumRMS: Float = 0.006,
+        noiseMultiplier: Float = 3.0
+    ) {
+        self.minimumDuration = max(0, minimumDuration)
+        self.minimumRMS = minimumRMS
+        self.noiseMultiplier = noiseMultiplier
+    }
+
+    public func threshold(noiseFloor: Float) -> Float {
+        max(minimumRMS, noiseFloor * noiseMultiplier)
+    }
+
+    public func shouldDispatch(text: String, activeSpeechSeconds: Double) -> Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && activeSpeechSeconds >= minimumDuration
+    }
 }
 
 public struct DictationStopTailPolicy: Equatable, Sendable {

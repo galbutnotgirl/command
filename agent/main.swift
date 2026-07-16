@@ -2060,7 +2060,8 @@ UserDefaults.standard.register(defaults: [
     "showDockIcon": false,
     "cliphistoryEnabled": false,
     "pickerTheme": "auto",
-    VoiceSettingsKeys.dictationEnabled: VoiceSettingsDefaults.dictationEnabled
+    VoiceSettingsKeys.dictationEnabled: VoiceSettingsDefaults.dictationEnabled,
+    VoiceSettingsKeys.minDictationDuration: VoiceSettingsDefaults.minDictationDuration
 ])
 applyDockPolicy()                 // menu-bar only unless the user enabled "Show in Dock"
 if MainActor.assumeIsolated({ offerMoveToApplicationsIfNeeded() }) { exit(0) }

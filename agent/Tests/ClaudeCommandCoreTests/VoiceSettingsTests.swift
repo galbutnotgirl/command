@@ -12,6 +12,7 @@ final class VoiceSettingsTests: XCTestCase {
         XCTAssertEqual(VoiceSettingsKeys.startSound, "startSound")
         XCTAssertEqual(VoiceSettingsKeys.stopSound, "stopSound")
         XCTAssertEqual(VoiceSettingsKeys.dictationEnabled, "dictationEnabled")
+        XCTAssertEqual(VoiceSettingsKeys.minDictationDuration, "minDictationDuration")
         XCTAssertEqual(VoiceSettingsKeys.dictationAssistantProvider, "dictationAssistantProvider")
         XCTAssertEqual(VoiceSettingsKeys.dictationAssistant2Provider, "dictationAssistant2Provider")
     }
@@ -32,8 +33,22 @@ final class VoiceSettingsTests: XCTestCase {
         XCTAssertEqual(VoiceSettingsDefaults.startSound, "Purr")
         XCTAssertEqual(VoiceSettingsDefaults.stopSound, "Purr")
         XCTAssertFalse(VoiceSettingsDefaults.dictationEnabled)
+        XCTAssertEqual(VoiceSettingsDefaults.minDictationDuration, 0.2, accuracy: 0.0001)
         XCTAssertEqual(VoiceSettingsDefaults.dictationAssistantProvider, "default")
         XCTAssertEqual(VoiceSettingsDefaults.dictationAssistant2Provider, "codex")
+    }
+
+    func testDictationActivityGateDropsShortOrEmptyResults() {
+        let gate = DictationActivityGate(minimumDuration: 0.2)
+        XCTAssertFalse(gate.shouldDispatch(text: "", activeSpeechSeconds: 1.0))
+        XCTAssertFalse(gate.shouldDispatch(text: "hey", activeSpeechSeconds: 0.19))
+        XCTAssertTrue(gate.shouldDispatch(text: "hey", activeSpeechSeconds: 0.2))
+    }
+
+    func testDictationActivityGateUsesAdaptiveNoiseFloor() {
+        let gate = DictationActivityGate(minimumDuration: 0.2, minimumRMS: 0.006, noiseMultiplier: 3.0)
+        XCTAssertEqual(gate.threshold(noiseFloor: 0.001), 0.006, accuracy: 0.0001)
+        XCTAssertEqual(gate.threshold(noiseFloor: 0.004), 0.012, accuracy: 0.0001)
     }
 
     func testDictationDefaultsUseFnAndAssistantUnbound() {

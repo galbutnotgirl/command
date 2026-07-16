@@ -272,11 +272,13 @@ Tabs:
 | History | Past dictations, raw and processed text, suggested corrections. |
 | Corrections | Misheard -> correct replacement rules. |
 | Vocabulary | Proper nouns, product names, filler words. |
-| Dictation Settings | Model, microphone access, shortcuts, processing, sounds. |
+| Dictation Settings | Model, microphone access, shortcuts, Ignore below slider, processing, sounds. |
 
 Use **Dictation Settings** for Dictate -> Insert, Dictate -> Assistant, and Dictate -> Assistant 2 shortcuts. Use **Shortcuts** for voice triggers tied to prompt actions.
 
 Voice custom actions use the same recording engine as built-in Dictate. Configure voice prompt actions in **Shortcuts**, not Dictation Settings.
+
+Use **Ignore below** to drop accidental taps, tiny bursts, and near-silence hallucinations before they insert text or send to an assistant. Default is 0.2 seconds.
 
 If final words are missing, compare **Dictation History** raw text, processed text, and the sent command before filing a bug.
 

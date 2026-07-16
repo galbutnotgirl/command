@@ -80,7 +80,7 @@ Dictation has four tabs.
 | History | Raw and processed transcripts, audio playback, and suggested corrections. |
 | Corrections | Misheard phrase replacement rules. |
 | Vocabulary | Proper nouns, product names, filler words, and terms the model should preserve. |
-| Dictation Settings | Microphone access, model status, dictation shortcuts, processing, and sounds. |
+| Dictation Settings | Microphone access, model status, dictation shortcuts, Ignore below slider, processing, and sounds. |
 
 Voice custom actions are configured in **Shortcuts**. Built-in dictation shortcuts live in **Dictation Settings**.
 

@@ -47,6 +47,9 @@ final class Recorder: ObservableObject {
     private var audioContinuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
     private var bufferFeederTask: Task<Void, Never>?
     private let stopTailPolicy = DEFAULT_DICTATION_STOP_TAIL_POLICY
+    private var totalAudioSeconds: Double = 0
+    private var activeSpeechSeconds: Double = 0
+    private var noiseFloorRMS: Float = 0.003
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
 
@@ -137,6 +140,7 @@ final class Recorder: ObservableObject {
         currentMode = mode
         stopRequestedDuringStart = false
         lastTranscript = ""; liveTranscript = ""
+        totalAudioSeconds = 0; activeSpeechSeconds = 0; noiseFloorRMS = 0.003
         state = .starting
         log("▶ session \(mySession) start mode=\(mode)")
 
@@ -183,7 +187,8 @@ final class Recorder: ObservableObject {
                     let n = Int(buf.frameLength); var sum: Float = 0
                     for i in 0..<n { let s = channelData[i]; sum += s * s }
                     let rms = n > 0 ? sqrt(sum / Float(n)) : 0
-                    Task { @MainActor in self?.audioLevel = min(rms * 20, 1.0) }
+                    let seconds = hwFormat.sampleRate > 0 ? Double(buf.frameLength) / hwFormat.sampleRate : 0
+                    Task { @MainActor in self?.observeAudioFrame(rms: rms, seconds: seconds) }
                 }
                 bufContinuation.yield(buf)
             }
@@ -278,15 +283,15 @@ final class Recorder: ObservableObject {
                 // returns less than the last partial (e.g. model flush gap), keep the
                 // partial — it's less likely to have dropped tail words than finish().
                 let best = text.count >= self.lastTranscript.count ? text : self.lastTranscript
-                if !best.isEmpty {
+                if self.shouldDispatchDictation(best) {
                     self.onFinal?(best, mode)
                 } else {
-                    self.log("⚠ finish empty — nothing to dispatch")
+                    self.log("⚠ dictation suppressed — textChars=\(best.count) activeSpeech=\(String(format: "%.3f", self.activeSpeechSeconds))s totalAudio=\(String(format: "%.3f", self.totalAudioSeconds))s min=\(String(format: "%.1f", self.minimumDictationDuration()))s")
                     self.onFinishedWithoutText?(mode)
                 }
             } catch {
                 self.log("finish() threw: \(error)")
-                if !self.lastTranscript.isEmpty {
+                if self.shouldDispatchDictation(self.lastTranscript) {
                     self.onFinal?(self.lastTranscript, mode)
                 } else {
                     self.onFinishedWithoutText?(mode)
@@ -305,6 +310,7 @@ final class Recorder: ObservableObject {
         bufferFeederTask?.cancel(); bufferFeederTask = nil
         cancelSilenceTimer()
         lastTranscript = ""; liveTranscript = ""
+        totalAudioSeconds = 0; activeSpeechSeconds = 0; noiseFloorRMS = 0.003
         audioLevel = 0
         state = .idle
         let mgr = currentMgr; currentMgr = nil
@@ -324,6 +330,30 @@ final class Recorder: ObservableObject {
     }
 
     private func cancelSilenceTimer() { silenceTimer?.cancel(); silenceTimer = nil }
+
+    private func observeAudioFrame(rms: Float, seconds: Double) {
+        totalAudioSeconds += seconds
+        let gate = DictationActivityGate(minimumDuration: minimumDictationDuration())
+        let threshold = gate.threshold(noiseFloor: noiseFloorRMS)
+        let active = rms >= threshold
+        if active {
+            activeSpeechSeconds += seconds
+        } else {
+            // Slow adaptive floor: learn quiet room tone, ignore louder bursts.
+            noiseFloorRMS = max(0.0005, min(0.03, (noiseFloorRMS * 0.96) + (rms * 0.04)))
+        }
+        audioLevel = min(rms * 20, 1.0)
+    }
+
+    private func minimumDictationDuration() -> Double {
+        let value = UserDefaults.standard.object(forKey: VoiceSettingsKeys.minDictationDuration) as? Double
+        return min(max(value ?? VoiceSettingsDefaults.minDictationDuration, 0), 1.5)
+    }
+
+    private func shouldDispatchDictation(_ text: String) -> Bool {
+        let gate = DictationActivityGate(minimumDuration: minimumDictationDuration())
+        return gate.shouldDispatch(text: text, activeSpeechSeconds: activeSpeechSeconds)
+    }
 
     private func fail(_ msg: String) {
         log("ERROR: \(msg)")

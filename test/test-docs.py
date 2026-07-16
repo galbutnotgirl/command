@@ -1213,7 +1213,8 @@ REQUIRED_TEXT = {
         "Fresh defaults use F8/Command-F8",
         "Built-in Dictate shortcuts live in <strong>Dictation Settings</strong>",
         "voice prompt triggers live in <strong>Shortcut Settings</strong>",
-        "stop timing is tuned inside the app",
+        "Settings -> Dictation Settings -> Ignore below",
+        "near-silence hallucinations",
         "The stop sound means release was accepted",
     ],
     "docs/examples.html": [
