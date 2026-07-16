@@ -185,7 +185,7 @@ unzip -p "$ZIP" Command.app/Contents/Resources/docs/permissions.html 2>/dev/null
   || fail "bundled docs/permissions.html missing bundle-id compatibility note"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/faq.html 2>/dev/null | grep -q "Why do some local paths still say <code>claude-command</code>" \
   || fail "bundled docs/faq.html missing local-path compatibility answer"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/settings.html 2>/dev/null | grep -q "command-export.json" \
+unzip -p "$ZIP" Command.app/Contents/Resources/docs/settings.html 2>/dev/null | grep -q "command-export-" \
   || fail "bundled docs/settings.html missing Command export filename"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/release.html 2>/dev/null | grep -q "Feature request" \
   || fail "bundled docs/release.html missing Feature request repo-surface check"

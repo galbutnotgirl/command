@@ -103,7 +103,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
     prefix explosion with one prefix, dispatch reads `trigger.kind` off the loaded record.
     `checkpoint-before-trigger-refactor` tag marks the commit right before this — a clean
     rollback point since it touched the hotkey dispatch code path everything else depends on.
-14. **Claude and ChatGPT / Codex provider parity** (branch `codex/codex-support`) — added provider resolution
+14. **Claude and ChatGPT provider parity** (branch `codex/codex-support`) — added provider resolution
     at global, Custom Action, and trigger levels while preserving Claude as migration/default
     behavior. Foreground delivery routes to Claude Chat/Cowork/Code, ChatGPT general chat,
     or configured Codex workspace; background delivery selects `claude -p` or `codex exec -`, including Codex
@@ -127,7 +127,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   background, history, retry, import/export, diagnostics, and Set Up paths. Claude-specific
   Chat/Cowork/Code controls stay capability-gated; Codex shows workspace instead.
 - **Custom Actions** (Settings ▸ Shortcuts ▸ Custom Actions): each is now centered on a
-  prompt/action body with default delivery (`Existing chat`, `New chat`, `Background`) and
+  prompt/action body with default delivery (`Existing conversation`, `New conversation`, `Background`) and
   default destination (`Default`, `Chat`, `Cowork`, `Code`). Each trigger (text,
   screenshot, popup, voice) can override delivery and destination independently. Older
   `isHandoff`/`sessionMode` JSON still migrates forward.
@@ -179,7 +179,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   of raw Markdown. The build also bundles README so the local docs landing page's install
   link resolves inside the app bundle. `test/test-docs.py` now validates local Markdown and
   HTML links in README/docs so shareable documentation has a regression check. First-run
-  onboarding copy now matches current defaults too: F8/Option-F8 and F7/Option-F7 are
+  onboarding copy now matches current defaults too: F8/Command-F8 and F7/Command-F7 are
   presented as Add/New paths, while Go stays an opt-in binding from Settings. A new
   `docs/EXAMPLES.md` gives copyable workflow setups for selected-text review, rewrites,
   screenshot review, voice-to-Code, background tasks, Google Docs context, and migration;
@@ -428,7 +428,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   sharing, asks for raw-vs-processed Dictation History detail on voice bugs, and names the
   Clipboard History error log.
 - **Issue chooser support routing**: GitHub issues now disable blank reports and route users
-  to Install, Troubleshooting, Support, private security reporting, or the latest Alpha
+  to Install, Troubleshooting, Support, security policy guidance, or the latest Alpha
   release before filing. Docs validation guards those contact links so repo support stays
   aligned with the published docs site and sensitive reports avoid public issues.
 - **Root support policy**: the repo now has a GitHub-standard `SUPPORT.md` entry point that
@@ -534,23 +534,22 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   becoming a long purple strip.
 - **Default shortcut docs guard**: `test/test-docs.py` now parses `DEFAULT_BINDINGS`,
   `CommandAction` names, and `KEYCODE_NAMES` from Swift source, formats doc-facing shortcuts
-  like `Option-F8` / `Unbound`, and verifies README plus docs default-shortcut tables line-by-line.
+  like `Command-F8` / `Unbound`, and verifies README plus docs default-shortcut tables line-by-line.
   This prevents future shortcut default changes from silently drifting across homepage, guide,
   quick reference, and changelog docs.
 - **Built-in Compose docs guard**: docs validation now parses `BUILTIN_COMPOSE_ROWS`,
   `DEFAULT_BUILTIN_COMPOSE_SETTINGS`, and Swift action names to verify User Guide and Quick
   Reference Compose tables show the current input, delivery, and default auto-submit state.
   Quick Reference now uses the same explicit `Default submit` No/Yes wording as User Guide.
-- **Private security report path**: About now has a dedicated **Private Security Report**
-  button that opens GitHub private advisory creation. Support docs route vulnerabilities,
-  exposed secrets, private logs, and sensitive diagnostics to that private path instead of
-  public bug/feature issues, and docs validation guards the app button plus URL helper.
+- **Security report path**: About links public docs and GitHub issue routes only.
+  Support docs route vulnerabilities, exposed secrets, private logs, and sensitive
+  diagnostics through Security Policy instead of public bug/feature issues.
 - **Release checklist support-action guard**: release checklist now tells maintainers to
   test About's **Copy Diagnostic Info**, **Report a Bug**, **Request Feature**, and
-  **Private Security Report** actions after publishing, and docs validation guards that
+   actions after publishing, and docs validation guards that
   checklist wording.
 - **About action docs parity**: root Support, Install, Settings Reference, and Quick
-  Reference now document **Private Security Report** beside Copy Diagnostic Info / Bug /
+  Reference now document  beside Copy Diagnostic Info / Bug /
   Feature actions, with docs validation guarding the private-advisory wording across
   Markdown and rendered HTML.
 - **Background wording cleanup**: Command History deletion now says "background run"
@@ -931,7 +930,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   public HTML docs page except itself. New rendered docs cannot ship without a route from
   the docs home.
 - **Docs home repo-trust routes**: docs home now links the contributor entry point beside
-  README and private security reporting, and docs validation requires those repo-trust
+  README and security policy guidance, and docs validation requires those repo-trust
   routes so public docs do not hide maintainer/contribution guidance.
 - **Release checklist guard wording**: release docs now name the newer docs gates
   explicitly: docs-home coverage, README docs-table coverage, Settings sidebar parity, and

@@ -2,27 +2,27 @@
 
 ## How do I switch between Claude and Codex?
 
-Choose **Default assistant** in **Settings -> Shortcuts**. Custom Actions and individual triggers can override it. Claude uses Chat/Cowork/Code destinations; Codex uses configured workspace. Set Up checks each app and CLI independently, and Command never silently falls back to other provider.
+Choose **Default assistant** in **Settings -> Shortcuts**. Custom Actions and individual triggers can override it. Claude uses Recent/Chat/Cowork/Code destinations. ChatGPT uses Recent/Chat/Codex destinations inside the ChatGPT app, with Codex using your configured workspace. Set Up checks each app and CLI independently, and Command never silently falls back to another provider.
 
 For background delivery, open **Command History -> Background Settings**. Claude and Codex have separate command, working-directory, and argument settings. Codex defaults to read-only execution until you explicitly choose Workspace changes.
 
 ## Why are auto-submit combinations unbound by default?
 
-Auto-submit opens a new chat, presses Return, and restores focus. That is powerful, but it is easier to trigger accidentally than a draft-only combination. Bind **Selected text -> New chat + auto-submit** or **Screenshot -> New chat + auto-submit** in **Settings -> Shortcuts** when you want that behavior.
+Auto-submit opens a new conversation, presses Return, and restores focus. That is powerful, but it is easier to trigger accidentally than a draft-only combination. Bind **Selected text -> New conversation + auto-submit** or **Screenshot -> New conversation + auto-submit** in **Settings -> Shortcuts** when you want that behavior.
 
 ## What if F6/F7/F8 conflict with another app?
 
 Open macOS **System Settings -> Keyboard** and enable standard function keys, or rebind Command shortcuts in **Settings -> Shortcuts** and **Settings -> Dictation Settings**.
 
-Fresh defaults use F8/Option-F8 for selected text, F7/Option-F7 for screenshots, F6 for Clipboard History, and Home/Option-Home for built-in dictation. Built-in Dictate shortcuts live in **Dictation Settings**; voice prompt triggers live in **Shortcut Settings**.
+Fresh defaults use F8/Command-F8 for selected text, F7/Command-F7 for screenshots, F6 for Clipboard History, and Fn with assistant dictation unbound for built-in dictation. Built-in Dictate shortcuts live in **Dictation Settings**; voice prompt triggers live in **Shortcut Settings**.
 
 ## What do the built-in Compose combinations do?
 
 | Combination | Result |
 |---|---|
-| Existing chat | Send captured content into the current Claude chat. |
-| New chat | Open a new Claude chat and wait for your note. |
-| New chat + auto-submit | Open a new Claude chat, auto-submit, and restore focus. |
+| Existing conversation | Send captured content into the current Claude chat. |
+| New conversation | Open a new Claude chat and wait for your note. |
+| New conversation + auto-submit | Open a new Claude chat, auto-submit, and restore focus. |
 
 ## What does `—` mean in a trigger row?
 

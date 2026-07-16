@@ -72,7 +72,7 @@ struct HandoffConfig {
         d["imagePromptTemplate"] = imagePromptTemplate
         d["notifications"] = notifications
         d["schemaVersion"] = 2
-        d["defaultProvider"] = UserDefaults.standard.string(forKey: "defaultProvider") ?? "claude"
+        d["defaultProvider"] = UserDefaults.standard.string(forKey: "defaultProvider") ?? "codex"
         var legacyCLI = d["cli"] as? [String: Any] ?? [:]
         legacyCLI["command"] = claudeCommand
         legacyCLI["cwd"] = claudeCwd

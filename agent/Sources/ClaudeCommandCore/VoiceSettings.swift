@@ -9,6 +9,7 @@ public enum VoiceSettingsKeys {
     public static let soundVolume = "soundVolume"
     public static let startSound = "startSound"
     public static let stopSound = "stopSound"
+    public static let dictationEnabled = "dictationEnabled"
     public static let dictationAssistantProvider = "dictationAssistantProvider"
     public static let dictationAssistant2Provider = "dictationAssistant2Provider"
 }
@@ -21,6 +22,7 @@ public enum VoiceSettingsDefaults {
     public static let soundVolume = 0.35
     public static let startSound = "Purr"
     public static let stopSound = "Purr"
+    public static let dictationEnabled = false
     public static let dictationAssistantProvider = "default"
     public static let dictationAssistant2Provider = "codex"
 }

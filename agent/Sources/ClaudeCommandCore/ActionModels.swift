@@ -18,11 +18,11 @@ public struct CommandAction {
 
 public let COMMAND_ACTIONS: [CommandAction] = [
     CommandAction(id: "add",         name: "Add",                detail: "Paste selection into already-open assistant session."),
-    CommandAction(id: "comment",     name: "New",                detail: "New session pre-filled; stays foreground so you add a note and send."),
+    CommandAction(id: "comment",     name: "New",                detail: "New conversation pre-filled; stays foreground so you add a note and send."),
     CommandAction(id: "go",          name: "Go",                 detail: "New assistant session, auto-submit, then restore focus."),
     CommandAction(id: "shotadd",     name: "Screenshot Add",     detail: "Capture → paste image into the already-open Claude chat."),
-    CommandAction(id: "shotcomment", name: "Screenshot New",     detail: "Capture → new session; you add a note."),
-    CommandAction(id: "shotgo",      name: "Screenshot Go",      detail: "Capture → new session, auto-submit."),
+    CommandAction(id: "shotcomment", name: "Screenshot New",     detail: "Capture → new conversation; you add a note."),
+    CommandAction(id: "shotgo",      name: "Screenshot Go",      detail: "Capture → new conversation, auto-submit."),
     CommandAction(id: "cliphistory", name: "Clipboard History",  detail: "Floating picker of recent clips."),
     CommandAction(id: "dictate",     name: "Dictate → Insert",   detail: "Speak → on-device Parakeet transcription → paste at cursor."),
     CommandAction(id: "dictateadd",  name: "Dictate → Assistant", detail: "Speak → on-device Parakeet transcription → send to selected assistant."),
@@ -51,18 +51,18 @@ public struct HotkeyBinding: Identifiable {
 }
 
 // Built-in defaults — active when command-hotkeys.json is absent.
-// keycodes: F6=97, F7=98, F8=100, Home=115; mods: option=2048, command=256
+// keycodes: Fn=63, F6=97, F7=98, F8=100; mods: command=256
 // User saves any binding → file is written → user values take over permanently.
 public let DEFAULT_BINDINGS: [(action: String, keycode: UInt32, mods: UInt32)] = [
-    ("add",         100,  2048),   // ⌥F8 — paste selection into current assistant session
-    ("comment",     100,  0),      // F8  — new session, you add note
+    ("add",         100,  0),      // F8  — paste selection into current assistant session
+    ("comment",     100,  256),    // ⌘F8 — new conversation, you add note
     ("go",          0,    0),      // unbound
-    ("shotadd",     98,   2048),   // ⌥F7 — screenshot → current assistant session
-    ("shotcomment", 98,   0),      // F7 — screenshot → new session
+    ("shotadd",     98,   0),      // F7  — screenshot → current assistant session
+    ("shotcomment", 98,   256),    // ⌘F7 — screenshot → new conversation
     ("shotgo",      0,    0),      // unbound
     ("cliphistory", 97,   0),      // F6   — clipboard history picker (only registered when enabled)
-    ("dictate",     115,  0),      // Home  — dictate → insert at cursor
-    ("dictateadd",  115,  2048),   // ⌥Home — dictate → send to assistant
+    ("dictate",     63,   0),      // Fn — dictate → insert at cursor
+    ("dictateadd",  0,    0),      // unbound — dictate → send to assistant
     ("dictateadd2", 0,    0),      // unbound — optional second assistant dictation target
 ]
 
@@ -122,7 +122,7 @@ public enum ClaudeDestination: String, CaseIterable, Codable, Sendable {
     }
 
     public static func available(for provider: AIProvider, includeDefault: Bool = true) -> [ClaudeDestination] {
-        let destinations: [ClaudeDestination] = provider == .claude ? [.recent, .chat, .cowork, .code] : [.chat, .code]
+        let destinations: [ClaudeDestination] = provider == .claude ? [.recent, .chat, .cowork, .code] : [.recent, .chat, .code]
         return includeDefault ? [.default] + destinations : destinations
     }
 }
@@ -132,8 +132,8 @@ public enum ActionDelivery: String, CaseIterable, Codable, Sendable {
 
     public var label: String {
         switch self {
-        case .existingChat: return "Existing session"
-        case .newChat: return "New session"
+        case .existingChat: return "Existing conversation"
+        case .newChat: return "New conversation"
         case .background: return "Background"
         }
     }

@@ -24,7 +24,7 @@ final class ProviderModelsTests: XCTestCase {
         XCTAssertTrue(ProviderCapabilities(provider: .codex).workspace)
         XCTAssertEqual(AIProvider.codex.label, "ChatGPT")
         XCTAssertEqual(ClaudeDestination.available(for: .claude), [.default, .recent, .chat, .cowork, .code])
-        XCTAssertEqual(ClaudeDestination.available(for: .codex), [.default, .chat, .code])
+        XCTAssertEqual(ClaudeDestination.available(for: .codex), [.default, .recent, .chat, .code])
         XCTAssertFalse(ClaudeDestination.available(for: .codex).contains(.cowork))
         XCTAssertEqual(ClaudeDestination.chat.label(for: .codex), "Chat")
         XCTAssertEqual(ClaudeDestination.code.label(for: .codex), "Codex")
@@ -47,14 +47,15 @@ final class ProviderModelsTests: XCTestCase {
         XCTAssertEqual(PrimaryAssistantPreference.claude.provider, .claude)
         XCTAssertEqual(PrimaryAssistantPreference.claude.destination, .recent)
         XCTAssertEqual(PrimaryAssistantPreference.chatgpt.provider, .codex)
-        XCTAssertEqual(PrimaryAssistantPreference.chatgpt.destination, .chat)
+        XCTAssertEqual(PrimaryAssistantPreference.chatgpt.destination, .recent)
         XCTAssertEqual(PrimaryAssistantPreference.codex.provider, .codex)
-        XCTAssertEqual(PrimaryAssistantPreference.codex.destination, .code)
+        XCTAssertEqual(PrimaryAssistantPreference.codex.destination, .recent)
     }
 
-    func testRecentIsClaudeOnlyAndFirstExplicitDestination() {
+    func testRecentIsFirstExplicitDestination() {
         XCTAssertEqual(ClaudeDestination.available(for: .claude, includeDefault: false).first, .recent)
-        XCTAssertFalse(ClaudeDestination.available(for: .codex).contains(.recent))
+        XCTAssertEqual(ClaudeDestination.available(for: .codex, includeDefault: false).first, .recent)
         XCTAssertEqual(ClaudeDestination.recent.label(for: .claude), "Recent")
+        XCTAssertEqual(ClaudeDestination.recent.label(for: .codex), "Recent")
     }
 }

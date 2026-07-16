@@ -5,7 +5,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/galbutnotgirl/command?include_prereleases&label=latest%20release)](https://github.com/galbutnotgirl/command/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Native macOS menu-bar shortcuts for Claude, ChatGPT, and Codex. Capture selected text, screenshots, typed popups, or voice; choose whether each prompt goes to an existing session, a new session, or a background CLI run.
+Native macOS menu-bar shortcuts for Claude and ChatGPT. Capture selected text, screenshots, typed popups, or voice; choose whether each prompt goes to an existing conversation, a new conversation, or a background CLI run.
 
 App site: [galbutnotgirl.github.io/command](https://galbutnotgirl.github.io/command/)
 
@@ -38,12 +38,12 @@ Repo: [github.com/galbutnotgirl/command](https://github.com/galbutnotgirl/comman
 Command is organized around prompts:
 
 - Built-in Compose: one shared prompt with selected-text and screenshot combinations.
-- Assistants: Claude or ChatGPT / Codex globally, per Custom Action, or per trigger.
-- ChatGPT destinations: Chat for general chat, Codex for workspace coding. Stored `codex` provider keys remain backward compatible.
+- Assistants: Claude or ChatGPT globally, per Custom Action, or per trigger.
+- ChatGPT destinations: Recent, Chat for general chat, or Codex for workspace coding inside the ChatGPT app. Stored `codex` provider keys remain backward compatible.
 - Custom actions: one prompt, many triggers.
 - Triggers: selected text, screenshot, popup, voice.
-- Delivery: existing chat, new chat, background.
-- Destination: default, Chat, Cowork, Code.
+- Delivery: existing conversation, new conversation, background.
+- Destination: Default, Recent, Chat, Cowork, Code. Destination applies to New and Go prompts; Existing conversation keeps the current assistant surface.
 - History: foreground sends and background runs.
 - Local tools: clipboard history, on-device dictation, import/export, troubleshooting.
 
@@ -51,15 +51,15 @@ Command is organized around prompts:
 
 | Built-in combination | Default | Result |
 |---|---:|---|
-| Selected text -> Existing chat | Option-F8 | Send selected text into current Claude chat. |
-| Selected text -> New chat | F8 | Open new Claude chat and wait. |
-| Selected text -> New chat + auto-submit | Unbound | Open new Claude chat, submit, restore focus. |
-| Screenshot -> Existing chat | Option-F7 | Capture screenshot and add to current chat. |
-| Screenshot -> New chat | F7 | Capture screenshot and open new chat. |
-| Screenshot -> New chat + auto-submit | Unbound | Capture screenshot, open new chat, submit. |
+| Selected text -> Existing conversation | F8 | Send selected text into current assistant conversation. |
+| Selected text -> New conversation | Command-F8 | Open new assistant conversation and wait. |
+| Selected text -> New conversation + auto-submit | Unbound | Open new assistant conversation, submit, restore focus. |
+| Screenshot -> Existing conversation | F7 | Capture screenshot and add to current assistant conversation. |
+| Screenshot -> New conversation | Command-F7 | Capture screenshot and open new conversation. |
+| Screenshot -> New conversation + auto-submit | Unbound | Capture screenshot, open new conversation, submit. |
 | Clipboard History | F6 | Open searchable clipboard picker. |
-| Dictate -> Insert | Home | Speak and paste transcript at cursor. |
-| Dictate -> Assistant | Option-Home | Speak and send transcript to selected assistant. |
+| Dictate -> Insert | Fn | Speak and paste transcript at cursor. |
+| Dictate -> Assistant | Unbound | Speak and send transcript to selected assistant. |
 | Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
 Change prompt/action shortcuts in **Settings -> Shortcuts**. Dictation shortcuts live in **Settings -> Dictation Settings**.

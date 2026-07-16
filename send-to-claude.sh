@@ -354,7 +354,7 @@ open_new() {  # $1 = q text (may be empty)
     local dest="$CLAUDE_DESTINATION"; [ "$COMMAND_PROVIDER" = "codex" ] && dest="$OPENAI_DESTINATION"
     local route=""
     if [ "$COMMAND_PROVIDER" = "codex" ]; then
-      if [ "$OPENAI_DESTINATION" = "chat" ]; then
+      if [ "$OPENAI_DESTINATION" = "chat" ] || [ "$OPENAI_DESTINATION" = "recent" ]; then
         route="native-new-session"
       else
         route="codex://threads/new?path=$(urlencode "$CODEX_WORKSPACE")"
@@ -372,7 +372,7 @@ open_new() {  # $1 = q text (may be empty)
   fi
   ensure_provider_app || return 1
   if [ "$COMMAND_PROVIDER" = "codex" ]; then
-    if [ "$OPENAI_DESTINATION" = "chat" ]; then
+    if [ "$OPENAI_DESTINATION" = "chat" ] || [ "$OPENAI_DESTINATION" = "recent" ]; then
       helper_activate "$TARGET_BUNDLE" || return 1
       sleep 0.2
       helper_newchat || { notify "Command could not open a new ChatGPT chat. Restart Command and try again."; return 1; }

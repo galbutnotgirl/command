@@ -120,13 +120,14 @@ final class SettingsModel: ObservableObject {
     @Published var recordingAction: String? = nil
     @Published var bindingConflict: String? = nil
     @Published var claudeDestination: String = UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent"
-    @Published var codexDestination: String = UserDefaults.standard.string(forKey: "codexDestination") ?? "code"
-    @Published var defaultProvider: String = UserDefaults.standard.string(forKey: "defaultProvider") ?? "claude"
+    @Published var codexDestination: String = UserDefaults.standard.string(forKey: "codexDestination") ?? "recent"
+    @Published var defaultProvider: String = UserDefaults.standard.string(forKey: "defaultProvider") ?? "codex"
     @Published var codexWorkspace: String = UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory()
     @Published var soundsEnabled: Bool = (UserDefaults.standard.object(forKey: VoiceSettingsKeys.soundsEnabled) as? Bool) ?? VoiceSettingsDefaults.soundsEnabled
     @Published var soundVolume: Double = (UserDefaults.standard.object(forKey: VoiceSettingsKeys.soundVolume) as? Double) ?? VoiceSettingsDefaults.soundVolume
     @Published var startSound: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.startSound) ?? VoiceSettingsDefaults.startSound
     @Published var stopSound: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.stopSound) ?? VoiceSettingsDefaults.stopSound
+    @Published var dictationEnabled: Bool = (UserDefaults.standard.object(forKey: VoiceSettingsKeys.dictationEnabled) as? Bool) ?? VoiceSettingsDefaults.dictationEnabled
     @Published var dictationAssistantProvider: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.dictationAssistantProvider) ?? VoiceSettingsDefaults.dictationAssistantProvider
     @Published var dictationAssistant2Provider: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.dictationAssistant2Provider) ?? VoiceSettingsDefaults.dictationAssistant2Provider
 
@@ -224,6 +225,7 @@ final class SettingsModel: ObservableObject {
         case 56, 60: return ev.modifierFlags.contains(.shift) ? key : nil
         case 58, 61: return ev.modifierFlags.contains(.option) ? key : nil
         case 59, 62: return ev.modifierFlags.contains(.control) ? key : nil
+        case 63: return ev.modifierFlags.contains(.function) ? key : nil
         default: return nil
         }
     }
@@ -827,10 +829,11 @@ struct ShortcutsView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(model.defaultProvider == "codex" ? "Default ChatGPT destination" : "Default Claude destination").font(.headline)
-                    Text("Used unless a prompt or individual trigger overrides it.")
+                    Text("Used for New and Go prompts unless a prompt or trigger overrides it. Existing conversation keeps the current assistant surface.")
                         .font(.caption).foregroundColor(.secondary)
                     if model.defaultProvider == "codex" {
                         Picker("", selection: codexDestBinding) {
+                            Text("Recent").tag("recent")
                             Text("Chat").tag("chat")
                             Text("Codex").tag("code")
                         }
@@ -1135,7 +1138,7 @@ struct CustomActionRow: View {
     @State private var showingEdit = false
     @State private var confirmingDelete = false
     private var resolvedProvider: AIProvider {
-        ca.provider.resolve(default: AIProvider(rawValue: model.defaultProvider) ?? .claude)
+        ca.provider.resolve(default: AIProvider(rawValue: model.defaultProvider) ?? .codex)
     }
 
     var body: some View {
@@ -1183,7 +1186,7 @@ struct CustomActionRow: View {
 
             ForEach(ca.triggers) { trig in
                 TriggerSummaryRow(trigger: trig, action: ca,
-                                  provider: ca.effectiveProvider(for: trig, default: AIProvider(rawValue: model.defaultProvider) ?? .claude))
+                                  provider: ca.effectiveProvider(for: trig, default: AIProvider(rawValue: model.defaultProvider) ?? .codex))
             }
         }
         .settingsCard()
@@ -1292,7 +1295,7 @@ struct CustomActionSheet: View {
     @State private var skill: String = ""
     @State private var actionTriggers: [ActionTrigger] = []
     private var resolvedProvider: AIProvider {
-        provider.resolve(default: AIProvider(rawValue: model.defaultProvider) ?? .claude)
+        provider.resolve(default: AIProvider(rawValue: model.defaultProvider) ?? .codex)
     }
 
     var body: some View {
@@ -1333,17 +1336,20 @@ struct CustomActionSheet: View {
                         VStack(alignment: .leading, spacing: 5) {
                             HStack(spacing: 5) {
                                 Text("Delivery").font(.caption).bold()
-                                Image(systemName: "questionmark.circle")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .help("Existing session pastes into open assistant. New session opens a fresh composer. Background runs a local CLI without opening assistant app.")
+                                Button { openHelpDoc(named: "settings", fragment: "shortcuts") } label: {
+                                    Image(systemName: "questionmark.circle")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Open Shortcut Settings help.")
                             }
                             Picker("", selection: $delivery) {
                                 ForEach(ActionDelivery.allCases, id: \.self) { d in Text(d.label).tag(d) }
                             }
                             .labelsHidden()
                             .pickerStyle(.segmented)
-                                .help("Existing session pastes into selected assistant. New session opens a fresh composer. Background runs selected local CLI.")
+                                .help("Existing conversation pastes into selected assistant. New conversation opens a fresh composer. Background runs selected local CLI.")
                         }
                         .frame(width: CustomActionSheetLayout.fieldColumn, alignment: .leading)
 
@@ -1359,7 +1365,7 @@ struct CustomActionSheet: View {
                             }
                             .labelsHidden()
                             .pickerStyle(.segmented)
-                            .help(resolvedProvider == .claude ? "Default uses global Claude destination. Chat, Cowork, and Code override it." : "Default uses global ChatGPT destination. Chat and Codex override it.")
+                            .help(resolvedProvider == .claude ? "Applies to New and Go prompts. Default uses global Claude destination; Recent, Chat, Cowork, and Code override it." : "Applies to New and Go prompts. Default uses global ChatGPT destination; Recent, Chat, and Codex override it.")
                         }
                         .frame(maxWidth: CustomActionSheetLayout.fieldColumn, alignment: .leading)
                     }
@@ -1483,7 +1489,7 @@ struct EditableTriggerRow: View {
     let canRemove: Bool
 
     private var effectiveProvider: AIProvider {
-        let global = AIProvider(rawValue: model.defaultProvider) ?? .claude
+        let global = AIProvider(rawValue: model.defaultProvider) ?? .codex
         guard let action = model.customActions.first(where: { $0.id == actionID }) else { return global }
         return action.effectiveProvider(for: trigger, default: global)
     }
@@ -1541,7 +1547,7 @@ struct EditableTriggerRow: View {
                             Text(d.label).tag(Optional(d))
                         }
                     }
-                    .help("Existing session pastes into open assistant. New session opens a fresh composer. Background runs a local CLI.")
+                    .help("Existing conversation pastes into open assistant. New conversation opens a fresh composer. Background runs a local CLI.")
                 }
 
                 if effectiveProvider.supportsDestinations { LabeledPicker(caption: "Destination") {
@@ -1975,9 +1981,9 @@ private func globalBundle(sections: Set<GlobalBundleSection>) -> [String: Any] {
     }
     if sections.contains(.appPreferences) {
         bundle["appPreferences"] = [
-            "defaultProvider": UserDefaults.standard.string(forKey: "defaultProvider") ?? "claude",
+            "defaultProvider": UserDefaults.standard.string(forKey: "defaultProvider") ?? "codex",
             "claudeDestination": UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent",
-            "codexDestination": UserDefaults.standard.string(forKey: "codexDestination") ?? "code",
+            "codexDestination": UserDefaults.standard.string(forKey: "codexDestination") ?? "recent",
             "codexWorkspace": UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory(),
             "clipRetentionDays": readRetentionDays(),
             "commandRetentionDays": readCommandRetentionDays(),
@@ -1986,6 +1992,7 @@ private func globalBundle(sections: Set<GlobalBundleSection>) -> [String: Any] {
             VoiceSettingsKeys.soundVolume: settingsModel.soundVolume,
             VoiceSettingsKeys.startSound: settingsModel.startSound,
             VoiceSettingsKeys.stopSound: settingsModel.stopSound,
+            VoiceSettingsKeys.dictationEnabled: settingsModel.dictationEnabled,
             VoiceSettingsKeys.dictationAssistantProvider: settingsModel.dictationAssistantProvider,
             VoiceSettingsKeys.dictationAssistant2Provider: settingsModel.dictationAssistant2Provider,
             VoiceSettingsKeys.fillerRemoval: UserDefaults.standard.object(forKey: VoiceSettingsKeys.fillerRemoval) as? Bool ?? VoiceSettingsDefaults.fillerRemoval,
@@ -2002,7 +2009,9 @@ private func exportGlobalBundle(sections: Set<GlobalBundleSection>) {
           let data = try? JSONSerialization.data(withJSONObject: globalBundle(sections: sections), options: [.prettyPrinted]) else { return }
     let panel = NSSavePanel()
     panel.allowedContentTypes = [.json]
-    panel.nameFieldStringValue = "command-export.json"
+    let stamp = DateFormatter()
+    stamp.dateFormat = "yyyy-MM-dd"
+    panel.nameFieldStringValue = "command-export-\(stamp.string(from: Date())).json"
     if panel.runModal() == .OK, let url = panel.url {
         try? data.write(to: url)
     }
@@ -2060,7 +2069,7 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
             UserDefaults.standard.set(v, forKey: "claudeDestination")
             model.claudeDestination = v
         }
-        if let v = prefs["codexDestination"] as? String, v == "chat" || v == "code" {
+        if let v = prefs["codexDestination"] as? String, v == "recent" || v == "chat" || v == "code" {
             UserDefaults.standard.set(v, forKey: "codexDestination")
             model.codexDestination = v
         }
@@ -2079,6 +2088,10 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
         if let v = prefs[VoiceSettingsKeys.soundVolume] as? Double { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.soundVolume); model.soundVolume = v }
         if let v = prefs[VoiceSettingsKeys.startSound] as? String { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.startSound); model.startSound = v }
         if let v = prefs[VoiceSettingsKeys.stopSound] as? String { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.stopSound); model.stopSound = v }
+        if let v = prefs[VoiceSettingsKeys.dictationEnabled] as? Bool {
+            UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.dictationEnabled)
+            model.dictationEnabled = v
+        }
         if let v = prefs[VoiceSettingsKeys.dictationAssistantProvider] as? String, AIProviderChoice(rawValue: v) != nil {
             UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.dictationAssistantProvider)
             model.dictationAssistantProvider = v
@@ -2912,7 +2925,7 @@ func copyCommandDiagnosticInfo(
     }
     out += "Default assistant: \(model.defaultProvider)\n"
     out += "Default Claude destination: \(model.claudeDestination)\n"
-    out += "Default ChatGPT destination: \(model.codexDestination == "chat" ? "Chat" : "Codex")\n"
+    out += "Default ChatGPT destination: \(ClaudeDestination.displayLabel(rawValue: model.codexDestination, provider: .codex))\n"
     out += "Default Codex workspace: \(model.codexWorkspace)\n"
     let background = HandoffConfig.load()
     out += "Claude CLI: \(background.claudeCommand), cwd=\(background.claudeCwd.isEmpty ? "home" : background.claudeCwd), extraArgs=\(background.claudeExtraArgs.count)\n"
@@ -2931,13 +2944,13 @@ func copyCommandDiagnosticInfo(
     } else {
         out += "Custom actions:\n"
         for action in customActions {
-            let resolvedProvider = action.provider.resolve(default: AIProvider(rawValue: model.defaultProvider) ?? .claude)
+            let resolvedProvider = action.provider.resolve(default: AIProvider(rawValue: model.defaultProvider) ?? .codex)
             out += "\(action.name): \(action.enabled ? "enabled" : "disabled") provider=\(action.provider.label) delivery=\(action.delivery.label) destination=\(action.destination.label(for: resolvedProvider)) autoSubmit=\(action.isAutoSubmit ? "on" : "off")\n"
             for trigger in action.triggers {
                 out += "  - \(trigger.kind.label): \(trigger.enabled ? "enabled" : "disabled") \(trigger.human)"
                 if let delivery = trigger.deliveryOverride { out += " delivery=\(delivery.label)" }
                 if let destination = trigger.destinationOverride {
-                    let triggerProvider = action.effectiveProvider(for: trigger, default: AIProvider(rawValue: model.defaultProvider) ?? .claude)
+                    let triggerProvider = action.effectiveProvider(for: trigger, default: AIProvider(rawValue: model.defaultProvider) ?? .codex)
                     out += " destination=\(destination.label(for: triggerProvider))"
                 }
                 if let provider = trigger.providerOverride { out += " provider=\(provider.label)" }
@@ -3133,26 +3146,20 @@ struct AboutView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Help & Documentation").font(.headline)
-                    Text("Open the app site for install, permissions, shortcuts, troubleshooting, updates, and support.")
+                    Text("Install, permissions, shortcuts, troubleshooting, updates, and support.")
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10)], alignment: .leading, spacing: 10) {
-                        AboutLinkButton(title: "App Site", systemImage: "safari") {
+                        AboutLinkButton(title: "Website", systemImage: "safari") {
                             if let u = URL(string: "https://galbutnotgirl.github.io/command/") { NSWorkspace.shared.open(u) }
+                        }
+                        AboutLinkButton(title: "Docs", systemImage: "book") {
+                            openHelpDoc(named: "index")
                         }
                         AboutLinkButton(title: "GitHub", systemImage: "link") {
                             if let u = URL(string: GITHUB_REPO_URL) { NSWorkspace.shared.open(u) }
                         }
-                    }
-                }
-                Text(GITHUB_REPO_URL).font(.caption).foregroundColor(.secondary).textSelection(.enabled)
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Support & Reporting").font(.headline)
-                    HStack(spacing: 10) {
-                        Button("Copy Diagnostic Info") {
+                        AboutLinkButton(title: "Copy Diagnostic Info", systemImage: "doc.on.doc") {
                             copyCommandDiagnosticInfo(
                                 model: model,
                                 channel: channel,
@@ -3165,27 +3172,14 @@ struct AboutView: View {
                             diagCopied = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { diagCopied = false }
                         }
-                        .buttonStyle(.bordered)
-                        Button {
+                        AboutLinkButton(title: "Report a Bug", systemImage: "ladybug") {
                             if let u = reportBugURL() { NSWorkspace.shared.open(u) }
-                        } label: {
-                            Label("Report a Bug", systemImage: "ladybug")
                         }
-                        Button {
+                        AboutLinkButton(title: "Request Feature", systemImage: "sparkles") {
                             if let u = requestFeatureURL() { NSWorkspace.shared.open(u) }
-                        } label: {
-                            Label("Request Feature", systemImage: "sparkles")
                         }
-                        Button {
-                            if let u = securityAdvisoryURL() { NSWorkspace.shared.open(u) }
-                        } label: {
-                            Label("Private Security Report", systemImage: "lock.shield")
-                        }
-                        if diagCopied { Text("Copied").font(.caption).foregroundColor(.secondary) }
                     }
-                    Text("Copy Diagnostic Info first, review it for sensitive content, then use Report a Bug for problems, Request Feature for non-bug workflow, trigger, destination, docs, or release improvements, or Private Security Report for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics.")
-                        .font(.caption2).foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if diagCopied { Text("Diagnostic info copied").font(.caption).foregroundColor(.secondary) }
                 }
             }
             .padding(24)
@@ -3267,7 +3261,7 @@ struct AboutView: View {
         }
         out += "Default assistant: \(model.defaultProvider)\n"
         out += "Default Claude destination: \(model.claudeDestination)\n"
-        out += "Default ChatGPT destination: \(model.codexDestination == "chat" ? "Chat" : "Codex")\n"
+        out += "Default ChatGPT destination: \(ClaudeDestination.displayLabel(rawValue: model.codexDestination, provider: .codex))\n"
         out += "Default Codex workspace: \(model.codexWorkspace)\n"
         let background = HandoffConfig.load()
         out += "Claude CLI: \(background.claudeCommand), cwd=\(background.claudeCwd.isEmpty ? "home" : background.claudeCwd), extraArgs=\(background.claudeExtraArgs.count)\n"
@@ -3286,13 +3280,13 @@ struct AboutView: View {
         } else {
             out += "Custom actions:\n"
             for action in customActions {
-                let resolvedProvider = action.provider.resolve(default: AIProvider(rawValue: model.defaultProvider) ?? .claude)
+                let resolvedProvider = action.provider.resolve(default: AIProvider(rawValue: model.defaultProvider) ?? .codex)
                 out += "\(action.name): \(action.enabled ? "enabled" : "disabled") provider=\(action.provider.label) delivery=\(action.delivery.label) destination=\(action.destination.label(for: resolvedProvider)) autoSubmit=\(action.isAutoSubmit ? "on" : "off")\n"
                 for trigger in action.triggers {
                     out += "  - \(trigger.kind.label): \(trigger.enabled ? "enabled" : "disabled") \(trigger.human)"
                     if let delivery = trigger.deliveryOverride { out += " delivery=\(delivery.label)" }
                     if let destination = trigger.destinationOverride {
-                        let triggerProvider = action.effectiveProvider(for: trigger, default: AIProvider(rawValue: model.defaultProvider) ?? .claude)
+                        let triggerProvider = action.effectiveProvider(for: trigger, default: AIProvider(rawValue: model.defaultProvider) ?? .codex)
                         out += " destination=\(destination.label(for: triggerProvider))"
                     }
                     if let provider = trigger.providerOverride { out += " provider=\(provider.label)" }
@@ -3908,6 +3902,26 @@ struct DictSettingsView: View {
                 Text("Dictation Settings").font(.title2).bold()
                 Text("On-device transcription via Parakeet TDT — no cloud, no streaming, runs on Apple Neural Engine.")
                     .foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+
+                GroupBox(label: Text("Dictation").font(.subheadline).bold()) {
+                    Toggle(isOn: Binding(
+                        get: { model.dictationEnabled },
+                        set: { enabled in
+                            model.dictationEnabled = enabled
+                            UserDefaults.standard.set(enabled, forKey: VoiceSettingsKeys.dictationEnabled)
+                            reregisterHotkeys()
+                        }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Enable Dictation")
+                            Text("Off by default. Enables built-in dictation shortcuts and custom voice triggers.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .toggleStyle(.checkbox)
+                    .padding(.vertical, 6)
+                }
 
                 GroupBox(label: Text("Model").font(.subheadline).bold()) {
                     HStack(spacing: 12) {

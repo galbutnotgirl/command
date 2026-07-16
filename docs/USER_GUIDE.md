@@ -10,29 +10,29 @@ This guide is written for end users. For a shorter cheat sheet, see [QUICK_REFER
 2. Open the menu-bar icon, then choose **Settings**.
 3. In **Set Up**, grant Accessibility. Grant Screen Recording if you use screenshots. Grant Microphone if you use dictation or voice custom actions.
 4. Open **Shortcuts** and confirm the built-in Compose combinations you want.
-5. Try **Selected text -> Existing chat** or **Selected text -> New chat** with selected text in any app.
+5. Try **Selected text -> Existing conversation** or **Selected text -> New conversation** with selected text in any app.
 
 For permission details and reset commands, see [PERMISSIONS.md](PERMISSIONS.md).
 
 ## Choose Claude, ChatGPT, or Codex
 
-Open **Settings -> Shortcuts** and choose **Default assistant**. Existing and fresh installations default to Claude. Choose **ChatGPT / Codex**, then select **ChatGPT** for general chats or **Codex** for workspace coding. ChatGPT and Codex delivery remain opt-in until **Set Up** shows ChatGPT app, Codex CLI, and workspace readiness.
+Open **Settings -> Shortcuts** and choose **Default assistant**. Fresh installations default to ChatGPT with **Recent** as the destination. Choose **Claude** for Claude Chat/Cowork/Code, or keep **ChatGPT** and switch between **Recent**, **Chat**, and **Codex** destinations inside the ChatGPT app. Codex workspace delivery still needs Codex CLI/workspace readiness in **Set Up**.
 
-Provider resolution is trigger override, then Custom Action default, then global default. Claude exposes Chat, Cowork, and Code destinations. Codex uses configured workspace instead. Command never silently sends to another provider when selected provider is unavailable.
+Provider resolution is trigger override, then Custom Action default, then global default. Recent keeps the assistant's current mode. Claude exposes Recent, Chat, Cowork, and Code destinations. ChatGPT exposes Recent, Chat, and Codex destinations. Command never silently sends to another provider when selected provider is unavailable.
 
 Default built-in shortcuts:
 
 | Built-in combination | Default | Result |
 |---|---:|---|
-| Selected text -> Existing chat | Option-F8 | Send selected text into current Claude chat. |
-| Selected text -> New chat | F8 | Open new Claude chat and wait for your note. |
-| Selected text -> New chat + auto-submit | Unbound | Open new Claude chat, submit, then restore focus. |
-| Screenshot -> Existing chat | Option-F7 | Capture screenshot and add to current chat. |
-| Screenshot -> New chat | F7 | Capture screenshot and open new chat. |
-| Screenshot -> New chat + auto-submit | Unbound | Capture screenshot, open new chat, submit. |
+| Selected text -> Existing conversation | F8 | Send selected text into current assistant session. |
+| Selected text -> New conversation | Command-F8 | Open new assistant session and wait for your note. |
+| Selected text -> New conversation + auto-submit | Unbound | Open new assistant session, submit, then restore focus. |
+| Screenshot -> Existing conversation | F7 | Capture screenshot and add to current assistant session. |
+| Screenshot -> New conversation | Command-F7 | Capture screenshot and open new assistant session. |
+| Screenshot -> New conversation + auto-submit | Unbound | Capture screenshot, open new assistant session, submit. |
 | Clipboard History | F6 | Open searchable clipboard picker. |
-| Dictate -> Insert | Home | Speak and paste transcript at cursor. |
-| Dictate -> Assistant | Option-Home | Speak and send transcript to selected assistant. |
+| Dictate -> Insert | Fn | Speak and paste transcript at cursor. |
+| Dictate -> Assistant | Unbound | Speak and send transcript to selected assistant. |
 | Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
 You can change prompt and trigger shortcuts from **Settings -> Shortcuts**. Open the prompt/action editor or trigger row, click a key field, press a combo, press Delete to clear, or Esc to cancel. Dictation shortcuts live in **Settings -> Dictation Settings**.
@@ -41,7 +41,7 @@ Shortcut capture notes:
 
 | Case | Guidance |
 |---|---|
-| F6/F7/F8 and Home | Default alpha bindings. F6/F7/F8 can still conflict with app shortcuts, and Home can conflict with navigation-heavy workflows. |
+| F6/F7/F8 and Fn | Default alpha bindings. F6/F7/F8 can still conflict with app shortcuts, and Fn may depend on keyboard settings. |
 | Home, End, PgUp, PgDn | Useful alternatives for press-and-hold dictation on keyboards where F-keys conflict. rebind dictation shortcuts in Dictation Settings. |
 | Press-and-hold dictation | Hold to record, release after the last word. The stop sound confirms release; the active menu-bar chip may stay visible while tail capture, transcription, cleanup, and dispatch finish. |
 | Locked dictation | Double-tap to lock recording on when holding is awkward; stop from the menu or dictation control. |
@@ -76,18 +76,19 @@ Each prompt chooses delivery:
 
 | Delivery | Result |
 |---|---|
-| Existing session | Paste into current Claude, ChatGPT, or Codex session. |
-| New session | Open new session in selected assistant and wait. |
+| Existing conversation | Paste into current assistant conversation. |
+| New conversation | Open new conversation in selected assistant and wait. |
 | Background | Run through selected local CLI with no assistant window. |
 
-Claude prompts can choose destination. Codex prompts inherit configured workspace:
+Destinations apply to New and Go prompts. Existing conversation keeps the current assistant surface. Claude prompts can choose Recent, Chat, Cowork, or Code. ChatGPT prompts can choose Recent, Chat, or Codex:
 
 | Destination | Result |
 |---|---|
-| Default | Use global Claude destination from Shortcuts. |
-| Chat | Send to Claude Chat mode. |
-| Cowork | Send to Claude Cowork mode. |
-| Code | Send to Claude Code mode. |
+| Default | Use global destination from Shortcuts. |
+| Recent | Keep the assistant's current mode. |
+| Chat | Open ChatGPT Chat or Claude Chat. |
+| Cowork | Open Claude Cowork. |
+| Code / Codex | Open Claude Code, or Codex inside ChatGPT. |
 
 You can set provider defaults at three levels:
 
@@ -103,12 +104,12 @@ Built-in Compose lives at the top of **Shortcuts**. It is one shared prompt with
 
 | Combination | Input | Delivery | Default submit |
 |---|---|---|---|
-| Selected text -> Existing chat | Selected text | Existing chat | No |
-| Selected text -> New chat | Selected text | New chat | No |
-| Selected text -> New chat + auto-submit | Selected text | New chat | Yes |
-| Screenshot -> Existing chat | Screenshot | Existing chat | No |
-| Screenshot -> New chat | Screenshot | New chat | No |
-| Screenshot -> New chat + auto-submit | Screenshot | New chat | Yes |
+| Selected text -> Existing conversation | Selected text | Existing conversation | No |
+| Selected text -> New conversation | Selected text | New conversation | No |
+| Selected text -> New conversation + auto-submit | Selected text | New conversation | Yes |
+| Screenshot -> Existing conversation | Screenshot | Existing conversation | No |
+| Screenshot -> New conversation | Screenshot | New conversation | No |
+| Screenshot -> New conversation + auto-submit | Screenshot | New conversation | Yes |
 
 Click the pencil icon to edit Compose. Prompt text, default auto-submit, and per-combination auto-submit overrides live in that editor. Prompt text is shared across selected-text and screenshot combinations.
 
@@ -132,8 +133,8 @@ To create one:
 1. Open **Settings -> Shortcuts**.
 2. Under **Custom Actions**, click **Add**.
 3. Name the action.
-4. Pick delivery: Existing chat, New chat, or Background.
-5. Pick destination: Default, Chat, Cowork, or Code.
+4. Pick delivery: Existing conversation, New conversation, or Background.
+5. Pick destination: Default, Recent, Chat, Cowork, Code, or Codex depending on selected assistant.
 6. Write prompt text.
 7. Save.
 8. Add triggers under the action row.
@@ -159,9 +160,9 @@ Suggested triggers:
 
 | Trigger | Delivery | Destination |
 |---|---|---|
-| Selected text | New chat | Default |
-| Popup | Existing chat | Default |
-| Voice | New chat | Code |
+| Selected text | New conversation | Default |
+| Popup | Existing conversation | Default |
+| Voice | New conversation | Code |
 
 More complete setups live in [EXAMPLES.md](EXAMPLES.md).
 
@@ -287,7 +288,7 @@ Command History shows:
 
 | Section | Includes |
 |---|---|
-| Foreground | Existing chat and New chat sends. |
+| Foreground | Existing conversation and New conversation sends. |
 | Background | `claude -p` runs, including logs and retry. |
 
 Filters:

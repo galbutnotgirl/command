@@ -264,13 +264,13 @@ struct WelcomeStepView: View {
 
     @State private var keysAppeared = false
 
-    private let previewKeys = ["F8", "⌥F8", "F7", "⌥F7", "F6", "Home", "⌥Home"]
+    private let previewKeys = ["F8", "⌘F8", "F7", "⌘F7", "F6", "Fn"]
 
     private let features: [(icon: String, color: Color, label: String, detail: String)] = [
         ("bolt.fill",              .orange, "Prompt Shortcuts",
-         "Select text in any app. Press Option-F8 to add it to selected assistant, or F8 to open a new session."),
+         "Select text in any app. Press F8 to add it to selected assistant, or Command-F8 to open a new conversation."),
         ("camera.on.rectangle",    .purple, "Screenshot to Claude",
-         "Drag to capture or press Space for a window. Send screenshots to existing chat, new chat, or a custom action."),
+         "Drag to capture or press Space for a window. Send screenshots to an existing conversation, a new conversation, or a custom action."),
         ("clock.arrow.circlepath", .blue,   "Clipboard History",
          "When enabled, copies stay local. Press F6 for a searchable picker — paste into assistant or anywhere."),
     ]
@@ -378,7 +378,7 @@ struct PrimaryAssistantStepView: View {
 
             VStack(spacing: 6) {
                 Text("Choose your primary AI").font(.title2).bold()
-                Text("Choose where built-in shortcuts go by default. ChatGPT includes Chat and Codex destinations.")
+                Text("Choose where built-in shortcuts go by default. ChatGPT includes Recent, Chat, and Codex destinations.")
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -550,7 +550,7 @@ struct ScreenRecordingStepView: View {
 
             Text("Allow Screen Recording").font(.title2).bold()
 
-            Text("Screenshot actions (F7 / Option-F7) capture your screen for assistant prompts. macOS requires Screen Recording access for this.")
+            Text("Screenshot actions (F7 / Command-F7) capture your screen for assistant prompts. macOS requires Screen Recording access for this.")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)

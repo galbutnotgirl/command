@@ -4,7 +4,7 @@ These examples show common prompt/action setups. Use them as starting points, th
 
 ## Review Selected Text In Current Chat
 
-Use this when you are already in a Claude conversation and want to add selected text without opening a new chat.
+Use this when you are already in a Claude conversation and want to add selected text without opening a new conversation.
 
 Settings:
 
@@ -12,9 +12,9 @@ Settings:
 |---|---|
 | Prompt | Built-in `Add` |
 | Trigger | Selected text |
-| Delivery | Existing chat |
+| Delivery | Existing conversation |
 | Destination | Default |
-| Default shortcut | Option-F8 |
+| Default shortcut | Command-F8 |
 
 Prompt text:
 
@@ -34,7 +34,7 @@ Settings:
 |---|---|
 | Prompt | Built-in `New` |
 | Trigger | Selected text |
-| Delivery | New chat |
+| Delivery | New conversation |
 | Destination | Default or Code |
 | Default shortcut | F8 |
 
@@ -54,9 +54,9 @@ Settings:
 
 | Field | Value |
 |---|---|
-| Prompt | Built-in `Screenshot -> New chat` combination or custom action |
+| Prompt | Built-in `Screenshot -> New conversation` combination or custom action |
 | Trigger | Screenshot |
-| Delivery | New chat |
+| Delivery | New conversation |
 | Destination | Chat |
 | Default shortcut | F7 |
 
@@ -77,7 +77,7 @@ Settings:
 |---|---|
 | Action name | Voice to Code |
 | Trigger | Voice |
-| Delivery | New chat |
+| Delivery | New conversation |
 | Destination | Code |
 
 Prompt text:

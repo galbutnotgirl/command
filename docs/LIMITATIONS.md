@@ -7,7 +7,7 @@ Use this before trying or sharing an alpha build. These are current expectations
 - Alpha builds can change shortcuts, Settings layout, storage format, and import/export sections.
 - Export settings before updating if a workflow matters.
 - Use the latest Alpha release before reporting a bug unless the update path itself is broken.
-- New chat + auto-submit combinations are unbound by default because they submit immediately and restore focus.
+- New conversation + auto-submit combinations are unbound by default because they submit immediately and restore focus.
 - F6/F7/F8 may control macOS features unless standard function keys are enabled. Rebind shortcuts in **Settings -> Shortcuts** and **Settings -> Dictation Settings** when needed.
 
 ## Permissions

@@ -58,7 +58,7 @@
         <h1>User Guide</h1>
         <p class="lead">Set up prompt-centered macOS shortcuts for Claude, ChatGPT, or Codex: selected text, screenshots, typed notes, voice, clipboard history, and background CLI runs.</p>
         <h2>Choose Claude, ChatGPT, or Codex</h2>
-        <p>Choose <strong>Default assistant</strong> in <strong>Settings -&gt; Shortcuts</strong>. Custom Actions and triggers can override it. Claude uses Chat/Cowork/Code destinations; Codex uses configured workspace. Command never silently falls back to another provider.</p>
+        <p>Choose <strong>Default assistant</strong> in <strong>Settings -&gt; Shortcuts</strong>. Custom Actions and triggers can override it. Claude uses Recent/Chat/Cowork/Code destinations. ChatGPT uses Recent/Chat/Codex destinations inside the ChatGPT app, with Codex using configured workspace. Command never silently falls back to another provider.</p>
         <div class="nav">
           <a class="button primary" href="quick-reference.html">Quick Reference</a>
           <a class="button" href="settings.html">Settings Reference</a>
@@ -73,21 +73,21 @@
           <li>Open menu-bar icon, then choose <strong>Settings</strong>.</li>
           <li>In <strong>Set Up</strong>, grant Accessibility. Add Screen Recording for screenshots and Microphone for dictation or voice custom actions.</li>
           <li>Open <strong>Shortcuts</strong> and confirm built-in Compose combinations you want.</li>
-          <li>Select text in any app and try <strong>Selected text -> Existing chat</strong> or <strong>Selected text -> New chat</strong>.</li>
+          <li>Select text in any app and try <strong>Selected text -> Existing conversation</strong> or <strong>Selected text -> New conversation</strong>.</li>
         </ol>
         <p>For permission details and reset commands, see <a href="permissions.html">Permissions</a>.</p>
         <table>
           <thead><tr><th>Built-in combination</th><th>Default</th><th>Result</th></tr></thead>
           <tbody>
-            <tr><td>Selected text -> Existing chat</td><td><kbd>Option-F8</kbd></td><td>Send selected text into current Claude chat.</td></tr>
-            <tr><td>Selected text -> New chat</td><td><kbd>F8</kbd></td><td>Open new Claude chat and wait.</td></tr>
-            <tr><td>Selected text -> New chat + auto-submit</td><td>Unbound</td><td>Open new Claude chat, submit, then restore focus.</td></tr>
-            <tr><td>Screenshot -> Existing chat</td><td><kbd>Option-F7</kbd></td><td>Capture screenshot and add to current chat.</td></tr>
-            <tr><td>Screenshot -> New chat</td><td><kbd>F7</kbd></td><td>Capture screenshot and open new chat.</td></tr>
-            <tr><td>Screenshot -> New chat + auto-submit</td><td>Unbound</td><td>Capture screenshot, open new chat, submit.</td></tr>
+            <tr><td>Selected text -> Existing conversation</td><td><kbd>F8</kbd></td><td>Send selected text into current Claude chat.</td></tr>
+            <tr><td>Selected text -> New conversation</td><td><kbd>Command-F8</kbd></td><td>Open new Claude chat and wait.</td></tr>
+            <tr><td>Selected text -> New conversation + auto-submit</td><td>Unbound</td><td>Open new Claude chat, submit, then restore focus.</td></tr>
+            <tr><td>Screenshot -> Existing conversation</td><td><kbd>F7</kbd></td><td>Capture screenshot and add to current chat.</td></tr>
+            <tr><td>Screenshot -> New conversation</td><td><kbd>Command-F7</kbd></td><td>Capture screenshot and open new conversation.</td></tr>
+            <tr><td>Screenshot -> New conversation + auto-submit</td><td>Unbound</td><td>Capture screenshot, open new conversation, submit.</td></tr>
             <tr><td>Clipboard History</td><td><kbd>F6</kbd></td><td>Open searchable clipboard picker.</td></tr>
-            <tr><td>Dictate -> Insert</td><td><kbd>Home</kbd></td><td>Speak and paste transcript at cursor.</td></tr>
-            <tr><td>Dictate -> Assistant</td><td><kbd>Option-Home</kbd></td><td>Speak and send transcript to selected assistant.</td></tr>
+            <tr><td>Dictate -> Insert</td><td><kbd>Fn</kbd></td><td>Speak and paste transcript at cursor.</td></tr>
+            <tr><td>Dictate -> Assistant</td><td>Unbound</td><td>Speak and send transcript to selected assistant.</td></tr>
             <tr><td>Dictate -> Assistant 2</td><td>Unbound</td><td>Optional second assistant dictation target.</td></tr>
           </tbody>
         </table>
@@ -96,7 +96,7 @@
         <table>
           <thead><tr><th>Case</th><th>Guidance</th></tr></thead>
           <tbody>
-            <tr><td>F6/F7/F8 and Home</td><td>Default alpha bindings. F6/F7/F8 can still conflict with app shortcuts, and Home can conflict with navigation-heavy workflows.</td></tr>
+            <tr><td>F6/F7/F8 and Fn</td><td>Default alpha bindings. F6/F7/F8 can still conflict with app shortcuts, and Fn may depend on keyboard settings.</td></tr>
             <tr><td>Home, End, PgUp, PgDn</td><td>Useful alternatives for press-and-hold dictation on keyboards where F-keys conflict. rebind dictation shortcuts in Dictation Settings.</td></tr>
             <tr><td>Press-and-hold dictation</td><td>Hold to record, release after the last word. The stop sound confirms release; the active menu-bar chip may stay visible while tail capture, transcription, cleanup, and dispatch finish.</td></tr>
             <tr><td>Locked dictation</td><td>Double-tap to lock recording on when holding is awkward; stop from the menu or dictation control.</td></tr>
@@ -124,8 +124,8 @@
         <p>Command is organized around prompts. Each prompt can have many triggers, one default delivery, one default destination, and per-trigger overrides.</p>
         <div class="grid">
           <div class="card"><strong>Triggers</strong><span class="muted">Selected text, screenshot, popup, voice.</span></div>
-          <div class="card"><strong>Delivery</strong><span class="muted">Existing chat, new chat, background.</span></div>
-          <div class="card"><strong>Destination</strong><span class="muted">Default, Chat, Cowork, Code.</span></div>
+          <div class="card"><strong>Delivery</strong><span class="muted">Existing conversation, new conversation, background.</span></div>
+          <div class="card"><strong>Destination</strong><span class="muted">Default, Recent, Chat, Cowork, Code, Codex.</span></div>
           <div class="card"><strong>Inheritance</strong><span class="muted"><code>—</code> means trigger inherits prompt/action default.</span></div>
         </div>
       </section>
@@ -136,12 +136,12 @@
         <table>
           <thead><tr><th>Combination</th><th>Input</th><th>Delivery</th><th>Default submit</th></tr></thead>
           <tbody>
-            <tr><td>Selected text -> Existing chat</td><td>Selected text</td><td>Existing chat</td><td>No</td></tr>
-            <tr><td>Selected text -> New chat</td><td>Selected text</td><td>New chat</td><td>No</td></tr>
-            <tr><td>Selected text -> New chat + auto-submit</td><td>Selected text</td><td>New chat</td><td>Yes</td></tr>
-            <tr><td>Screenshot -> Existing chat</td><td>Screenshot</td><td>Existing chat</td><td>No</td></tr>
-            <tr><td>Screenshot -> New chat</td><td>Screenshot</td><td>New chat</td><td>No</td></tr>
-            <tr><td>Screenshot -> New chat + auto-submit</td><td>Screenshot</td><td>New chat</td><td>Yes</td></tr>
+            <tr><td>Selected text -> Existing conversation</td><td>Selected text</td><td>Existing conversation</td><td>No</td></tr>
+            <tr><td>Selected text -> New conversation</td><td>Selected text</td><td>New conversation</td><td>No</td></tr>
+            <tr><td>Selected text -> New conversation + auto-submit</td><td>Selected text</td><td>New conversation</td><td>Yes</td></tr>
+            <tr><td>Screenshot -> Existing conversation</td><td>Screenshot</td><td>Existing conversation</td><td>No</td></tr>
+            <tr><td>Screenshot -> New conversation</td><td>Screenshot</td><td>New conversation</td><td>No</td></tr>
+            <tr><td>Screenshot -> New conversation + auto-submit</td><td>Screenshot</td><td>New conversation</td><td>Yes</td></tr>
           </tbody>
         </table>
         <p>Click the pencil icon to edit Compose. Prompt text, default auto-submit, and per-combination auto-submit overrides live in that editor.</p>
@@ -236,7 +236,7 @@ Return:
         <table>
           <thead><tr><th>Section</th><th>Includes</th></tr></thead>
           <tbody>
-            <tr><td>Foreground</td><td>Existing chat and New chat sends.</td></tr>
+            <tr><td>Foreground</td><td>Existing conversation and New conversation sends.</td></tr>
             <tr><td>Background</td><td><code>claude -p</code> runs, logs, retry, and parsed result.</td></tr>
           </tbody>
         </table>

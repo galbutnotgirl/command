@@ -26,11 +26,11 @@ struct BuiltInComposeRowDefinition: Identifiable {
 }
 
 let BUILTIN_COMPOSE_ROWS: [BuiltInComposeRowDefinition] = [
-    BuiltInComposeRowDefinition(action: "add", inputLabel: "Selected text", behaviorLabel: "Existing chat", icon: "text.cursor"),
-    BuiltInComposeRowDefinition(action: "comment", inputLabel: "Selected text", behaviorLabel: "New chat", icon: "text.cursor"),
+    BuiltInComposeRowDefinition(action: "add", inputLabel: "Selected text", behaviorLabel: "Existing conversation", icon: "text.cursor"),
+    BuiltInComposeRowDefinition(action: "comment", inputLabel: "Selected text", behaviorLabel: "New conversation", icon: "text.cursor"),
     BuiltInComposeRowDefinition(action: "go", inputLabel: "Selected text", behaviorLabel: "Go", icon: "text.cursor"),
-    BuiltInComposeRowDefinition(action: "shotadd", inputLabel: "Screenshot", behaviorLabel: "Existing chat", icon: "camera.viewfinder"),
-    BuiltInComposeRowDefinition(action: "shotcomment", inputLabel: "Screenshot", behaviorLabel: "New chat", icon: "camera.viewfinder"),
+    BuiltInComposeRowDefinition(action: "shotadd", inputLabel: "Screenshot", behaviorLabel: "Existing conversation", icon: "camera.viewfinder"),
+    BuiltInComposeRowDefinition(action: "shotcomment", inputLabel: "Screenshot", behaviorLabel: "New conversation", icon: "camera.viewfinder"),
     BuiltInComposeRowDefinition(action: "shotgo", inputLabel: "Screenshot", behaviorLabel: "Go", icon: "camera.viewfinder"),
 ]
 

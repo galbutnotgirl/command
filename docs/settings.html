@@ -82,16 +82,16 @@
         <table>
           <thead><tr><th>Control</th><th>Purpose</th></tr></thead>
           <tbody>
-            <tr><td>Default assistant</td><td>Top-level Claude or ChatGPT / Codex fallback.</td></tr>
-            <tr><td>Default ChatGPT destination</td><td>Chat for general chat or Codex for workspace coding.</td></tr>
-            <tr><td>Claude destination</td><td>Claude-only fallback: Chat, Cowork, or Code.</td></tr>
-            <tr><td>Codex workspace</td><td>Workspace used for new Codex sessions and background runs.</td></tr>
-            <tr><td>Compose</td><td>Shared built-in prompt for selected-text and screenshot combinations: existing chat, new chat, or new chat with auto-submit.</td></tr>
+            <tr><td>Default assistant</td><td>Top-level Claude or ChatGPT fallback.</td></tr>
+            <tr><td>Default ChatGPT destination</td><td>Recent, Chat for general chat, or Codex for workspace coding inside ChatGPT. Applies to New and Go prompts.</td></tr>
+            <tr><td>Claude destination</td><td>Claude-only fallback: Recent, Chat, Cowork, or Code. Applies to New and Go prompts.</td></tr>
+            <tr><td>Codex workspace</td><td>Workspace used when ChatGPT destination is Codex and for Codex background runs.</td></tr>
+            <tr><td>Compose</td><td>Shared built-in prompt for selected-text and screenshot combinations: existing conversation, new conversation, or new conversation with auto-submit.</td></tr>
             <tr><td>Custom Actions</td><td>User-defined prompt groups with selected text, screenshot, popup, or voice triggers.</td></tr>
             <tr><td>Trigger rows</td><td>Per-trigger key binding plus optional delivery, destination, and auto-submit override.</td></tr>
           </tbody>
         </table>
-        <p>Inheritance rule: <code>—</code> means no override. Trigger settings win over action defaults. Action defaults win over global destination.</p>
+        <p>Inheritance rule: <code>—</code> means no override. Trigger settings win over action defaults. Action defaults win over global destination. Destination applies to New and Go prompts; Existing conversation keeps the current assistant surface.</p>
       </section>
 
       <section id="context">
@@ -163,13 +163,11 @@
             <tr><td>Launch at login</td><td>Creates or toggles the Command launch service for startup. Downloaded app installs do not need Terminal scripts.</td></tr>
             <tr><td>Show in Menu Bar</td><td>Shows or hides the status item.</td></tr>
             <tr><td>Show Dock icon</td><td>Switches between menu-bar-only and Dock-visible app behavior.</td></tr>
-            <tr><td>Import / Export</td><td>Move shortcuts, prompt settings, context rules, dictation vocabulary, Background settings, and app preferences. Exports default to <code>command-export.json</code>.</td></tr>
-            <tr><td>Help &amp; Documentation</td><td>Opens the App Site or GitHub. The app site links the full public docs set.</td></tr>
-            <tr><td>Support &amp; Reporting</td><td>Diagnostics, public bug/feature routes, and private security reporting.</td></tr>
-            <tr><td>Copy Diagnostic Info</td><td>Copies app path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews.</td></tr>
+            <tr><td>Import / Export</td><td>Move shortcuts, prompt settings, context rules, dictation vocabulary, Background settings, and app preferences. Exports default to <code>command-export-YYYY-MM-DD.json</code>.</td></tr>
+            <tr><td>Help &amp; Documentation</td><td>Opens Website, Docs, GitHub, diagnostics, bug reports, and feature requests.</td></tr>
+                        <tr><td>Copy Diagnostic Info</td><td>Copies app path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews.</td></tr>
             <tr><td>Report a Bug</td><td>Opens GitHub issue template with key diagnostic fields prefilled.</td></tr>
             <tr><td>Request Feature</td><td>Opens GitHub feature request template for non-bug workflow, trigger, destination, docs, or release improvements.</td></tr>
-            <tr><td>Private Security Report</td><td>Opens GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics.</td></tr>
           </tbody>
         </table>
         <h3>Import / Export Sections</h3>

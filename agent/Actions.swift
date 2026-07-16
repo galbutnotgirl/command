@@ -71,7 +71,8 @@ private func migrateExperimentalShortcutDefaultsIfNeeded(_ byAction: inout [Stri
         }
     }
     for def in DEFAULT_BINDINGS {
-        byAction[def.action] = HotkeyBinding(action: def.action, keycode: def.keycode, mods: def.mods, enabled: true)
+        let enabled = def.keycode != 0
+        byAction[def.action] = HotkeyBinding(action: def.action, keycode: def.keycode, mods: def.mods, enabled: enabled)
     }
     return true
 }

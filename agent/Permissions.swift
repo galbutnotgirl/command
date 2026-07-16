@@ -277,7 +277,7 @@ func componentChecks() -> [StatusCheck] {
                     detail: "Background Claude delivery. Unknown usually means sign-in is needed.",
                     state: providerCLIState(.claude)),
         StatusCheck(title: "ChatGPT app",
-                    detail: "Foreground ChatGPT and Codex delivery via com.openai.codex.",
+                    detail: "Foreground ChatGPT delivery, including Chat and Codex destinations, via com.openai.codex.",
                     state: providerAppInstalled(.codex) ? .ok : .unknown),
         StatusCheck(title: "Codex CLI",
                     detail: "Background Codex delivery. Unknown usually means `codex login` is needed.",

@@ -28,8 +28,10 @@ final class KeyCodesTests: XCTestCase {
     func testModifierOnlyKeysDisplayByName() {
         XCTAssertEqual(humanShortcut(keycode: 55, mods: 0), "Command")
         XCTAssertEqual(humanShortcut(keycode: 58, mods: 0), "Option")
+        XCTAssertEqual(humanShortcut(keycode: 63, mods: 0), "Fn")
         XCTAssertTrue(MODIFIER_ONLY_KEYCODES.contains(55))
         XCTAssertTrue(MODIFIER_ONLY_KEYCODES.contains(58))
+        XCTAssertTrue(MODIFIER_ONLY_KEYCODES.contains(63))
     }
 
     func testCarbonModsFromCocoaFlagsRoundTrips() {

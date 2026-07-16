@@ -197,6 +197,12 @@ assert_contains "ChatGPT foreground dry run selects general chat without changin
 assert_contains "ChatGPT new session uses native app command, not Codex deep link" "$CHATGPT_DRY_OUTPUT" \
   "route=native-new-session chars="
 
+CHATGPT_RECENT_DRY_OUTPUT="$(ACTION=go DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=codex OPENAI_DESTINATION=recent CODEX_WORKSPACE='/tmp/project space' zsh "$SEND_SCRIPT" 2>/dev/null)"
+assert_contains "ChatGPT Recent foreground dry run stays in native app route" "$CHATGPT_RECENT_DRY_OUTPUT" \
+  "provider=codex dest=recent workspace=/tmp/project space"
+assert_contains "ChatGPT Recent avoids Codex workspace deep link" "$CHATGPT_RECENT_DRY_OUTPUT" \
+  "route=native-new-session chars="
+
 CLAUDE_COWORK_DRY_OUTPUT="$(ACTION=comment DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=claude CLAUDE_DESTINATION=cowork zsh "$SEND_SCRIPT" 2>/dev/null)"
 assert_contains "Claude Cowork uses installed app deep link contract" "$CLAUDE_COWORK_DRY_OUTPUT" \
   "route=claude://cowork/new"

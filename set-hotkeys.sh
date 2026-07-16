@@ -15,10 +15,10 @@ set -uo pipefail
 # action(worker ACTION) | "Service menu name" | hotkey tokens
 # Tip: you can also rebind these visually in the menu-bar window (Shortcuts tab).
 HOTKEYS=(
-  "add|Command - Add|opt F8"
-  "comment|Command - New|F8"
-  "shotadd|Command - Screenshot Add|opt F7"
-  "shotcomment|Command - Screenshot New|F7"
+  "add|Command - Add|F8"
+  "comment|Command - New|cmd F8"
+  "shotadd|Command - Screenshot Add|F7"
+  "shotcomment|Command - Screenshot New|cmd F7"
   "cliphistory|Command - Clipboard History|F6"
   # Go and Screenshot Go default to unbound in the app to avoid F-key conflicts.
   # Bind them visually in Settings → Shortcuts if you want one-key submit.

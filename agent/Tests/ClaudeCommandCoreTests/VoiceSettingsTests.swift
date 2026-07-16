@@ -11,6 +11,7 @@ final class VoiceSettingsTests: XCTestCase {
         XCTAssertEqual(VoiceSettingsKeys.soundVolume, "soundVolume")
         XCTAssertEqual(VoiceSettingsKeys.startSound, "startSound")
         XCTAssertEqual(VoiceSettingsKeys.stopSound, "stopSound")
+        XCTAssertEqual(VoiceSettingsKeys.dictationEnabled, "dictationEnabled")
         XCTAssertEqual(VoiceSettingsKeys.dictationAssistantProvider, "dictationAssistantProvider")
         XCTAssertEqual(VoiceSettingsKeys.dictationAssistant2Provider, "dictationAssistant2Provider")
     }
@@ -30,20 +31,21 @@ final class VoiceSettingsTests: XCTestCase {
         XCTAssertEqual(VoiceSettingsDefaults.soundVolume, 0.35, accuracy: 0.0001)
         XCTAssertEqual(VoiceSettingsDefaults.startSound, "Purr")
         XCTAssertEqual(VoiceSettingsDefaults.stopSound, "Purr")
+        XCTAssertFalse(VoiceSettingsDefaults.dictationEnabled)
         XCTAssertEqual(VoiceSettingsDefaults.dictationAssistantProvider, "default")
         XCTAssertEqual(VoiceSettingsDefaults.dictationAssistant2Provider, "codex")
     }
 
-    func testDictationDefaultsUseHomeAndOptionHome() {
+    func testDictationDefaultsUseFnAndAssistantUnbound() {
         let byAction = Dictionary(uniqueKeysWithValues: DEFAULT_BINDINGS.map { ($0.action, (keycode: $0.keycode, mods: $0.mods)) })
-        XCTAssertEqual(byAction["dictate"]?.keycode, 115)
+        XCTAssertEqual(byAction["dictate"]?.keycode, 63)
         XCTAssertEqual(byAction["dictate"]?.mods, 0)
-        XCTAssertEqual(byAction["dictateadd"]?.keycode, 115)
-        XCTAssertEqual(byAction["dictateadd"]?.mods, 2048)
+        XCTAssertEqual(byAction["dictateadd"]?.keycode, 0)
+        XCTAssertEqual(byAction["dictateadd"]?.mods, 0)
         XCTAssertEqual(byAction["dictateadd2"]?.keycode, 0)
         XCTAssertEqual(byAction["dictateadd2"]?.mods, 0)
-        XCTAssertEqual(HotkeyBinding(action: "dictate", keycode: 115, mods: 0, enabled: true).human, "Home")
-        XCTAssertEqual(HotkeyBinding(action: "dictateadd", keycode: 115, mods: 2048, enabled: true).human, "⌥Home")
+        XCTAssertEqual(HotkeyBinding(action: "dictate", keycode: 63, mods: 0, enabled: true).human, "Fn")
+        XCTAssertEqual(HotkeyBinding(action: "dictateadd", keycode: 0, mods: 0, enabled: true).human, "—")
         XCTAssertEqual(HotkeyBinding(action: "dictateadd2", keycode: 0, mods: 0, enabled: true).human, "—")
     }
 

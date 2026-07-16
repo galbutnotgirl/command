@@ -105,8 +105,8 @@ Normal release runs also execute `swift test`, `node --test`, `./test/test-shell
 14. Confirm pull request template asks for user impact, docs parity, sensitive-report routing, issue-template/chooser parity, bundled-doc release smoke, release-note/checklist needs, and validation evidence.
 15. In installed app, open **Settings -> About -> Check for Updates**.
 16. Download update and confirm app relaunches.
-17. Open **Settings -> About -> View on GitHub** and confirm the project repository opens.
-18. Open each **Settings -> About** support action: **Copy Diagnostic Info**, **Report a Bug**, **Request Feature**, and **Private Security Report**. Confirm diagnostics copy, public issue buttons open the right templates, and Private Security Report opens GitHub private advisory creation.
+17. Open **Settings -> About -> GitHub** and confirm the project repository opens.
+18. Open each **Settings -> About** support action: **Copy Diagnostic Info**, **Report a Bug**, and **Request Feature**. Confirm diagnostics copy and public issue buttons open the right templates.
 19. Open each **Settings -> About** docs button: **Documentation**, **User Guide**, **Install Guide**, **Uninstall**, **Settings Reference**, **Quick Reference**, **Troubleshooting**, **Permissions**, **Support**, **Security Policy**, **Examples**, **FAQ**, **Updates**, **Privacy**, **Changelog**, **Alpha Limitations**, **Icon Treatments**, **Background Architecture**, and **Release Checklist**. Confirm bundled docs load offline.
 20. If testing a build without bundled docs, confirm those About docs buttons fall back to GitHub Pages, not raw Markdown.
 

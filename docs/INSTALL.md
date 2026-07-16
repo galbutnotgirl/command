@@ -61,8 +61,8 @@ Then test:
 
 | Test | Expected |
 |---|---|
-| Select text and press `Option-F8` | Selected text sends to existing Claude session. |
-| Press `F8` | New Claude session opens with captured text. |
+| Select text and press `F8` | Selected text sends to existing Claude session. |
+| Press `Command-F8` | New Claude session opens with captured text. |
 | Press `F6` | Clipboard History picker opens when enabled. |
 
 If F-keys control brightness, media, or dictation instead of Command, enable standard function keys in macOS Keyboard settings, rebind prompt shortcuts in **Settings -> Shortcuts**, or rebind dictation shortcuts in **Settings -> Dictation Settings**.
@@ -73,12 +73,10 @@ Open **Settings -> About**:
 
 | Button | Use |
 |---|---|
-| Help & Documentation | App Site and GitHub. |
-| Support & Reporting | Diagnostics, public bug/feature routes, and private security reporting. |
+| Help & Documentation | Website, Docs, GitHub, diagnostics, bug reports, and feature requests. |
 | Copy Diagnostic Info | App path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews. |
 | Report a Bug | Prefilled GitHub issue template. |
 | Request Feature | Prefilled GitHub feature request template. |
-| Private Security Report | GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics. |
 
 For every Settings tab and About control, see [Settings Reference](SETTINGS_REFERENCE.md).
 

@@ -25,8 +25,8 @@ Before filing, check [Support](https://galbutnotgirl.github.io/command/support.h
 - [ ] Docs / support
 
 Trigger:
-Delivery: Existing chat / New chat / Background
-Destination: Default / Claude Chat / Claude Cowork / Claude Code / ChatGPT / Codex
+Delivery: Existing conversation / New conversation / Background
+Destination: Default / Recent / Claude Chat / Claude Cowork / Claude Code / ChatGPT Chat / ChatGPT Codex
 Auto-submit:
 Current setting or workaround:
 

@@ -72,8 +72,7 @@ public enum PrimaryAssistantPreference: String, CaseIterable, Codable, Sendable 
     public var destination: ClaudeDestination {
         switch self {
         case .claude: return .recent
-        case .codex: return .code
-        case .chatgpt: return .chat
+        case .chatgpt, .codex: return .recent
         }
     }
 }

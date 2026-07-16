@@ -6,7 +6,7 @@ Command is a local macOS app that can read selected text, screenshots, clipboard
 
 Do not file public GitHub issues for vulnerabilities, exposed secrets, private logs, or diagnostic output that contains sensitive text.
 
-Use **Settings -> About -> Private Security Report** or GitHub private vulnerability reporting instead:
+Use **Security Policy** or GitHub private vulnerability reporting instead:
 
 [Report a private vulnerability](https://github.com/galbutnotgirl/command/security/advisories/new)
 

@@ -8,10 +8,10 @@ Use this when filing a bug, requesting a feature, or asking for help.
 2. Open **Settings -> About -> Copy Diagnostic Info**. It includes app path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up permission/component status, recent log tails, recent command summaries, Clipboard History errors, and the last three dictation raw/processed previews.
 3. For bugs, open **Settings -> About -> Report a Bug**.
 4. For non-bug requests, open **Settings -> About -> Request Feature**.
-5. For vulnerabilities, exposed secrets, private logs, or sensitive diagnostic output, open **Settings -> About -> Private Security Report** instead of a public issue.
+5. For vulnerabilities, exposed secrets, private logs, or sensitive diagnostic output, open **Security Policy** instead of a public issue.
 6. Review copied diagnostics for sensitive log or recent-text content, then paste only relevant lines into the GitHub issue or private advisory.
 
-If the report involves a vulnerability, exposed secret, private log, or sensitive diagnostic output, do not use a public issue. Use **Settings -> About -> Private Security Report** or [Security Policy](SECURITY.md) instead.
+If the report involves a vulnerability, exposed secret, private log, or sensitive diagnostic output, do not use a public issue. Use [Security Policy](SECURITY.md) instead.
 
 ## Feature Requests
 
@@ -78,6 +78,6 @@ For dictation tail-cutoff bugs, say whether the missing words are absent from **
 
 If an update failed, include update channel, target version, and whether manual install from [Install Guide](INSTALL.md) worked.
 
-For vulnerabilities, exposed secrets, private logs, or sensitive diagnostic output, use **Settings -> About -> Private Security Report** or [Security Policy](SECURITY.md) instead of a public issue.
+For vulnerabilities, exposed secrets, private logs, or sensitive diagnostic output, use **Security Policy** or [Security Policy](SECURITY.md) instead of a public issue.
 
 For tab-by-tab Settings help, see [Settings Reference](SETTINGS_REFERENCE.md). For symptom-first fixes before filing, see [Troubleshooting](TROUBLESHOOTING.md).

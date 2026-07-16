@@ -169,7 +169,7 @@ func runWorker(_ action: String, source: String, captured: String = "", customPr
     if customSession == "add" { env["CUSTOM_SESSION"] = "add" }
     if !customIncludeSource { env["CUSTOM_INCLUDE_SOURCE"] = "0" }
     if let builtInAutoSubmit { env["BUILTIN_AUTO_SUBMIT"] = builtInAutoSubmit ? "1" : "0" }
-    let effectiveProvider = provider ?? AIProvider(rawValue: settingsModel.defaultProvider) ?? .claude
+    let effectiveProvider = provider ?? AIProvider(rawValue: settingsModel.defaultProvider) ?? .codex
     let providerDefaultDestination = effectiveProvider == .claude ? settingsModel.claudeDestination : settingsModel.codexDestination
     let requestedDestination = destination ?? providerDefaultDestination
     let effectiveDestination = effectiveProvider == .codex && requestedDestination == "cowork"
@@ -344,7 +344,7 @@ let CLAUDE_BUNDLE = "com.anthropic.claudefordesktop"
 let CODEX_BUNDLE = "com.openai.codex"
 
 func selectedProvider() -> AIProvider {
-    AIProvider(rawValue: settingsModel.defaultProvider) ?? .claude
+    AIProvider(rawValue: settingsModel.defaultProvider) ?? .codex
 }
 
 func dictationAssistantProvider() -> AIProvider {
@@ -633,6 +633,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         let badge = makeFilterBadge()
         badge.translatesAutoresizingMaskIntoConstraints = false
         badge.setContentHuggingPriority(.required, for: .horizontal)
+        badge.widthAnchor.constraint(equalToConstant: 182).isActive = true
 
         let row = NSStackView(views: [badge, searchIcon, lbl])
         row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 8
@@ -1077,9 +1078,11 @@ struct HK { let action: String; let keycode: UInt32; let mods: UInt32 }
 
 func loadHotkeys() -> [HK] {
     let clipboardEnabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
+    let dictationEnabled = UserDefaults.standard.bool(forKey: VoiceSettingsKeys.dictationEnabled)
     return loadBindings().compactMap { binding in
         guard binding.enabled,
               binding.keycode != 0,
+              !isBuiltInVoiceAction(binding.action) || dictationEnabled,
               binding.action != "cliphistory" || clipboardEnabled else { return nil }
         return HK(action: binding.action, keycode: binding.keycode, mods: binding.mods)
     }
@@ -1283,6 +1286,7 @@ private func dictMode(forBuiltInVoiceAction action: String) -> DictMode {
 }
 
 private func voiceHotkeyTarget(keycode: UInt32, mods: UInt32) -> VoiceHotkeyTarget? {
+    guard UserDefaults.standard.bool(forKey: VoiceSettingsKeys.dictationEnabled) else { return nil }
     if let hk = loadHotkeys().first(where: { $0.keycode == keycode && $0.mods == mods && isBuiltInVoiceAction($0.action) }) {
         return .builtIn(dictMode(forBuiltInVoiceAction: hk.action))
     }
@@ -1335,6 +1339,7 @@ private func isModifierKeyDown(keycode: UInt32, flags: CGEventFlags) -> Bool {
     case 56, 60: return flags.contains(.maskShift) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
     case 58, 61: return flags.contains(.maskAlternate) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
     case 59, 62: return flags.contains(.maskControl) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
+    case 63: return flags.contains(.maskSecondaryFn) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
     default: return false
     }
 }
@@ -2051,7 +2056,12 @@ func installMainMenu() {
 let app = NSApplication.shared
 app.delegate = appDelegate
 installMainMenu()
-UserDefaults.standard.register(defaults: ["showDockIcon": false, "cliphistoryEnabled": false, "pickerTheme": "auto"])
+UserDefaults.standard.register(defaults: [
+    "showDockIcon": false,
+    "cliphistoryEnabled": false,
+    "pickerTheme": "auto",
+    VoiceSettingsKeys.dictationEnabled: VoiceSettingsDefaults.dictationEnabled
+])
 applyDockPolicy()                 // menu-bar only unless the user enabled "Show in Dock"
 if MainActor.assumeIsolated({ offerMoveToApplicationsIfNeeded() }) { exit(0) }
 validateInstall()

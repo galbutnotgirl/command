@@ -24,15 +24,15 @@ Use **Shortcut Settings** for prompt-centered commands.
 
 | Control | Purpose |
 |---|---|
-| Default assistant | Top-level Claude or ChatGPT / Codex fallback. |
-| Default ChatGPT destination | Chat for general chat or Codex for workspace coding. |
-| Claude destination | Claude-only fallback destination: Chat, Cowork, or Code. |
-| Codex workspace | Workspace used for new Codex sessions and background runs. |
-| Compose | Shared built-in prompt for selected-text and screenshot combinations: existing chat, new chat, or new chat with auto-submit. |
+| Default assistant | Top-level Claude or ChatGPT fallback. |
+| Default ChatGPT destination | Recent, Chat for general chat, or Codex for workspace coding inside ChatGPT. Applies to New and Go prompts. |
+| Claude destination | Claude-only fallback destination: Recent, Chat, Cowork, or Code. Applies to New and Go prompts. |
+| Codex workspace | Workspace used when ChatGPT destination is Codex and for Codex background runs. |
+| Compose | Shared built-in prompt for selected-text and screenshot combinations: existing conversation, new conversation, or new conversation with auto-submit. |
 | Custom Actions | User-defined prompt groups with selected text, screenshot, popup, or voice triggers. |
 | Trigger rows | Per-trigger key binding plus optional delivery, destination, and auto-submit override. |
 
-Inheritance rule: `—` means no override. Trigger settings win over action defaults. Action defaults win over global destination.
+Inheritance rule: `—` means no override. Trigger settings win over action defaults. Action defaults win over global destination. Destination applies to New and Go prompts; Existing conversation keeps the current assistant surface.
 
 ## Context
 
@@ -95,13 +95,11 @@ Use **About** for release, help, and portability workflows.
 | Launch at login | Creates or toggles the Command launch service for startup. Downloaded app installs do not need Terminal scripts. |
 | Show in Menu Bar | Shows or hides the status item. |
 | Show Dock icon | Switches between menu-bar-only and Dock-visible app behavior. |
-| Import / Export | Move shortcuts, prompt settings, context rules, dictation vocabulary, Background settings, and app preferences. Exports default to `command-export.json`. |
-| Help & Documentation | Opens the App Site or GitHub. The app site links the full public docs set. |
-| Support & Reporting | Diagnostics, public bug/feature routes, and private security reporting. |
+| Import / Export | Move shortcuts, prompt settings, context rules, dictation vocabulary, Background settings, and app preferences. Exports default to `command-export-YYYY-MM-DD.json`. |
+| Help & Documentation | Opens Website, Docs, GitHub, diagnostics, bug reports, and feature requests. |
 | Copy Diagnostic Info | Copies app path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews. |
 | Report a Bug | Opens GitHub issue template with key diagnostic fields prefilled. |
 | Request Feature | Opens GitHub feature request template for non-bug workflow, trigger, destination, docs, or release improvements. |
-| Private Security Report | Opens GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics. |
 
 ### Import / Export Sections
 

@@ -4,15 +4,15 @@
 
 | Built-in combination | Default | Result |
 |---|---:|---|
-| Selected text -> Existing chat | Option-F8 | Send selected text into current Claude chat. |
-| Selected text -> New chat | F8 | Open new Claude chat and wait. |
-| Selected text -> New chat + auto-submit | Unbound | Open new Claude chat, submit, restore focus. |
-| Screenshot -> Existing chat | Option-F7 | Capture screenshot and add to current chat. |
-| Screenshot -> New chat | F7 | Capture screenshot and open new chat. |
-| Screenshot -> New chat + auto-submit | Unbound | Capture screenshot, open new chat, submit. |
+| Selected text -> Existing conversation | F8 | Send selected text into current Claude chat. |
+| Selected text -> New conversation | Command-F8 | Open new Claude chat and wait. |
+| Selected text -> New conversation + auto-submit | Unbound | Open new Claude chat, submit, restore focus. |
+| Screenshot -> Existing conversation | F7 | Capture screenshot and add to current chat. |
+| Screenshot -> New conversation | Command-F7 | Capture screenshot and open new conversation. |
+| Screenshot -> New conversation + auto-submit | Unbound | Capture screenshot, open new conversation, submit. |
 | Clipboard History | F6 | Open searchable clipboard picker. |
-| Dictate -> Insert | Home | Speak and paste transcript at cursor. |
-| Dictate -> Assistant | Option-Home | Speak and send transcript to selected assistant. |
+| Dictate -> Insert | Fn | Speak and paste transcript at cursor. |
+| Dictate -> Assistant | Unbound | Speak and send transcript to selected assistant. |
 | Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
 Change prompt/action shortcuts in **Settings -> Shortcuts**. Dictation shortcuts live in **Settings -> Dictation Settings**. Open the relevant editor or trigger row, click a key field, press a combo. Delete clears. Esc cancels.
@@ -24,7 +24,7 @@ The menu-bar menu only shows prompt/action shortcuts that are enabled and bound 
 | Case | Guidance |
 |---|---|
 | Home, End, PgUp, PgDn | Good choices for press-and-hold dictation because they avoid F-key media behavior on many keyboards. rebind dictation shortcuts in Dictation Settings. |
-| F6/F7/F8 and Home | Default alpha choices. F6/F7/F8 can still conflict with app shortcuts, and Home can conflict with navigation-heavy workflows. |
+| F6/F7/F8 and Fn | Default alpha choices. F6/F7/F8 can still conflict with app shortcuts, and Fn may depend on keyboard settings. |
 | Press-and-hold voice | Hold to record, release after the last word. The stop sound confirms release; the active menu-bar chip can stay visible while tail capture, transcription, cleanup, and dispatch finish. |
 | Double-tap voice | Double-tap to lock recording on when holding is awkward; stop from the menu or dictation control. |
 
@@ -46,9 +46,9 @@ Unbound combinations, disabled triggers, and auto-submit combinations with no sh
 | Prompt | The instruction text Command sends to Claude. |
 | Action | A named prompt setup, with defaults and one or more triggers. |
 | Trigger | The way content is captured: selected text, screenshot, popup, or voice. |
-| Delivery | Where the rendered prompt goes: existing chat, new chat, or background. |
-| Destination | Claude: Default, Chat, Cowork, or Code. ChatGPT: Default, Chat, or Codex. |
-| Auto-submit | Whether Command presses Return after filling a new chat. |
+| Delivery | Where the rendered prompt goes: existing conversation, new conversation, or background. |
+| Destination | Claude: Default, Recent, Chat, Cowork, or Code. ChatGPT: Default, Recent, Chat, or Codex. |
+| Auto-submit | Whether Command presses Return after filling a new conversation. |
 | Background | A local `claude -p` run with no Claude window. |
 
 ## Prompt Model
@@ -56,8 +56,8 @@ Unbound combinations, disabled triggers, and auto-submit combinations with no sh
 | Layer | Choices |
 |---|---|
 | Trigger | Selected text, Screenshot, Popup, Voice |
-| Delivery | Existing chat, New chat, Background |
-| Destination | Claude: Default, Chat, Cowork, Code. ChatGPT: Default, Chat, Codex. |
+| Delivery | Existing conversation, New conversation, Background |
+| Destination | Claude: Default, Recent, Chat, Cowork, Code. ChatGPT: Default, Recent, Chat, Codex. |
 
 `—` means inherit from prompt/action.
 
@@ -67,20 +67,22 @@ Default resolution:
 2. Prompt/action delivery and destination.
 3. Trigger override.
 
+Destination applies to New and Go prompts. Existing conversation keeps the current assistant surface. ChatGPT destinations are Recent, Chat, or Codex inside the ChatGPT app.
+
 ## Built-In Compose
 
 One shared Compose prompt powers six built-in combinations:
 
 | Combination | Input | Delivery | Default submit |
 |---|---|---|---|
-| Selected text -> Existing chat | Selected text | Existing chat | No |
-| Selected text -> New chat | Selected text | New chat | No |
-| Selected text -> New chat + auto-submit | Selected text | New chat | Yes |
-| Screenshot -> Existing chat | Screenshot | Existing chat | No |
-| Screenshot -> New chat | Screenshot | New chat | No |
-| Screenshot -> New chat + auto-submit | Screenshot | New chat | Yes |
+| Selected text -> Existing conversation | Selected text | Existing conversation | No |
+| Selected text -> New conversation | Selected text | New conversation | No |
+| Selected text -> New conversation + auto-submit | Selected text | New conversation | Yes |
+| Screenshot -> Existing conversation | Screenshot | Existing conversation | No |
+| Screenshot -> New conversation | Screenshot | New conversation | No |
+| Screenshot -> New conversation + auto-submit | Screenshot | New conversation | Yes |
 
-Pencil opens Compose editor for shared prompt text and default/per-row auto-submit. Auto-submit is on by default only for the two "New chat + auto-submit" combinations.
+Pencil opens Compose editor for shared prompt text and default/per-row auto-submit. Auto-submit is on by default only for the two "New conversation + auto-submit" combinations.
 
 ## Prompt Variables
 
@@ -164,12 +166,10 @@ Open **Settings -> About**:
 
 | Button | Use |
 |---|---|
-| Help & Documentation | App Site and GitHub. |
-| Support & Reporting | Diagnostics, public bug/feature routes, and private security reporting. |
+| Help & Documentation | Website, Docs, GitHub, diagnostics, bug reports, and feature requests. |
 | Copy Diagnostic Info | App path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews. |
 | Report a Bug | Prefilled GitHub issue template. |
 | Request Feature | Prefilled GitHub feature request template. |
-| Private Security Report | GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics. |
 
 ## Full Docs
 

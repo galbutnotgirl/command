@@ -62,15 +62,15 @@
         <table>
           <thead><tr><th>Built-in combination</th><th>Default</th><th>Result</th></tr></thead>
           <tbody>
-            <tr><td>Selected text -> Existing chat</td><td><kbd>Option-F8</kbd></td><td>Send selected text into current Claude chat.</td></tr>
-            <tr><td>Selected text -> New chat</td><td><kbd>F8</kbd></td><td>Open new Claude chat and wait.</td></tr>
-            <tr><td>Selected text -> New chat + auto-submit</td><td>Unbound</td><td>Open new Claude chat, submit, restore focus.</td></tr>
-            <tr><td>Screenshot -> Existing chat</td><td><kbd>Option-F7</kbd></td><td>Capture screenshot and add to current chat.</td></tr>
-            <tr><td>Screenshot -> New chat</td><td><kbd>F7</kbd></td><td>Capture screenshot and open new chat.</td></tr>
-            <tr><td>Screenshot -> New chat + auto-submit</td><td>Unbound</td><td>Capture screenshot, open new chat, submit.</td></tr>
+            <tr><td>Selected text -> Existing conversation</td><td><kbd>F8</kbd></td><td>Send selected text into current Claude chat.</td></tr>
+            <tr><td>Selected text -> New conversation</td><td><kbd>Command-F8</kbd></td><td>Open new Claude chat and wait.</td></tr>
+            <tr><td>Selected text -> New conversation + auto-submit</td><td>Unbound</td><td>Open new Claude chat, submit, restore focus.</td></tr>
+            <tr><td>Screenshot -> Existing conversation</td><td><kbd>F7</kbd></td><td>Capture screenshot and add to current chat.</td></tr>
+            <tr><td>Screenshot -> New conversation</td><td><kbd>Command-F7</kbd></td><td>Capture screenshot and open new conversation.</td></tr>
+            <tr><td>Screenshot -> New conversation + auto-submit</td><td>Unbound</td><td>Capture screenshot, open new conversation, submit.</td></tr>
             <tr><td>Clipboard History</td><td><kbd>F6</kbd></td><td>Open searchable clipboard picker.</td></tr>
-            <tr><td>Dictate -> Insert</td><td><kbd>Home</kbd></td><td>Speak and paste transcript at cursor.</td></tr>
-            <tr><td>Dictate -> Assistant</td><td><kbd>Option-Home</kbd></td><td>Speak and send transcript to selected assistant.</td></tr>
+            <tr><td>Dictate -> Insert</td><td><kbd>Fn</kbd></td><td>Speak and paste transcript at cursor.</td></tr>
+            <tr><td>Dictate -> Assistant</td><td>Unbound</td><td>Speak and send transcript to selected assistant.</td></tr>
             <tr><td>Dictate -> Assistant 2</td><td>Unbound</td><td>Optional second assistant dictation target.</td></tr>
           </tbody>
         </table>
@@ -83,7 +83,7 @@
           <thead><tr><th>Case</th><th>Guidance</th></tr></thead>
           <tbody>
             <tr><td>Home, End, PgUp, PgDn</td><td>Good choices for press-and-hold dictation because they avoid F-key media behavior on many keyboards. rebind dictation shortcuts in Dictation Settings.</td></tr>
-            <tr><td>F6/F7/F8 and Home</td><td>Default alpha choices. F6/F7/F8 can still conflict with app shortcuts, and Home can conflict with navigation-heavy workflows.</td></tr>
+            <tr><td>F6/F7/F8 and Fn</td><td>Default alpha choices. F6/F7/F8 can still conflict with app shortcuts, and Fn may depend on keyboard settings.</td></tr>
             <tr><td>Press-and-hold voice</td><td>Hold to record, release after the last word. The stop sound confirms release; the active menu-bar chip can stay visible while tail capture, transcription, cleanup, and dispatch finish.</td></tr>
             <tr><td>Double-tap voice</td><td>Double-tap to lock recording on when holding is awkward; stop from the menu or dictation control.</td></tr>
           </tbody>
@@ -110,9 +110,9 @@
             <tr><td>Prompt</td><td>The instruction text Command sends to Claude.</td></tr>
             <tr><td>Action</td><td>A named prompt setup, with defaults and one or more triggers.</td></tr>
             <tr><td>Trigger</td><td>The way content is captured: selected text, screenshot, popup, or voice.</td></tr>
-            <tr><td>Delivery</td><td>Where the rendered prompt goes: existing chat, new chat, or background.</td></tr>
+            <tr><td>Delivery</td><td>Where the rendered prompt goes: existing conversation, new conversation, or background.</td></tr>
             <tr><td>Destination</td><td>Claude: Default, Chat, Cowork, or Code. ChatGPT: Default, Chat, or Codex.</td></tr>
-            <tr><td>Auto-submit</td><td>Whether Command presses Return after filling a new chat.</td></tr>
+            <tr><td>Auto-submit</td><td>Whether Command presses Return after filling a new conversation.</td></tr>
             <tr><td>Background</td><td>A local <code>claude -p</code> run with no Claude window.</td></tr>
           </tbody>
         </table>
@@ -123,12 +123,12 @@
           <thead><tr><th>Layer</th><th>Choices</th></tr></thead>
           <tbody>
             <tr><td>Trigger</td><td>Selected text, Screenshot, Popup, Voice</td></tr>
-            <tr><td>Delivery</td><td>Existing chat, New chat, Background</td></tr>
+            <tr><td>Delivery</td><td>Existing conversation, New conversation, Background</td></tr>
             <tr><td>Destination</td><td>Claude: Default, Chat, Cowork, Code. ChatGPT: Default, Chat, Codex.</td></tr>
           </tbody>
         </table>
         <p><code>—</code> means inherit from prompt/action.</p>
-        <p>Destination resolves global setting first, then prompt/action default, then trigger override.</p>
+        <p>Destination resolves global setting first, then prompt/action default, then trigger override. Destination applies to New and Go prompts; Existing conversation keeps the current assistant surface. ChatGPT destinations are Recent, Chat, or Codex inside the ChatGPT app.</p>
       </section>
       <section id="built-in-compose">
         <h2>Built-In Compose</h2>
@@ -136,15 +136,15 @@
         <table>
           <thead><tr><th>Combination</th><th>Input</th><th>Delivery</th><th>Default submit</th></tr></thead>
           <tbody>
-            <tr><td>Selected text -> Existing chat</td><td>Selected text</td><td>Existing chat</td><td>No</td></tr>
-            <tr><td>Selected text -> New chat</td><td>Selected text</td><td>New chat</td><td>No</td></tr>
-            <tr><td>Selected text -> New chat + auto-submit</td><td>Selected text</td><td>New chat</td><td>Yes</td></tr>
-            <tr><td>Screenshot -> Existing chat</td><td>Screenshot</td><td>Existing chat</td><td>No</td></tr>
-            <tr><td>Screenshot -> New chat</td><td>Screenshot</td><td>New chat</td><td>No</td></tr>
-            <tr><td>Screenshot -> New chat + auto-submit</td><td>Screenshot</td><td>New chat</td><td>Yes</td></tr>
+            <tr><td>Selected text -> Existing conversation</td><td>Selected text</td><td>Existing conversation</td><td>No</td></tr>
+            <tr><td>Selected text -> New conversation</td><td>Selected text</td><td>New conversation</td><td>No</td></tr>
+            <tr><td>Selected text -> New conversation + auto-submit</td><td>Selected text</td><td>New conversation</td><td>Yes</td></tr>
+            <tr><td>Screenshot -> Existing conversation</td><td>Screenshot</td><td>Existing conversation</td><td>No</td></tr>
+            <tr><td>Screenshot -> New conversation</td><td>Screenshot</td><td>New conversation</td><td>No</td></tr>
+            <tr><td>Screenshot -> New conversation + auto-submit</td><td>Screenshot</td><td>New conversation</td><td>Yes</td></tr>
           </tbody>
         </table>
-        <p>Pencil opens Compose editor for shared prompt text and default/per-row auto-submit. Auto-submit is on by default only for the two "New chat + auto-submit" combinations.</p>
+        <p>Pencil opens Compose editor for shared prompt text and default/per-row auto-submit. Auto-submit is on by default only for the two "New conversation + auto-submit" combinations.</p>
       </section>
       <section id="variables">
         <h2>Prompt Variables</h2>
@@ -234,13 +234,11 @@
         <table>
           <thead><tr><th>Button</th><th>Use</th></tr></thead>
           <tbody>
-            <tr><td>Help &amp; Documentation</td><td>App Site and GitHub.</td></tr>
-            <tr><td>Support &amp; Reporting</td><td>Diagnostics, public bug/feature routes, and private security reporting.</td></tr>
-            <tr><td>Copy Diagnostic Info</td><td>App path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews.</td></tr>
+            <tr><td>Help &amp; Documentation</td><td>Website, Docs, GitHub, diagnostics, bug reports, and feature requests.</td></tr>
+                        <tr><td>Copy Diagnostic Info</td><td>App path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews.</td></tr>
             <tr><td>Report a Bug</td><td>Prefilled GitHub issue template.</td></tr>
             <tr><td>Request Feature</td><td>Prefilled GitHub feature request template.</td></tr>
-            <tr><td>Private Security Report</td><td>GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics.</td></tr>
-          </tbody>
+                      </tbody>
         </table>
       </section>
       <section id="full-docs">

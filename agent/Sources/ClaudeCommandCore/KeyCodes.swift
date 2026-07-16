@@ -22,14 +22,14 @@ public let KEYCODE_NAMES: [UInt32: String] = [
     37:"L",46:"M",45:"N",31:"O",35:"P",12:"Q",15:"R",1:"S",17:"T",32:"U",
     9:"V",13:"W",7:"X",16:"Y",6:"Z",18:"1",19:"2",20:"3",21:"4",23:"5",
     22:"6",26:"7",28:"8",25:"9",29:"0",49:"Space",
-    55:"Command",54:"Right Command",58:"Option",61:"Right Option",
+    63:"Fn",55:"Command",54:"Right Command",58:"Option",61:"Right Option",
     59:"Control",62:"Right Control",56:"Shift",60:"Right Shift",
     122:"F1",120:"F2",99:"F3",118:"F4",96:"F5",97:"F6",98:"F7",100:"F8",
     101:"F9",109:"F10",103:"F11",111:"F12",
     115:"Home",119:"End",116:"PgUp",121:"PgDn",117:"⌦",
 ]
 
-public let MODIFIER_ONLY_KEYCODES: Set<UInt32> = [54, 55, 56, 58, 59, 60, 61, 62]
+public let MODIFIER_ONLY_KEYCODES: Set<UInt32> = [54, 55, 56, 58, 59, 60, 61, 62, 63]
 
 public func humanShortcut(keycode: UInt32, mods: UInt32) -> String {
     var s = ""

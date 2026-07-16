@@ -47,9 +47,9 @@
         <p class="lead">User-facing release notes for alpha builds.</p>
         <h2>1.2.0-alpha.8</h2>
         <ul>
-          <li>Added first-class Claude and ChatGPT / Codex selection globally, per Custom Action, and per trigger.</li>
+          <li>Added first-class Claude and ChatGPT selection globally, per Custom Action, and per trigger, with Codex as a ChatGPT destination.</li>
           <li>Added ChatGPT general-chat and workspace-aware Codex destinations with global, action, and trigger inheritance.</li>
-          <li>Routed ChatGPT new sessions through Quick Chat and Codex new sessions through workspace-aware deep links.</li>
+          <li>Routed ChatGPT new conversations through Quick Chat and Codex destination conversations through workspace-aware deep links.</li>
           <li>Fixed foreground failures that could report success after workspace validation or task creation failed.</li>
           <li>Added Codex foreground tasks, workspace routing, background <code>codex exec -</code>, image attachments, safe execution presets, provider-tagged history, and compatible settings migration.</li>
         </ul>
@@ -66,7 +66,7 @@
           <li>Dictation got history, corrections, vocabulary, settings, and voice custom action routing.</li>
           <li>Active dictation now uses a compact solid-purple voice-lines menu-bar icon with animated white bars for stronger visibility without the earlier wide badge.</li>
           <li>Copy Diagnostic Info includes app path, bundle ID, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews for faster install/update/support triage.</li>
-          <li>About includes View on GitHub, Report a Bug, Request Feature, Security Policy, and Private Security Report routes so repository links, public issues, feature requests, and sensitive reports go to the right place.</li>
+          <li>About includes GitHub, Report a Bug, Request Feature, and Docs routes so public links go to the right place.</li>
           <li>App and repository are now named Command. Release assets use <code>Command-*.zip</code>, GitHub Pages lives under <code>/command/</code>, and compatibility IDs/paths stay stable so existing alpha permissions and local history continue working.</li>
           <li>Docs site now includes install, uninstall, user guide, settings reference, quick reference, examples, FAQ, alpha limitations, updates, permissions, troubleshooting, privacy, support, security policy, icon treatments, background architecture, release checklist, and 404 fallback.</li>
           <li>App bundle includes offline HTML/CSS/SVG/Markdown docs.</li>
@@ -78,15 +78,15 @@
         <table>
           <thead><tr><th>Built-in combination</th><th>Default</th></tr></thead>
           <tbody>
-            <tr><td>Selected text -> Existing chat</td><td><kbd>Option-F8</kbd></td></tr>
-            <tr><td>Selected text -> New chat</td><td><kbd>F8</kbd></td></tr>
-            <tr><td>Selected text -> New chat + auto-submit</td><td>Unbound</td></tr>
-            <tr><td>Screenshot -> Existing chat</td><td><kbd>Option-F7</kbd></td></tr>
-            <tr><td>Screenshot -> New chat</td><td><kbd>F7</kbd></td></tr>
-            <tr><td>Screenshot -> New chat + auto-submit</td><td>Unbound</td></tr>
+            <tr><td>Selected text -> Existing conversation</td><td><kbd>F8</kbd></td></tr>
+            <tr><td>Selected text -> New conversation</td><td><kbd>Command-F8</kbd></td></tr>
+            <tr><td>Selected text -> New conversation + auto-submit</td><td>Unbound</td></tr>
+            <tr><td>Screenshot -> Existing conversation</td><td><kbd>F7</kbd></td></tr>
+            <tr><td>Screenshot -> New conversation</td><td><kbd>Command-F7</kbd></td></tr>
+            <tr><td>Screenshot -> New conversation + auto-submit</td><td>Unbound</td></tr>
             <tr><td>Clipboard History</td><td><kbd>F6</kbd></td></tr>
-            <tr><td>Dictate -> Insert</td><td><kbd>Home</kbd></td></tr>
-            <tr><td>Dictate -> Assistant</td><td><kbd>Option-Home</kbd></td></tr>
+            <tr><td>Dictate -> Insert</td><td><kbd>Fn</kbd></td></tr>
+            <tr><td>Dictate -> Assistant</td><td>Unbound</td></tr>
             <tr><td>Dictate -> Assistant 2</td><td>Unbound</td></tr>
           </tbody>
         </table>
