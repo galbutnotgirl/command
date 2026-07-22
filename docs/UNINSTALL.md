@@ -7,8 +7,8 @@ Use this when removing Command from a Mac. For installing or updating, see [INST
 For a downloaded app install:
 
 ```bash
-osascript -e 'quit app "Command"' 2>/dev/null || true
 launchctl bootout "gui/$(id -u)/com.claudecommand" 2>/dev/null || true
+pkill -x Command 2>/dev/null || true
 rm -f ~/Library/LaunchAgents/com.claudecommand.plist
 rm -rf ~/Applications/Command.app
 ```

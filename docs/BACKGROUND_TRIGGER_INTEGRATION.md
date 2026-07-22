@@ -40,7 +40,7 @@ Dropped (Electron-specific, superseded by native equivalents):
 | Imported piece | Native equivalent |
 |---|---|
 | `src/main.js` (tray, globalShortcut) | `agent/main.swift` Carbon hotkeys + menu bar |
-| `src/capture/*` (osascript ⌘C, screencapture, clipboard) | `send-to-claude.sh` capture stages |
+| `src/capture/*` (native copy, screencapture, clipboard) | `send-to-claude.sh` capture stages |
 | `src/windows/*`, `renderer/*` (settings/text-entry UIs) | native Background Settings sheet + popup trigger panel (`agent/Handoff.swift`) |
 
 Kept unchanged: `src/{settings,prompt,runner,submit,submissions,paths}.js`, `test/`,

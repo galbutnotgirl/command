@@ -662,7 +662,7 @@ struct SetupView: View {
                     Spacer()
                 }
                 if pendingRestart {
-                    Text("Restarting Command so macOS can apply the new permission grant...")
+                    Text("Restarting Command so macOS can apply the new permission grant…")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -883,6 +883,7 @@ struct ShortcutsView: View {
     @ObservedObject var model: SettingsModel
     @StateObject private var templates = TemplatesModel()
     @State private var showingAddCustom = false
+    @State private var exportError: String?
 
     private var destBinding: Binding<String> {
         Binding(
@@ -915,7 +916,10 @@ struct ShortcutsView: View {
                 HStack {
                     Text("Shortcuts").font(.title2).bold()
                     Spacer()
-                    Button(action: exportGlobalBundle) {
+                    Button {
+                        do { try exportGlobalBundle() }
+                        catch { exportError = error.localizedDescription }
+                    } label: {
                         Label("Export…", systemImage: "square.and.arrow.up")
                     }
                     .help("Export all Command settings. Import later lets you choose what to keep or overwrite.")
@@ -1007,6 +1011,14 @@ struct ShortcutsView: View {
         .sheet(isPresented: $showingAddCustom) {
             CustomActionSheet(isPresented: $showingAddCustom, model: model)
         }
+        .alert("Export Failed", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { exportError = nil }
+        } message: {
+            Text(exportError ?? "Command could not export settings.")
+        }
     }
 }
 
@@ -1033,6 +1045,7 @@ struct BuiltInComposeCard: View {
                 }
                 .buttonStyle(.plain)
                 .help("Edit compose")
+                .accessibilityLabel("Edit Compose")
             }
             VStack(spacing: 6) {
                 BuiltInComposeSummaryRow(def: def(for: "add"), binding: binding(for: "add"), autoSubmit: settings.effectiveAutoSubmit(for: "add"))
@@ -1295,11 +1308,13 @@ struct CustomActionRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Edit action")
+                .accessibilityLabel("Edit \(ca.name)")
                 Button(action: { confirmingDelete = true }) {
                     Image(systemName: "trash").foregroundColor(.red)
                 }
                 .buttonStyle(.plain)
                 .help("Delete action")
+                .accessibilityLabel("Delete \(ca.name)")
             }
 
             ForEach(ca.triggers) { trig in
@@ -1641,6 +1656,7 @@ struct EditableTriggerRow: View {
                 }
                 .buttonStyle(.plain).disabled(!canRemove)
                 .help(canRemove ? "Remove this trigger" : "Action needs at least one trigger")
+                .accessibilityLabel("Remove \(trigger.kind.label) trigger")
             }
 
             HStack(spacing: 12) {
@@ -1965,7 +1981,10 @@ struct EnrichRuleRow: View {
                     }
                 Button { model.removeRule(id: rule.id) } label: {
                     Image(systemName: "minus.circle").foregroundColor(.red)
-                }.buttonStyle(.plain)
+                }
+                .buttonStyle(.plain)
+                .help("Remove context rule")
+                .accessibilityLabel("Remove context rule for \(rule.pattern)")
             }
             if match == .host {
                 HStack(spacing: 8) {
@@ -2052,6 +2071,23 @@ private struct ImportPreviewStats {
             "\(currentOnly) kept current-only"
         ]
         return parts.joined(separator: " · ") + (note.isEmpty ? "" : " · \(note)")
+    }
+}
+
+private enum GlobalBundleError: LocalizedError {
+    case invalidImportFile(String)
+    case invalidSection(String)
+    case saveFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidImportFile(let reason):
+            return "This file could not be imported: \(reason)"
+        case .invalidSection(let section):
+            return "\(section) has an unsupported or damaged format. No settings were changed."
+        case .saveFailed(let reason):
+            return "Command could not save the export: \(reason)"
+        }
     }
 }
 
@@ -2203,6 +2239,90 @@ private func importPayload(_ section: GlobalBundleSection, object: [String: Any]
     }
 }
 
+private func validatedImportPayload(_ section: GlobalBundleSection, object: [String: Any]) throws -> Any {
+    guard let payload = importPayload(section, object: object) else {
+        throw GlobalBundleError.invalidSection(section.label)
+    }
+    let valid: Bool
+    switch section {
+    case .shortcutBindings:
+        valid = (payload as? [[String: Any]])?.allSatisfy {
+            $0["action"] is String && $0["keycode"] is Int && $0["mods"] is Int
+                && ($0["enabled"] == nil || $0["enabled"] is Bool)
+        } == true
+    case .customActions:
+        valid = (payload as? [[String: Any]])?.allSatisfy {
+            $0["id"] is String && $0["name"] is String && $0["prompt"] is String
+        } == true
+    case .builtInCompose:
+        if let value = payload as? [String: Any] {
+            valid = value["autoSubmitDefault"] is Bool
+                && value["autoSubmitOverrides"] is [String: Bool]
+        } else { valid = false }
+    case .commandTemplates:
+        valid = payload is [String: String]
+    case .contextRules:
+        valid = (payload as? [[String: Any]])?.allSatisfy {
+            guard let rawMatch = $0["match"] as? String else { return false }
+            return EnrichMatchType(rawValue: rawMatch) != nil
+                && $0["pattern"] is String && $0["text"] is String
+        } == true
+    case .vocabulary:
+        if let value = payload as? [String: Any] {
+            let replacementsValid = (value["replacements"] as? [[String: Any]])?.allSatisfy {
+                $0["wrong"] is String && $0["correct"] is String
+            } ?? (value["replacements"] == nil)
+            let termsValid = value["vocab"] is [String] || value["vocab"] == nil
+            let fillersValid = (value["fillers"] as? [[String: Any]])?.allSatisfy {
+                $0["phrase"] is String
+            } ?? (value["fillers"] == nil)
+            valid = replacementsValid && termsValid && fillersValid
+        } else { valid = false }
+    case .handoffSettings:
+        valid = payload is [String: Any]
+    case .appPreferences:
+        if let value = payload as? [String: Any] {
+            let providerValid = value["defaultProvider"] == nil
+                || (value["defaultProvider"] as? String).flatMap(AIProvider.init(rawValue:)) != nil
+            let claudeDestinationValid = value["claudeDestination"] == nil
+                || (value["claudeDestination"] as? String).flatMap(ClaudeDestination.init(rawValue:)).map { $0 != .default } == true
+            let codexDestinationValid = value["codexDestination"] == nil
+                || ["recent", "chat", "code"].contains(value["codexDestination"] as? String ?? "")
+            let workspaceValid = value["codexWorkspace"] == nil || value["codexWorkspace"] is String
+            let retentionValid = ["clipRetentionDays", "commandRetentionDays", "handoffRetentionDays"].allSatisfy {
+                value[$0] == nil || (value[$0] as? Int).map { $0 >= 1 && $0 <= 365 } == true
+            }
+            let boolKeys = [
+                VoiceSettingsKeys.soundsEnabled,
+                VoiceSettingsKeys.dictationEnabled,
+                VoiceSettingsKeys.fillerRemoval,
+                VoiceSettingsKeys.smartFormatting,
+                VoiceSettingsKeys.aiCleanup
+            ]
+            let booleansValid = boolKeys.allSatisfy { value[$0] == nil || value[$0] is Bool }
+            let soundNamesValid = [VoiceSettingsKeys.startSound, VoiceSettingsKeys.stopSound].allSatisfy {
+                value[$0] == nil || value[$0] is String
+            }
+            let volumeValid = value[VoiceSettingsKeys.soundVolume] == nil
+                || (value[VoiceSettingsKeys.soundVolume] as? Double).map { $0 >= 0 && $0 <= 1 } == true
+            let durationValid = value[VoiceSettingsKeys.minDictationDuration] == nil
+                || (value[VoiceSettingsKeys.minDictationDuration] as? Double).map { $0 >= 0 && $0 <= 1.5 } == true
+            let assistantKeys = [
+                VoiceSettingsKeys.dictationAssistantProvider,
+                VoiceSettingsKeys.dictationAssistant2Provider
+            ]
+            let assistantsValid = assistantKeys.allSatisfy {
+                value[$0] == nil || (value[$0] as? String).flatMap(AIProviderChoice.init(rawValue:)) != nil
+            }
+            valid = providerValid && claudeDestinationValid && codexDestinationValid
+                && workspaceValid && retentionValid && booleansValid && soundNamesValid
+                && volumeValid && durationValid && assistantsValid
+        } else { valid = false }
+    }
+    guard valid else { throw GlobalBundleError.invalidSection(section.label) }
+    return payload
+}
+
 @MainActor
 private func importPreviewStats(_ section: GlobalBundleSection, object: [String: Any]) -> ImportPreviewStats? {
     guard let payload = importPayload(section, object: object) else { return nil }
@@ -2229,12 +2349,17 @@ private func importPreviewStats(_ section: GlobalBundleSection, object: [String:
         let replacements = (root["replacements"] as? [Any])?.count ?? 0
         let terms = (root["vocab"] as? [Any])?.count ?? 0
         let fillers = (root["fillers"] as? [Any])?.count ?? 0
-        let incoming = replacements + terms + fillers
         let currentRoot = jsonObject(at: VocabularyStore.diskURL().path, fallback: [:]) as? [String: Any] ?? [:]
-        let current = (currentRoot["replacements"] as? [Any])?.count ?? 0
-            + ((currentRoot["vocab"] as? [Any])?.count ?? 0)
-            + ((currentRoot["fillers"] as? [Any])?.count ?? 0)
-        return ImportPreviewStats(incoming: incoming, current: current, same: 0, added: incoming, updated: 0, currentOnly: current, note: "\(replacements) corrections, \(terms) terms, \(fillers) fillers.")
+        let counts = vocabularyImportPreviewCounts(current: currentRoot, incoming: root)
+        return ImportPreviewStats(
+            incoming: counts.incoming,
+            current: counts.current,
+            same: counts.same,
+            added: counts.added,
+            updated: counts.updated,
+            currentOnly: counts.currentOnly,
+            note: "\(replacements) corrections, \(terms) terms, \(fillers) fillers."
+        )
     case .handoffSettings:
         return dictionaryPreview(current: handoffSettingsJSON(),
                                  incoming: payload as? [String: Any] ?? [:])
@@ -2269,20 +2394,33 @@ private func currentAppPreferencesPreview() -> [String: Any] {
     ]
 }
 
+private func defaultAppPreferences() -> [String: Any] {
+    [
+        "defaultProvider": "codex",
+        "claudeDestination": "recent",
+        "codexDestination": "recent",
+        "codexWorkspace": NSHomeDirectory(),
+        "clipRetentionDays": 7,
+        "commandRetentionDays": 7,
+        "handoffRetentionDays": 7,
+        VoiceSettingsKeys.soundsEnabled: VoiceSettingsDefaults.soundsEnabled,
+        VoiceSettingsKeys.soundVolume: VoiceSettingsDefaults.soundVolume,
+        VoiceSettingsKeys.startSound: VoiceSettingsDefaults.startSound,
+        VoiceSettingsKeys.stopSound: VoiceSettingsDefaults.stopSound,
+        VoiceSettingsKeys.dictationEnabled: VoiceSettingsDefaults.dictationEnabled,
+        VoiceSettingsKeys.minDictationDuration: VoiceSettingsDefaults.minDictationDuration,
+        VoiceSettingsKeys.dictationAssistantProvider: VoiceSettingsDefaults.dictationAssistantProvider,
+        VoiceSettingsKeys.dictationAssistant2Provider: VoiceSettingsDefaults.dictationAssistant2Provider,
+        VoiceSettingsKeys.fillerRemoval: VoiceSettingsDefaults.fillerRemoval,
+        VoiceSettingsKeys.smartFormatting: VoiceSettingsDefaults.smartFormatting,
+        VoiceSettingsKeys.aiCleanup: VoiceSettingsDefaults.aiCleanup
+    ]
+}
+
 private func jsonObject(at path: String, fallback: Any) -> Any {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
           let obj = try? JSONSerialization.jsonObject(with: data) else { return fallback }
     return obj
-}
-
-private func writeJSONObject(_ obj: Any, to path: String) {
-    guard JSONSerialization.isValidJSONObject(obj),
-          let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]) else { return }
-    try? FileManager.default.createDirectory(
-        at: URL(fileURLWithPath: path).deletingLastPathComponent(),
-        withIntermediateDirectories: true
-    )
-    try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
 }
 
 @MainActor
@@ -2323,26 +2461,34 @@ private func globalBundle() -> [String: Any] {
 }
 
 @MainActor
-private func exportGlobalBundle() {
-    guard let data = try? JSONSerialization.data(withJSONObject: globalBundle(), options: [.prettyPrinted]) else { return }
+private func exportGlobalBundle() throws {
+    let data = try encodeImportJSONObject(globalBundle())
     let panel = NSSavePanel()
     panel.allowedContentTypes = [.json]
     let stamp = DateFormatter()
     stamp.dateFormat = "yyyy-MM-dd"
     panel.nameFieldStringValue = "command-export-\(stamp.string(from: Date())).json"
     if panel.runModal() == .OK, let url = panel.url {
-        try? data.write(to: url)
+        do { try data.write(to: url, options: .atomic) }
+        catch { throw GlobalBundleError.saveFailed(error.localizedDescription) }
     }
 }
 
 @MainActor
-private func chooseGlobalImportBundle() -> GlobalImportBundle? {
+private func chooseGlobalImportBundle() throws -> GlobalImportBundle? {
     let panel = NSOpenPanel()
     panel.allowedContentTypes = [.json]
     panel.message = "Select a Command export file"
-    guard panel.runModal() == .OK, let url = panel.url,
-          let data = try? Data(contentsOf: url),
-          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+    guard panel.runModal() == .OK, let url = panel.url else { return nil }
+    let data: Data
+    do { data = try Data(contentsOf: url) }
+    catch { throw GlobalBundleError.invalidImportFile(error.localizedDescription) }
+    let value: Any
+    do { value = try JSONSerialization.jsonObject(with: data) }
+    catch { throw GlobalBundleError.invalidImportFile("invalid JSON") }
+    guard let obj = value as? [String: Any] else {
+        throw GlobalBundleError.invalidImportFile("expected a Command settings object")
+    }
     var available = Set<GlobalBundleSection>()
     if importPayload(.shortcutBindings, object: obj) != nil { available.insert(.shortcutBindings) }
     if importPayload(.customActions, object: obj) != nil { available.insert(.customActions) }
@@ -2356,56 +2502,109 @@ private func chooseGlobalImportBundle() -> GlobalImportBundle? {
 }
 
 @MainActor
-private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundleSection: GlobalImportMode], model: SettingsModel) {
+private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundleSection: GlobalImportMode], model: SettingsModel) throws {
     let obj = bundle.object
-    if let mode = modes[.shortcutBindings], mode != .skip, let hotkeys = importPayload(.shortcutBindings, object: obj) {
-        let merged: Any
-        if mode == .merge, let incoming = hotkeys as? [[String: Any]] {
-            merged = mergeDictionaryArrays(current: hotkeyJSON(loadBindings()), incoming: incoming, key: "action")
-        } else {
-            merged = hotkeys
-        }
-        writeJSONObject(merged, to: CFG)
+    var mutations: [ImportFileMutation] = []
+    var importedPreferences: [String: Any]?
+    var shouldReloadVocabulary = false
+
+    func appendMutation(_ value: Any, path: String) throws {
+        mutations.append(ImportFileMutation(
+            url: URL(fileURLWithPath: path),
+            data: try encodeImportJSONObject(value)
+        ))
     }
-    if let mode = modes[.customActions], mode != .skip, let actions = importPayload(.customActions, object: obj) {
-        writeJSONObject(mergedArray(currentPath: CUSTOM_ACTIONS_PATH, incoming: actions, key: "id", mode: mode), to: CUSTOM_ACTIONS_PATH)
+
+    if let mode = modes[.shortcutBindings], mode != .skip {
+        let incoming = try validatedImportPayload(.shortcutBindings, object: obj) as! [[String: Any]]
+        let value = mode == .merge
+            ? mergeDictionaryArrays(current: hotkeyJSON(loadBindings()), incoming: incoming, key: "action")
+            : incoming
+        try appendMutation(value, path: CFG)
     }
-    if let mode = modes[.builtInCompose], mode != .skip, let compose = importPayload(.builtInCompose, object: obj) {
-        let merged: Any
-        if mode == .merge, let incoming = compose as? [String: Any] {
-            merged = mergeDictionaryValues(current: builtInComposeJSON(), incoming: incoming)
-        } else { merged = compose }
-        writeJSONObject(merged, to: BUILTIN_COMPOSE_SETTINGS_PATH)
+    if let mode = modes[.customActions], mode != .skip {
+        let incoming = try validatedImportPayload(.customActions, object: obj) as! [[String: Any]]
+        let value = mode == .merge
+            ? mergeDictionaryArrays(
+                current: jsonObject(at: CUSTOM_ACTIONS_PATH, fallback: []) as? [[String: Any]] ?? [],
+                incoming: incoming,
+                key: "id"
+            )
+            : incoming
+        try appendMutation(value, path: CUSTOM_ACTIONS_PATH)
     }
-    if let mode = modes[.commandTemplates], mode != .skip, let t = importPayload(.commandTemplates, object: obj) {
-        let merged: Any
-        if mode == .merge, let incoming = t as? [String: Any] {
-            merged = mergeDictionaryValues(current: commandTemplateJSON(), incoming: incoming)
-        } else { merged = t }
-        writeJSONObject(merged, to: COMMAND_TEMPLATES_PATH)
+    if let mode = modes[.builtInCompose], mode != .skip {
+        let incoming = try validatedImportPayload(.builtInCompose, object: obj) as! [String: Any]
+        let value = mode == .merge
+            ? mergeDictionaryValues(current: builtInComposeJSON(), incoming: incoming)
+            : incoming
+        try appendMutation(value, path: BUILTIN_COMPOSE_SETTINGS_PATH)
     }
-    if let mode = modes[.contextRules], mode != .skip, let r = importPayload(.contextRules, object: obj) {
-        let merged: Any
-        if mode == .merge, let incoming = r as? [[String: Any]] {
-            merged = mergeEnrichRuleDictionaries(current: enrichRulesJSON(), incoming: incoming)
-        } else { merged = r }
-        writeJSONObject(merged, to: ENRICHMENT_RULES_PATH)
+    if let mode = modes[.commandTemplates], mode != .skip {
+        let incoming = try validatedImportPayload(.commandTemplates, object: obj) as! [String: Any]
+        let value = mode == .merge
+            ? mergeDictionaryValues(current: commandTemplateJSON(), incoming: incoming)
+            : incoming
+        try appendMutation(value, path: COMMAND_TEMPLATES_PATH)
+    }
+    if let mode = modes[.contextRules], mode != .skip {
+        let incoming = try validatedImportPayload(.contextRules, object: obj) as! [[String: Any]]
+        let value = mode == .merge
+            ? mergeEnrichRuleDictionaries(current: enrichRulesJSON(), incoming: incoming)
+            : incoming
+        try appendMutation(value, path: ENRICHMENT_RULES_PATH)
     }
     if let mode = modes[.vocabulary], mode != .skip {
-        let vocabObj: Any? = obj["vocabulary"] ?? (obj["replacements"] != nil || obj["vocab"] != nil ? obj : nil)
-        if let vocabObj { writeJSONObject(mergedVocabulary(incoming: vocabObj, mode: mode), to: VocabularyStore.diskURL().path); VocabularyStore.shared.load() }
+        let incoming = try validatedImportPayload(.vocabulary, object: obj) as! [String: Any]
+        let value = mode == .merge
+            ? mergeVocabularyDictionaries(
+                current: jsonObject(at: VocabularyStore.diskURL().path, fallback: [:]) as? [String: Any] ?? [:],
+                incoming: incoming
+            )
+            : incoming
+        try appendMutation(value, path: VocabularyStore.diskURL().path)
+        shouldReloadVocabulary = true
     }
-    if let mode = modes[.handoffSettings], mode != .skip, let h = obj["handoffSettings"] {
-        let merged: Any
-        if mode == .merge, let incoming = h as? [String: Any] {
-            merged = mergeDictionaryValues(current: handoffSettingsJSON(), incoming: incoming)
-        } else { merged = h }
-        writeJSONObject(merged, to: HandoffConfig.settingsFile)
+    if let mode = modes[.handoffSettings], mode != .skip {
+        let incoming = try validatedImportPayload(.handoffSettings, object: obj) as! [String: Any]
+        let value = mode == .merge
+            ? mergeDictionaryValues(current: handoffSettingsJSON(), incoming: incoming)
+            : incoming
+        try appendMutation(value, path: HandoffConfig.settingsFile)
     }
-    if let mode = modes[.appPreferences], mode != .skip, let prefs = obj["appPreferences"] as? [String: Any] {
-        if let v = prefs["claudeDestination"] as? String {
-            UserDefaults.standard.set(v, forKey: "claudeDestination")
-            model.claudeDestination = v
+    if let mode = modes[.appPreferences], mode != .skip {
+        let incoming = try validatedImportPayload(.appPreferences, object: obj) as! [String: Any]
+        importedPreferences = mode == .overwrite
+            ? mergeDictionaryValues(current: defaultAppPreferences(), incoming: incoming)
+            : incoming
+    }
+
+    if let prefs = importedPreferences {
+        var commandConfig = readCommandConfig()
+        var changesCommandConfig = false
+        for (preferenceKey, configKey) in [
+            ("clipRetentionDays", "retentionDays"),
+            ("commandRetentionDays", "commandRetentionDays"),
+            ("handoffRetentionDays", "handoffRetentionDays")
+        ] {
+            if let value = prefs[preferenceKey] as? Int {
+                commandConfig[configKey] = value
+                changesCommandConfig = true
+            }
+        }
+        if changesCommandConfig {
+            try appendMutation(commandConfig, path: COMMAND_CONFIG)
+        }
+    }
+
+    try applyImportFileMutations(mutations)
+    if shouldReloadVocabulary { VocabularyStore.shared.load() }
+
+    if let prefs = importedPreferences {
+        if let v = prefs["claudeDestination"] as? String,
+           let destination = ClaudeDestination(rawValue: v), destination != .default {
+                UserDefaults.standard.set(v, forKey: "claudeDestination")
+                model.claudeDestination = v
         }
         if let v = prefs["codexDestination"] as? String, v == "recent" || v == "chat" || v == "code" {
             UserDefaults.standard.set(v, forKey: "codexDestination")
@@ -2419,9 +2618,6 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
             UserDefaults.standard.set(v, forKey: "codexWorkspace")
             model.codexWorkspace = v
         }
-        if let v = prefs["clipRetentionDays"] as? Int { writeRetentionDays(v) }
-        if let v = prefs["commandRetentionDays"] as? Int { writeCommandRetentionDays(v) }
-        if let v = prefs["handoffRetentionDays"] as? Int { writeHandoffRetentionDays(v) }
         if let v = prefs[VoiceSettingsKeys.soundsEnabled] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.soundsEnabled); model.soundsEnabled = v }
         if let v = prefs[VoiceSettingsKeys.soundVolume] as? Double { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.soundVolume); model.soundVolume = v }
         if let v = prefs[VoiceSettingsKeys.startSound] as? String { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.startSound); model.startSound = v }
@@ -2451,26 +2647,12 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
     model.refresh()
 }
 
-private func mergedArray(currentPath: String, incoming: Any, key: String, mode: GlobalImportMode) -> Any {
-    guard mode == .merge,
-          let current = jsonObject(at: currentPath, fallback: []) as? [[String: Any]],
-          let inc = incoming as? [[String: Any]] else { return incoming }
-    return mergeDictionaryArrays(current: current, incoming: inc, key: key)
-}
-
-@MainActor
-private func mergedVocabulary(incoming: Any, mode: GlobalImportMode) -> Any {
-    guard mode == .merge,
-          let cur = jsonObject(at: VocabularyStore.diskURL().path, fallback: [:]) as? [String: Any],
-          let inc = incoming as? [String: Any] else { return incoming }
-    return mergeVocabularyDictionaries(current: cur, incoming: inc)
-}
-
 struct GlobalImportSheet: View {
     @Binding var isPresented: Bool
     let bundle: GlobalImportBundle
     @ObservedObject var model: SettingsModel
     @State private var modes: [GlobalBundleSection: GlobalImportMode] = [:]
+    @State private var importError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2540,8 +2722,12 @@ struct GlobalImportSheet: View {
                 Button("Cancel") { isPresented = false }
                 Spacer()
                 Button("Import Selected") {
-                    applyGlobalImport(bundle, modes: modes, model: model)
-                    isPresented = false
+                    do {
+                        try applyGlobalImport(bundle, modes: modes, model: model)
+                        isPresented = false
+                    } catch {
+                        importError = error.localizedDescription
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!modes.values.contains { $0 != .skip })
@@ -2556,6 +2742,14 @@ struct GlobalImportSheet: View {
                 initial[s] = bundle.available.contains(s) ? .merge : .skip
             }
             modes = initial
+        }
+        .alert("Import Failed", isPresented: Binding(
+            get: { importError != nil },
+            set: { if !$0 { importError = nil } }
+        )) {
+            Button("OK", role: .cancel) { importError = nil }
+        } message: {
+            Text(importError ?? "Command could not import settings.")
         }
     }
 }
@@ -2943,6 +3137,7 @@ struct HandoffsView: View {
                     Spacer()
                     Button(action: refresh) { Image(systemName: "arrow.clockwise") }
                         .help("Reload from disk")
+                        .accessibilityLabel("Reload Command History")
                 }
                 Text("Commands sent through Command. Background runs and foreground shortcuts share the same seven-day retention foundation.")
                     .font(.caption).foregroundColor(.secondary)
@@ -3128,7 +3323,9 @@ struct HandoffSubmissionRow: View {
                 if let log = submission.logFile, FileManager.default.fileExists(atPath: log) {
                     Button { NSWorkspace.shared.open(URL(fileURLWithPath: log)) } label: {
                         Image(systemName: "doc.text.magnifyingglass")
-                    }.buttonStyle(.plain).help("Open log")
+                    }
+                    .buttonStyle(.plain).help("Open log")
+                    .accessibilityLabel("Open background run log")
                 }
                 if submission.status == "failed" {
                     Button {
@@ -3137,16 +3334,23 @@ struct HandoffSubmissionRow: View {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { retried = false }
                     } label: {
                         Image(systemName: retried ? "checkmark" : "arrow.clockwise")
-                    }.buttonStyle(.plain).help("Retry").disabled(retried)
+                    }
+                    .buttonStyle(.plain).help("Retry").disabled(retried)
+                    .accessibilityLabel(retried ? "Background run retry started" : "Retry background run")
                 }
                 if submission.isStalled {
                     Button { onMarkFailed() } label: {
                         Image(systemName: "exclamationmark.octagon").foregroundColor(.orange)
-                    }.buttonStyle(.plain).help("Stuck at \"running\" — mark as failed so it can be retried")
+                    }
+                    .buttonStyle(.plain).help("Stuck at \"running\" — mark as failed so it can be retried")
+                    .accessibilityLabel("Mark stalled background run as failed")
                 }
                 Button { onDelete() } label: {
                     Image(systemName: "trash").foregroundColor(.red)
-                }.buttonStyle(.plain)
+                }
+                .buttonStyle(.plain)
+                .help("Delete background run")
+                .accessibilityLabel("Delete background run")
             }
             if expanded, let prompt = submission.prompt {
                 Text(prompt)
@@ -3374,6 +3578,8 @@ struct AboutView: View {
     @State private var channel = currentChannel()
     @State private var diagCopied = false
     @State private var importBundle: GlobalImportBundle? = nil
+    @State private var transferErrorTitle = ""
+    @State private var transferError: String?
 
     private var version: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
@@ -3456,12 +3662,20 @@ struct AboutView: View {
                         .font(.caption).foregroundColor(.secondary)
                     HStack(spacing: 10) {
                         Button {
-                            exportGlobalBundle()
+                            do { try exportGlobalBundle() }
+                            catch {
+                                transferErrorTitle = "Export Failed"
+                                transferError = error.localizedDescription
+                            }
                         } label: {
                             Label("Export…", systemImage: "square.and.arrow.up")
                         }
                         Button {
-                            importBundle = chooseGlobalImportBundle()
+                            do { importBundle = try chooseGlobalImportBundle() }
+                            catch {
+                                transferErrorTitle = "Import Failed"
+                                transferError = error.localizedDescription
+                            }
                         } label: {
                             Label("Import…", systemImage: "square.and.arrow.down")
                         }
@@ -3519,6 +3733,14 @@ struct AboutView: View {
                 get: { importBundle != nil },
                 set: { if !$0 { importBundle = nil } }
             ), bundle: bundle, model: model)
+        }
+        .alert(transferErrorTitle, isPresented: Binding(
+            get: { transferError != nil },
+            set: { if !$0 { transferError = nil } }
+        )) {
+            Button("OK", role: .cancel) { transferError = nil }
+        } message: {
+            Text(transferError ?? "Command could not complete this settings transfer.")
         }
     }
 
@@ -3865,16 +4087,21 @@ struct HistoryEntryRow: View {
                     NSPasteboard.general.setString(entry.processed, forType: .string)
                 } label: { Image(systemName: "doc.on.doc").font(.caption) }
                 .buttonStyle(.plain).help("Copy")
+                .accessibilityLabel("Copy dictation")
 
                 Button {
                     correctionRequest = CorrectionRequest(fullText: entry.processed, preselected: selectedText)
                 } label: {
                     Image(systemName: "wand.and.sparkles").font(.caption)
-                }.buttonStyle(.plain).help("Add correction — select a word first, then click")
+                }
+                .buttonStyle(.plain).help("Add correction — select a word first, then click")
+                .accessibilityLabel("Add correction from dictation")
 
                 Button { hist.remove(id: entry.id) } label: {
                     Image(systemName: "trash").font(.caption).foregroundColor(.red)
-                }.buttonStyle(.plain).help("Delete")
+                }
+                .buttonStyle(.plain).help("Delete")
+                .accessibilityLabel("Delete dictation")
             }
             SelectableText(text: entry.processed, selection: $selectedText)
             if entry.processed != entry.raw {
@@ -3993,7 +4220,10 @@ struct DictCorrectionsView: View {
                                         Spacer()
                                         Button { vocab.removeReplacement(id: r.id) } label: {
                                             Image(systemName: "trash").foregroundColor(.red)
-                                        }.buttonStyle(.plain)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Delete correction")
+                                        .accessibilityLabel("Delete correction for \(r.wrong)")
                                     }.font(.system(size: 13))
                                     .settingsCard()
                                 }
@@ -4068,7 +4298,10 @@ struct DictVocabularyView: View {
                                         Spacer()
                                         Button { vocab.removeVocab(at: IndexSet([i])) } label: {
                                             Image(systemName: "trash").foregroundColor(.red)
-                                        }.buttonStyle(.plain)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Delete vocabulary term")
+                                        .accessibilityLabel("Delete vocabulary term \(term)")
                                     }.font(.system(size: 13))
                                     .settingsCard()
                                 }
@@ -4102,7 +4335,10 @@ struct DictVocabularyView: View {
                                     Spacer()
                                     Button { vocab.removeFiller(id: f.id) } label: {
                                         Image(systemName: "trash").foregroundColor(.red)
-                                    }.buttonStyle(.plain)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Delete filler phrase")
+                                    .accessibilityLabel("Delete filler phrase \(f.phrase)")
                                 }.font(.system(size: 13))
                                 .settingsCard()
                             }
@@ -4158,6 +4394,8 @@ struct SoundRow: View {
                     .frame(width: 24)
             }
             .buttonStyle(.plain)
+            .help("Preview \(name) sound")
+            .accessibilityLabel("Preview \(name) sound")
 
             Text(name).font(.system(size: 13)).frame(maxWidth: .infinity, alignment: .leading)
 

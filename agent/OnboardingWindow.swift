@@ -133,7 +133,7 @@ struct OnboardingView: View {
             case .screenRecording:
                 ScreenRecordingStepView(
                     onRequest: { requestScreenRecording() },
-                    onDone: { withAnimation(.easeInOut(duration: 0.3)) { step = .microphone } }
+                    onDone: { restartApp() }
                 )
                 .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
 
@@ -556,7 +556,7 @@ struct AccessibilityStepView: View {
                 HStack(spacing: 10) {
                     Button("Ask again") { onRequest() }
                         .buttonStyle(.bordered).controlSize(.small)
-                    Button("I've enabled it ->") { onContinue() }
+                    Button("I've enabled it →") { onContinue() }
                         .buttonStyle(.borderedProminent).controlSize(.regular)
                 }
             }
@@ -824,7 +824,7 @@ struct MicrophoneStepView: View {
 
                 if enableDictation {
                     if micGranted {
-                        Button("Continue  ->") {
+                        Button("Continue →") {
                             onContinue(true)
                         }
                         .buttonStyle(.borderedProminent)
@@ -865,7 +865,7 @@ struct DoneStepView: View {
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)
-            Text("Restarting in \(countdown)...")
+            Text("Restarting in \(countdown)…")
                 .font(.headline).foregroundColor(.accentColor)
                 .monospacedDigit()
         }

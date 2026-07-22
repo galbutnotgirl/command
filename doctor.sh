@@ -145,13 +145,10 @@ if [ -f "${STATE}/cliphistory/index.json" ]; then
 fi
 
 print -- "Claude Code desktop app"
-CLAUDE_APP_ID="$(osascript -e 'id of app "Claude"' 2>/dev/null || true)"
 if mdfind "kMDItemCFBundleIdentifier == '${CLAUDE_BUNDLE}'" 2>/dev/null | grep -q .; then
   pass "Claude desktop app found"
 elif [ -d "/Applications/Claude.app" ] || [ -d "${HOME}/Applications/Claude.app" ]; then
   pass "Claude desktop app found at standard app path"
-elif [ -n "${CLAUDE_APP_ID}" ]; then
-  pass "Claude desktop app found (${CLAUDE_APP_ID})"
 else
   fail "Claude desktop app not found"; note "install it — every action opens claude://code/…"
 fi

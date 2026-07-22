@@ -1,6 +1,6 @@
 // SendHelper — tiny stable-identity helper so keystroke synthesis needs
 // Accessibility ONCE (granted to this app), with NO Automation/Apple-Events
-// prompts. The Quick Actions call this instead of `osascript … System Events`.
+// prompts. Quick Actions call this instead of short-lived automation processes.
 //
 // Commands:
 //   sendhelper copy [out] → synth ⌘C, then write clipboard text to `out` file

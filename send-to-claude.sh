@@ -69,24 +69,14 @@ BLOCK_BUNDLES=(com.apple.keychainaccess com.apple.SecurityAgent com.1password.1p
 
 mkdir -p "$(dirname "$DO_LOG")" 2>/dev/null
 log()    { print -r -- "$(date '+%Y-%m-%d %H:%M:%S') [s2c] $*" >> "$LOG_FILE" 2>/dev/null || true; }
-notify() { [ "${COMMAND_TEST_SILENT:-0}" = "1" ] || osascript -e "display notification \"$1\" with title \"${2:-Command}\"" 2>/dev/null; }
 urlencode() { printf '%s' "$1" | /usr/bin/python3 -c 'import sys,urllib.parse; sys.stdout.write(urllib.parse.quote(sys.stdin.read()))'; }
 pb_cc()  { /usr/bin/python3 -c 'from AppKit import NSPasteboard; print(NSPasteboard.generalPasteboard().changeCount())' 2>/dev/null; }
-clipboard_has_image() {
-  osascript -e 'try
-    repeat with i in (clipboard info)
-      set k to (item 1 of i) as string
-      if k contains "PNG" or k contains "TIFF" or k contains "picture" then return "yes"
-    end repeat
-  end try
-  return "no"' 2>/dev/null | grep -q yes
-}
 front_bundle() { local a; a="$(lsappinfo front 2>/dev/null)"; [ -n "$a" ] && lsappinfo info -only bundleid "$a" 2>/dev/null | awk -F'"' '{print $4}'; }
 front_name()   { local a; a="$(lsappinfo front 2>/dev/null)"; [ -n "$a" ] && lsappinfo info -only name "$a" 2>/dev/null | awk -F'"' '{print $4}'; }
 # Keystroke synthesis: prefer the always-running Command app (its own TCC
 # identity, granted once; instant — no launch latency, so submit/paste land in
 # the right field). Fall back to launching SendHelper via `open -gW` (own
-# process too, but slower) if the agent socket isn't up. No osascript/System
+# process too, but slower) if the agent socket isn't up. No Apple Events/System
 # Events fallback — that was the source of per-app Automation prompts.
 agent_cmd() {  # $1 = command; prints the agent's reply on stdout; nonzero if unreachable
   [ -S "$AGENT_SOCK" ] || return 1
@@ -101,6 +91,12 @@ except Exception:
     sys.exit(1)
 PY
 }
+encode_agent_field() { printf '%s' "$1" | /usr/bin/base64 | tr -d '\n'; }
+notify() {
+  [ "${COMMAND_TEST_SILENT:-0}" = "1" ] && return
+  agent_cmd "notify $(encode_agent_field "${2:-Command}") $(encode_agent_field "$1")" >/dev/null 2>&1 || true
+}
+clipboard_has_image() { [ "$(agent_cmd clipboardhasimage 2>/dev/null)" = "yes" ]; }
 helper_run()   { [ -d "$HELPER_APP" ] && open -gW "$HELPER_APP" --args "$@" 2>/dev/null; }
 helper_paste() {
   # New Claude and unified ChatGPT can create an Electron window without making
@@ -263,9 +259,8 @@ fi
 URL="${SOURCE_URL:-}"
 if [ -z "$URL" ]; then
   case "$BUNDLE_ID" in
-    com.apple.Safari) URL="$(osascript -e 'tell application "Safari" to get URL of front document' 2>/dev/null)" ;;
-    com.google.Chrome|com.brave.Browser|org.chromium.Chromium) URL="$(osascript -e "tell application \"$APP_NAME\" to get URL of active tab of front window" 2>/dev/null)" ;;
-    company.thebrowser.Browser) URL="$(osascript -e 'tell application "Arc" to get URL of active tab of front window' 2>/dev/null)" ;;
+    com.apple.Safari|com.google.Chrome|com.brave.Browser|org.chromium.Chromium|company.thebrowser.Browser)
+      URL="$(agent_cmd "fronturl $BUNDLE_ID" 2>/dev/null)" ;;
   esac
 fi
 HOST="$(printf '%s' "$URL" | sed -n 's#^[a-z][a-z]*://\([^/]*\).*#\1#p')"

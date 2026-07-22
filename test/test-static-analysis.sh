@@ -64,5 +64,12 @@ else
   bad "ruby unavailable; cannot parse tracked YAML"
 fi
 
+if git grep -n -Ei 'osascript|NSAppleScript|Script Editor|com\.apple\.scripteditor' \
+    -- . ':!test/test-static-analysis.sh' >/dev/null; then
+  bad "AppleScript or Script Editor dependency found"
+else
+  ok
+fi
+
 printf '\nstatic analysis: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

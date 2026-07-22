@@ -22,6 +22,16 @@ assert_status() {
   if [[ "$actual" == "$expected" ]]; then ok "$name"; else not_ok "$name" "status $actual, expected $expected"; fi
 }
 
+assert_contains() {
+  local name="$1" needle="$2" haystack="$3"
+  if [[ "$haystack" == *"$needle"* ]]; then ok "$name"; else not_ok "$name" "missing '$needle'"; fi
+}
+
+assert_not_contains() {
+  local name="$1" needle="$2" haystack="$3"
+  if [[ "$haystack" != *"$needle"* ]]; then ok "$name"; else not_ok "$name" "unexpected '$needle'"; fi
+}
+
 make_app() {
   local app_path="$1" version="$2" bundle_id="${3:-com.claudecommand}"
   mkdir -p "$app_path/Contents/MacOS"
@@ -88,6 +98,46 @@ SIGNATURE_STATUS="$?"
 set -e
 assert_status "signature mismatch fails" "$SIGNATURE_STATUS" 1
 assert_eq "signature mismatch restores prior app" "$(version_of "$SIGNATURE_DEST")" "1.0.0"
+
+RESTART_ROOT="${TMP_ROOT}/launchd restart"
+RESTART_DEST="${RESTART_ROOT}/Applications/Command.app"
+RESTART_NEW="${RESTART_ROOT}/download/Command.app"
+RESTART_LOG="${RESTART_ROOT}/restart.log"
+FAKE_LAUNCHCTL="${RESTART_ROOT}/launchctl"
+FAKE_OPEN="${RESTART_ROOT}/open"
+mkdir -p "$RESTART_ROOT"
+make_app "$RESTART_DEST" "1.0.0"
+make_app "$RESTART_NEW" "2.0.0"
+cat > "$FAKE_LAUNCHCTL" <<'SH'
+#!/bin/sh
+printf 'launchctl %s\n' "$*" >> "$COMMAND_TEST_RESTART_LOG"
+exit "${COMMAND_TEST_LAUNCHCTL_EXIT:-0}"
+SH
+cat > "$FAKE_OPEN" <<'SH'
+#!/bin/sh
+printf 'open %s\n' "$*" >> "$COMMAND_TEST_RESTART_LOG"
+exit 0
+SH
+chmod +x "$FAKE_LAUNCHCTL" "$FAKE_OPEN"
+COMMAND_LAUNCHCTL_BIN="$FAKE_LAUNCHCTL" COMMAND_OPEN_BIN="$FAKE_OPEN" \
+  COMMAND_TEST_RESTART_LOG="$RESTART_LOG" HOME="${TMP_ROOT}/home" \
+  zsh "$SWAPPER" 999999 "$RESTART_NEW" "$RESTART_DEST" \
+  com.claudecommand 2.0.0 "$TEST_REQUIREMENT" 1 >/dev/null 2>&1
+RESTART_OUTPUT="$(cat "$RESTART_LOG")"
+assert_contains "successful update restarts loaded launchd job" "launchctl kickstart gui/$(id -u)/com.claudecommand" "$RESTART_OUTPUT"
+assert_not_contains "successful launchd restart avoids detached open" "open " "$RESTART_OUTPUT"
+
+FALLBACK_ROOT="${TMP_ROOT}/open fallback"
+FALLBACK_DEST="${FALLBACK_ROOT}/Applications/Command.app"
+FALLBACK_NEW="${FALLBACK_ROOT}/download/Command.app"
+: > "$RESTART_LOG"
+make_app "$FALLBACK_DEST" "1.0.0"
+make_app "$FALLBACK_NEW" "2.0.0"
+COMMAND_LAUNCHCTL_BIN="$FAKE_LAUNCHCTL" COMMAND_OPEN_BIN="$FAKE_OPEN" \
+  COMMAND_TEST_LAUNCHCTL_EXIT=1 COMMAND_TEST_RESTART_LOG="$RESTART_LOG" HOME="${TMP_ROOT}/home" \
+  zsh "$SWAPPER" 999999 "$FALLBACK_NEW" "$FALLBACK_DEST" \
+  com.claudecommand 2.0.0 "$TEST_REQUIREMENT" 1 >/dev/null 2>&1
+assert_contains "update falls back to open without loaded launchd job" "open $FALLBACK_DEST" "$(cat "$RESTART_LOG")"
 
 print -- ""
 print -- "updater swap tests: ${PASS} passed, ${FAIL} failed"

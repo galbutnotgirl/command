@@ -8,7 +8,17 @@ Repo: `galbutnotgirl/command`. Current version: **1.2.0-alpha.8**
 (`git checkout checkpoint-before-trigger-refactor` rolls back to just before the biggest
 recent change if something in there needs undoing).
 
-## Latest release hardening (2026-07-21)
+## Latest release hardening (2026-07-22)
+
+- Command no longer invokes AppleScript or `osascript`. Notifications, browser URL context,
+  clipboard image detection, and vendored background-core calls now use native AppKit,
+  Accessibility, and Command's owner-only Unix socket. Static analysis prevents regressions.
+- Import now validates every selected section before writing and applies file mutations as one
+  rollback transaction. Failures stay visible without dismissing preview; vocabulary preview
+  distinguishes unchanged, added, updated, and current-only entries.
+- Incremental installation now stops launchd before replacing signed bundle contents, rejects
+  stuck processes and identity changes before mutation, and restores previous bundle on failed
+  copy or signature validation. Updater restarts loaded launchd job instead of detached app.
 
 - Release preflight now runs Pages-specific install/download validation alongside docs and
   string review checks, closing gap between local packaging and GitHub Pages CI.
@@ -18,8 +28,8 @@ recent change if something in there needs undoing).
 - Incremental-install coverage now preserves custom actions, hotkeys, vocabulary, background
   settings, Command History, and Clipboard History data, and rejects signing-identity changes
   that would invalidate macOS privacy grants.
-- Installed assistant contract checks now verify ChatGPT New Task/projectless-task, Claude
-  Chat/Cowork/Code deep-link handlers, and live menu shortcuts before route testing.
+- Installed assistant contract checks now verify ChatGPT New Task/projectless-task and Claude
+  Chat/Cowork/Code deep-link handlers directly from each installed app's bundled resources.
 - Dictation finalization now owns its stream resources through an explicit finishing phase,
   preventing a rapid follow-up trigger or cancellation from replacing or clearing tail buffers.
   A cached-model probe streams generated speech in app-sized buffers and asserts final-word retention.
@@ -29,11 +39,11 @@ recent change if something in there needs undoing).
   bundle ID, version, executable, code signature, and current designated signing
   requirement before replacement, then repeats validation after copy.
 - Bundled `update-swap.sh` receives paths as arguments, preserves prior app, and rolls
-  back on copy, metadata, executable, version, or signature failure. Eight isolated
+  back on copy, metadata, executable, version, or signature failure. Eleven isolated
   swap tests plus a real production-signature rehearsal pass.
 - Fresh/incremental installer test runs in isolated HOME. It found and fixed missing
   `~/Library/LaunchAgents` directory creation; updates preserve onboarding and Clipboard
-  History preferences. Eight install-state tests pass.
+  History preferences. Twenty-five install-state tests pass.
 - Onboarding resume order is now pure core logic with tests for clean start, every
   interrupted step, and stale later-step flags.
 
@@ -147,9 +157,10 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 
 ## Current state (alpha.8)
 
-- **Test suites**: 124 Swift (`cd agent && swift test`), 56 Node
+- **Test suites**: 129 Swift (`cd agent && swift test`), 58 Node
   (`cd vendor/claude-command-capture && node --test`), 50 shell (`./test/test-shell.sh`),
-  16 isolated install-state, 8 updater rollback, 7 release-policy, string-review, and docs
+  25 isolated install-state, 11 updater rollback/restart, 7 release-policy, 63 static,
+  string-review, and docs
   validation checks. All green. Local release verification also checks current installed
   Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test
   (`./release.sh --skip-checks` and `./test/test-release-asset.sh`) on push/PR
@@ -157,8 +168,8 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 - **Dictation model integration**: `./test/test-dictation-model.sh` generates local speech,
   feeds it through Parakeet's streaming manager in 4096-frame buffers, and verifies its final
   phrase survives immediate stream completion. It runs on release Mac with cached models, not CI.
-- **Installed provider contract**: ChatGPT 26.707.72221 and Claude 1.24012.0 pass 12/12
-  packaged-resource, live-menu, and Claude Chat/Cowork/Code deep-link checks. Actual prompt
+- **Installed provider contract**: ChatGPT 26.707.72221 and Claude 1.24012.0 pass 9/9
+  packaged-resource and Claude Chat/Cowork/Code deep-link checks. Actual prompt
   insertion remains a manual release gate because contract inspection does not prove field focus.
 - **Provider parity**: Claude and Codex share selected-text, screenshot, popup, voice,
   dictation, Clipboard History, existing/new task, auto-submit, Context, Custom Action,
@@ -1243,6 +1254,14 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 - **Tracked-file static gate**: CI and normal release preflight now parse every tracked shell,
   Python, JavaScript, JSON, property-list, and YAML file with platform-native tools. Syntax or
   configuration corruption now fails before packaging instead of surfacing in an installed build.
+- **Safe incremental install ordering**: local incremental installs now unload launchd and wait for
+  Command to exit before syncing files into the signed bundle. This prevents macOS from terminating
+  a running app with `Code Signature Invalid` while executable or resource pages are replaced. The
+  install-state suite asserts `bootout -> terminate -> sync` ordering so KeepAlive cannot race it.
+- **Updater launchd ownership preserved**: after a verified in-app update, the swap helper now
+  restarts Command through its loaded launchd job instead of opening a detached Finder process.
+  Restart-on-failure supervision therefore survives updates; `open` remains a tested fallback when
+  no launchd job is loaded.
 
 ## Next up (roughly in the order they came up)
 
@@ -1271,7 +1290,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 - **Bump `VERSION` and run `./release.sh --publish`** after any user-facing change worth
   shipping — this session cut alpha.1 through alpha.6 incrementally rather than batching.
 - **Real functional tests over synthetic ones where possible.** A synthetic
-  `osascript key code` press reliably triggers Carbon hotkeys and is good enough to prove
+  synthetic key press reliably triggers Carbon hotkeys and is good enough to prove
   a *visible* effect (a window opening for the popup trigger); for anything with no visible
   UI (a background handoff), the CLI-level test (`submit-cli.js --retry-prompt` with the
   actual rendered prompt) is the trustworthy one — clean up test tasks created against the

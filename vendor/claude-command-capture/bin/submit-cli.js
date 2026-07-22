@@ -36,8 +36,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
 const { appDirs } = require('../src/paths');
+const { notifyCommand } = require('../src/command-agent');
 const { loadSettings, saveSettings, settingsPath, DEFAULT_SETTINGS, settingsForProvider } = require('../src/settings');
 const { submitCapture, resubmitPrompt } = require('../src/submit');
 
@@ -82,12 +82,7 @@ function parseArgs(argv) {
 
 function notifyDesktop(title, body) {
   if (process.platform !== 'darwin') return;
-  const script = `display notification ${JSON.stringify(body)} with title ${JSON.stringify(title)}`;
-  try {
-    spawn('osascript', ['-e', script], { stdio: 'ignore', detached: true }).unref();
-  } catch {
-    // Notifications are best-effort.
-  }
+  notifyCommand(title, body);
 }
 
 function readStdin() {

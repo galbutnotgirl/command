@@ -16,8 +16,13 @@ OLD_APP="${INSTALL_DIR}/ClaudeCommand.app"
 BIN="${APP}/Contents/MacOS/Command"
 PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
 OLD_CLIPWATCH="${HOME}/Library/LaunchAgents/com.claudecommand.clipwatch.plist"
+UID_NUM="$(id -u)"
 
 [ -x "${SRC_APP}/Contents/MacOS/Command" ] || { print -- "[agent] missing Command.app — run ./build-agent.sh first"; exit 1; }
+/usr/bin/codesign --verify --deep --strict "$SRC_APP" >/dev/null 2>&1 || {
+    print -- "[agent] ERROR source Command.app has an invalid signature; install canceled"
+    exit 1
+}
 
 # Fresh install = no prior LaunchAgent plist AND no prior app bundle.
 # Update = app already exists (in-place sync, TCC grants survive).
@@ -31,23 +36,79 @@ FRESH_INSTALL=false
 # while the bundle stays at the same path with the same identity → grants persist.
 mkdir -p "$INSTALL_DIR"
 if [ -d "$APP" ]; then
-old_req="$(codesign -dr - "$APP" 2>&1 | sed -n 's/^.*designated => //p')"
-new_req="$(codesign -dr - "$SRC_APP" 2>&1 | sed -n 's/^.*designated => //p')"
-if [[ -n "$old_req" && -n "$new_req" && "$old_req" != "$new_req" && "${COMMAND_ALLOW_TCC_IDENTITY_CHANGE:-0}" != "1" ]]; then
-  print -- "[agent] ERROR signing identity changed; install stopped to preserve macOS permissions"
-  print -- "[agent] old requirement: $old_req"
-  print -- "[agent] new requirement: $new_req"
-  print -- "[agent] Fix by signing with the same Command certificate, or set COMMAND_ALLOW_TCC_IDENTITY_CHANGE=1 to accept re-granting permissions."
-  exit 1
+    old_req="$(codesign -dr - "$APP" 2>&1 | sed -n 's/^.*designated => //p')"
+    new_req="$(codesign -dr - "$SRC_APP" 2>&1 | sed -n 's/^.*designated => //p')"
+    if [[ -n "$old_req" && -n "$new_req" && "$old_req" != "$new_req" && "${COMMAND_ALLOW_TCC_IDENTITY_CHANGE:-0}" != "1" ]]; then
+        print -- "[agent] ERROR signing identity changed; install stopped to preserve macOS permissions"
+        print -- "[agent] old requirement: $old_req"
+        print -- "[agent] new requirement: $new_req"
+        print -- "[agent] Fix by signing with the same Command certificate, or set COMMAND_ALLOW_TCC_IDENTITY_CHANGE=1 to accept re-granting permissions."
+        exit 1
+    fi
 fi
-rsync -a --delete "${SRC_APP}/" "${APP}/"
-if [ -d "$OLD_APP" ]; then
-  rm -rf "$OLD_APP"
-  print -- "[agent] removed old ClaudeCommand.app bundle"
+
+# Stop launchd before terminating Command so KeepAlive cannot race the update.
+# Never overwrite a running signed bundle: macOS can kill the process with
+# "Code Signature Invalid" when executable or resource pages change in place.
+launchctl bootout "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
+pkill -x Command 2>/dev/null || true
+pkill -x ClaudeCommand 2>/dev/null || true
+STOP_WAIT_ATTEMPTS="${COMMAND_STOP_WAIT_ATTEMPTS:-30}"
+for (( _i = 0; _i < STOP_WAIT_ATTEMPTS; _i++ )); do
+    if ! pgrep -x Command >/dev/null 2>&1 && ! pgrep -x ClaudeCommand >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.1
+done
+if pgrep -x Command >/dev/null 2>&1 || pgrep -x ClaudeCommand >/dev/null 2>&1; then
+    print -- "[agent] ERROR Command did not stop; install canceled before changing the app bundle"
+    exit 1
 fi
+
+if [ -d "$APP" ]; then
+    BACKUP_ROOT="$(mktemp -d "${INSTALL_DIR}/.command-update-backup.XXXXXX")" || {
+        print -- "[agent] ERROR could not create update backup; install canceled"
+        exit 1
+    }
+    BACKUP_APP="${BACKUP_ROOT}/Command.app"
+    if ! /usr/bin/ditto "$APP" "$BACKUP_APP"; then
+        rm -rf "$BACKUP_ROOT"
+        print -- "[agent] ERROR could not back up current app; install canceled"
+        exit 1
+    fi
+
+    restore_previous_app() {
+        local reason="$1"
+        if ! rsync -a --delete "${BACKUP_APP}/" "${APP}/"; then
+            print -- "[agent] ERROR update failed (${reason}) and previous app could not be restored"
+            rm -rf "$BACKUP_ROOT"
+            exit 1
+        fi
+        rm -rf "$BACKUP_ROOT"
+        if [ -f "$PLIST" ]; then
+            launchctl bootstrap "gui/${UID_NUM}" "$PLIST" 2>/dev/null || true
+            launchctl kickstart "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
+        fi
+        print -- "[agent] ERROR update failed (${reason}); previous app restored"
+        exit 1
+    }
+
+    rsync -a --delete "${SRC_APP}/" "${APP}/" || restore_previous_app "copy failed"
+    /usr/bin/codesign --verify --deep --strict "$APP" >/dev/null 2>&1 \
+        || restore_previous_app "installed signature invalid"
+    rm -rf "$BACKUP_ROOT"
+    if [ -d "$OLD_APP" ]; then
+        rm -rf "$OLD_APP"
+        print -- "[agent] removed old ClaudeCommand.app bundle"
+    fi
     print -- "[agent] updated in-place at ${APP} (TCC grants preserved)"
 else
-    cp -R "$SRC_APP" "$APP"
+    if ! /usr/bin/ditto "$SRC_APP" "$APP" \
+        || ! /usr/bin/codesign --verify --deep --strict "$APP" >/dev/null 2>&1; then
+        rm -rf "$APP"
+        print -- "[agent] ERROR first install copy or signature verification failed"
+        exit 1
+    fi
     print -- "[agent] installed to ${APP} (first install)"
 fi
 
@@ -59,23 +120,12 @@ fi
 
 mkdir -p "${HOME}/.claude/logs" "${HOME}/.claude/state"
 
-UID_NUM="$(id -u)"
-
 # Remove stale clipwatch LaunchAgent (now a subprocess, not a separate agent).
 if [ -f "$OLD_CLIPWATCH" ]; then
     print -- "[agent] removing old clipwatch LaunchAgent (now bundled subprocess)"
     launchctl bootout "gui/${UID_NUM}/com.claudecommand.clipwatch" 2>/dev/null || true
     rm -f "$OLD_CLIPWATCH"
 fi
-
-# Kill any running instance.
-pkill -x Command 2>/dev/null || true
-pkill -x ClaudeCommand 2>/dev/null || true
-sleep 0.3
-
-# Unload existing LaunchAgent if loaded (bootout is idempotent on failure).
-launchctl bootout "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
-sleep 0.2
 
 # Write the LaunchAgent plist. BIN is the absolute path so launchd resolves it
 # correctly regardless of what directory it was bootstrapped from.

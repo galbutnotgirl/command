@@ -21,7 +21,21 @@ export PATH="/opt/homebrew/bin:${HOME}/.claude/local:${HOME}/.local/bin:/usr/loc
 
 LOG_FILE="${HOME}/Library/Logs/claude-command.log"
 log()    { print -r -- "$(date '+%Y-%m-%d %H:%M:%S') [background] $*" >> "$LOG_FILE" 2>/dev/null; }
-notify() { osascript -e "display notification \"$1\" with title \"${2:-ClaudeCommand}\"" 2>/dev/null; }
+notify() {
+  /usr/bin/python3 - "$1" "${2:-Command}" "${HOME}/.claude/state/command-agent.sock" <<'PY' >/dev/null 2>&1 || true
+import base64, socket, sys
+body, title, path = sys.argv[1:]
+payload = "notify {} {}\n".format(
+    base64.b64encode(title.encode()).decode(),
+    base64.b64encode(body.encode()).decode(),
+)
+with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+    client.settimeout(2)
+    client.connect(path)
+    client.sendall(payload.encode())
+    client.recv(16)
+PY
+}
 
 SCRIPT_DIR="${0:A:h}"
 # Bundled layout (app Resources) puts the core next to this script; repo layout

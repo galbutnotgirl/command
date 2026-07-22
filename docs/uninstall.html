@@ -52,8 +52,8 @@
       <section id="standard">
         <h2>Standard Uninstall</h2>
         <p>For a downloaded app install:</p>
-        <pre><code>osascript -e 'quit app "Command"' 2&gt;/dev/null || true
-launchctl bootout "gui/$(id -u)/com.claudecommand" 2&gt;/dev/null || true
+        <pre><code>launchctl bootout "gui/$(id -u)/com.claudecommand" 2&gt;/dev/null || true
+pkill -x Command 2&gt;/dev/null || true
 rm -f ~/Library/LaunchAgents/com.claudecommand.plist
 rm -rf ~/Applications/Command.app</code></pre>
         <p>If you installed source-only Quick Actions from a repo checkout, remove those too:</p>

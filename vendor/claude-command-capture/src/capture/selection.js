@@ -4,13 +4,14 @@
 // simulating the OS copy shortcut and reading the clipboard. The previous
 // clipboard contents (text or image) are restored afterwards.
 //
-// macOS: requires the Accessibility permission (System Settings > Privacy &
-// Security > Accessibility) so System Events may send keystrokes.
+// macOS: routes copy through Command's persistent agent and its Accessibility
+// permission.
 // Linux: requires `xdotool` (X11).
 // Windows: uses WScript SendKeys via PowerShell.
 
 const { execFile } = require('child_process');
 const { clipboard } = require('electron');
+const { agentCommand } = require('../command-agent');
 
 const COPY_TIMEOUT_MS = 1500;
 const POLL_INTERVAL_MS = 50;
@@ -27,10 +28,7 @@ function execFileAsync(cmd, args) {
 
 async function simulateCopy() {
   if (process.platform === 'darwin') {
-    await execFileAsync('osascript', [
-      '-e',
-      'tell application "System Events" to keystroke "c" using {command down}',
-    ]);
+    return agentCommand('copy');
   } else if (process.platform === 'linux') {
     await execFileAsync('xdotool', ['key', '--clearmodifiers', 'ctrl+c']);
   } else if (process.platform === 'win32') {
@@ -69,9 +67,10 @@ async function captureSelection() {
     // Clear first so we can detect the copy even when the selection equals
     // the old clipboard contents.
     clipboard.clear();
-    await simulateCopy();
+    const copiedText = await simulateCopy();
+    if (process.platform === 'darwin') text = copiedText;
     const deadline = Date.now() + COPY_TIMEOUT_MS;
-    while (Date.now() < deadline) {
+    while (!text && Date.now() < deadline) {
       text = clipboard.readText();
       if (text) break;
       await sleep(POLL_INTERVAL_MS);

@@ -112,10 +112,10 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 - Download release zip in browser, verify SHA-256, install, and launch without bypass steps.
 - Run in-app update from previous release and verify rollback on simulated invalid package.
 
-## Current Evidence (2026-07-21)
+## Current Evidence (2026-07-22)
 
-- Automated local suites: 124 Swift, 56 Node, 50 shell, 16 install-state, 8 updater,
-  7 release-policy, static syntax/configuration, and 2 string-review; docs, Pages, provider
+- Automated local suites: 129 Swift, 58 Node, 50 shell, 25 install-state, 11 updater,
+  7 release-policy, 63 static syntax/configuration, and 2 string-review; docs, Pages, provider
   contract, and release asset pass.
 - Cached-model streaming probe retains generated speech's distinctive final words after immediate
   stream drain and Parakeet `finish()`.

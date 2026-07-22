@@ -19,10 +19,23 @@ REOPEN="$7"
 BACKUP_APP="${DEST_APP}.old"
 LOG_DIR="${HOME}/.claude/logs"
 LOG_FILE="${LOG_DIR}/command-updater.log"
+LAUNCH_AGENT_LABEL="${COMMAND_LAUNCH_AGENT_LABEL:-com.claudecommand}"
+LAUNCHCTL_BIN="${COMMAND_LAUNCHCTL_BIN:-/bin/launchctl}"
+OPEN_BIN="${COMMAND_OPEN_BIN:-/usr/bin/open}"
 
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 log() { print -r -- "$(date '+%Y-%m-%d %H:%M:%S') [updater] $*" >> "$LOG_FILE" 2>/dev/null || true; }
-open_app() { [[ "$REOPEN" == "1" && -d "$1" ]] && /usr/bin/open "$1" >/dev/null 2>&1 || true; }
+open_app() {
+  [[ "$REOPEN" == "1" && -d "$1" ]] || return 0
+  local service="gui/$(id -u)/${LAUNCH_AGENT_LABEL}"
+  if "$LAUNCHCTL_BIN" print "$service" >/dev/null 2>&1 \
+      && "$LAUNCHCTL_BIN" kickstart "$service" >/dev/null 2>&1; then
+    log "restarted through launchd service=$service"
+    return 0
+  fi
+  "$OPEN_BIN" "$1" >/dev/null 2>&1 || true
+  log "launchd restart unavailable; reopened with open"
+}
 
 rollback() {
   local reason="$1"

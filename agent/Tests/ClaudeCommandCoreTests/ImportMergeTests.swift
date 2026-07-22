@@ -58,6 +58,7 @@ final class ImportMergeTests: XCTestCase {
             "vocab": ["AXP", "Personalize"],
             "replacements": [["wrong": "ax pea", "correct": "AXP strategy"]],
             "fillers": [["phrase": "you know", "enabled": false]],
+            "futureSchemaField": ["enabled": true],
         ]
 
         let merged = mergeVocabularyDictionaries(current: current, incoming: incoming)
@@ -67,5 +68,94 @@ final class ImportMergeTests: XCTestCase {
         XCTAssertEqual(replacements?.first?["correct"] as? String, "AXP strategy")
         let fillers = merged["fillers"] as? [[String: Any]]
         XCTAssertEqual(fillers?.count, 2)
+        XCTAssertEqual((merged["futureSchemaField"] as? [String: Bool])?["enabled"], true)
+    }
+
+    func testImportFileMutationsCommitAllFiles() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = root.appendingPathComponent("first.json")
+        let second = root.appendingPathComponent("nested/second.json")
+
+        try applyImportFileMutations([
+            ImportFileMutation(url: first, data: Data("first".utf8)),
+            ImportFileMutation(url: second, data: Data("second".utf8)),
+        ])
+
+        XCTAssertEqual(try String(contentsOf: first, encoding: .utf8), "first")
+        XCTAssertEqual(try String(contentsOf: second, encoding: .utf8), "second")
+    }
+
+    func testImportFileMutationsRollBackExistingAndNewFilesAfterFailure() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let existing = root.appendingPathComponent("existing.json")
+        let created = root.appendingPathComponent("created.json")
+        try Data("original".utf8).write(to: existing)
+        var writes = 0
+
+        XCTAssertThrowsError(try applyImportFileMutations([
+            ImportFileMutation(url: existing, data: Data("updated".utf8)),
+            ImportFileMutation(url: created, data: Data("created".utf8)),
+        ], writer: { data, url in
+            writes += 1
+            try data.write(to: url, options: .atomic)
+            if writes == 2 { throw CocoaError(.fileWriteUnknown) }
+        }))
+
+        XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8), "original")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: created.path))
+    }
+
+    func testImportFileMutationsRejectDuplicateDestinationBeforeWriting() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let destination = root.appendingPathComponent("settings.json")
+        var wrote = false
+
+        XCTAssertThrowsError(try applyImportFileMutations([
+            ImportFileMutation(url: destination, data: Data("one".utf8)),
+            ImportFileMutation(url: destination, data: Data("two".utf8)),
+        ], writer: { _, _ in wrote = true }))
+        XCTAssertFalse(wrote)
+    }
+
+    func testEncodeImportJSONObjectRejectsUnsupportedValues() {
+        XCTAssertThrowsError(try encodeImportJSONObject(["date": Date()]))
+    }
+
+    func testVocabularyPreviewCountsSameAddedUpdatedAndCurrentOnly() {
+        let current: [String: Any] = [
+            "vocab": ["AXP", "Contentstack"],
+            "replacements": [
+                ["wrong": "ax pea", "correct": "AXP"],
+                ["wrong": "old", "correct": "Old"],
+            ],
+            "fillers": [
+                ["phrase": "um", "enabled": true],
+                ["phrase": "old filler", "enabled": true],
+            ],
+        ]
+        let incoming: [String: Any] = [
+            "vocab": ["Contentstack", "Personalize"],
+            "replacements": [
+                ["wrong": "ax pea", "correct": "AXP"],
+                ["wrong": "old", "correct": "New"],
+                ["wrong": "new", "correct": "New"],
+            ],
+            "fillers": [
+                ["phrase": "um", "enabled": true],
+                ["phrase": "new filler", "enabled": false],
+            ],
+        ]
+
+        XCTAssertEqual(
+            vocabularyImportPreviewCounts(current: current, incoming: incoming),
+            ImportPreviewCounts(incoming: 7, current: 6, same: 3, added: 3, updated: 1, currentOnly: 2)
+        )
     }
 }

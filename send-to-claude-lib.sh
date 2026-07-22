@@ -2,7 +2,7 @@
 # send-to-claude-lib.sh — pure function definitions used by send-to-claude.sh,
 # split out so they're sourceable (and testable — see test/test-shell.sh)
 # without also running the rest of the script's side-effecting top half
-# (clipboard capture, AppleScript, etc).
+# (clipboard capture, native app routing, etc).
 #
 # expand_template() reads these globals from its caller rather than taking them
 # as extra args (matches how send-to-claude.sh already used it inline): set

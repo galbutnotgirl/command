@@ -9,6 +9,8 @@ FAKE_HOME="${TMP_ROOT}/home"
 FAKE_BIN="${TMP_ROOT}/bin"
 SOURCE_APP="${TMP_ROOT}/source/Command.app"
 DEFAULTS_LOG="${TMP_ROOT}/defaults.log"
+LIFECYCLE_LOG="${TMP_ROOT}/lifecycle.log"
+RSYNC_STATE="${TMP_ROOT}/rsync-state"
 PASS=0
 FAIL=0
 trap 'rm -rf "$TMP_ROOT"' EXIT
@@ -49,11 +51,30 @@ codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/nul
 
 cat > "$FAKE_BIN/launchctl" <<'SH'
 #!/bin/sh
+printf 'launchctl %s\n' "$*" >> "$COMMAND_TEST_LIFECYCLE_LOG"
 exit 0
 SH
 cat > "$FAKE_BIN/pkill" <<'SH'
 #!/bin/sh
+printf 'pkill %s\n' "$*" >> "$COMMAND_TEST_LIFECYCLE_LOG"
 exit 0
+SH
+cat > "$FAKE_BIN/pgrep" <<'SH'
+#!/bin/sh
+printf 'pgrep %s\n' "$*" >> "$COMMAND_TEST_LIFECYCLE_LOG"
+[ "${COMMAND_TEST_PGREP_RUNNING:-0}" = "1" ] && exit 0
+exit 1
+SH
+cat > "$FAKE_BIN/rsync" <<'SH'
+#!/bin/sh
+printf 'rsync %s\n' "$*" >> "$COMMAND_TEST_LIFECYCLE_LOG"
+/usr/bin/rsync "$@"
+rc=$?
+if [ "$rc" -eq 0 ] && [ "${COMMAND_TEST_RSYNC_FAIL:-0}" = "1" ] && [ ! -e "$COMMAND_TEST_RSYNC_STATE" ]; then
+  : > "$COMMAND_TEST_RSYNC_STATE"
+  exit 1
+fi
+exit "$rc"
 SH
 cat > "$FAKE_BIN/defaults" <<'SH'
 #!/bin/sh
@@ -64,7 +85,7 @@ if [ "$1" = "read" ]; then
 fi
 exit 0
 SH
-chmod +x "$FAKE_BIN/launchctl" "$FAKE_BIN/pkill" "$FAKE_BIN/defaults"
+chmod +x "$FAKE_BIN/launchctl" "$FAKE_BIN/pkill" "$FAKE_BIN/pgrep" "$FAKE_BIN/rsync" "$FAKE_BIN/defaults"
 
 run_install() {
   HOME="$FAKE_HOME" \
@@ -73,6 +94,12 @@ run_install() {
   COMMAND_SKIP_LSREGISTER=1 \
   COMMAND_SOCKET_WAIT_ATTEMPTS=0 \
   COMMAND_TEST_DEFAULTS_LOG="$DEFAULTS_LOG" \
+  COMMAND_TEST_LIFECYCLE_LOG="$LIFECYCLE_LOG" \
+  COMMAND_TEST_PGREP_RUNNING="${2:-0}" \
+  COMMAND_TEST_RSYNC_FAIL="${3:-0}" \
+  COMMAND_TEST_RSYNC_STATE="$RSYNC_STATE" \
+  COMMAND_STOP_WAIT_ATTEMPTS=0 \
+  COMMAND_ALLOW_TCC_IDENTITY_CHANGE="${4:-0}" \
   COMMAND_TEST_DEFAULTS_EXIST="${1:-0}" \
   zsh "$INSTALLER" 2>&1
 }
@@ -97,8 +124,10 @@ print 'command-history-sentinel' > "$FAKE_HOME/Library/Application Support/claud
 print 'clipboard-history-sentinel' > "$FAKE_HOME/.claude/state/cliphistory/index.json"
 
 : > "$DEFAULTS_LOG"
+: > "$LIFECYCLE_LOG"
 INCREMENTAL_OUTPUT="$(run_install 1)"
 INCREMENTAL_DEFAULTS="$(cat "$DEFAULTS_LOG")"
+INCREMENTAL_LIFECYCLE="$(cat "$LIFECYCLE_LOG")"
 assert_contains "incremental install updates in place" "updated in-place" "$INCREMENTAL_OUTPUT"
 assert_not_contains "incremental install preserves onboarding" "delete com.claudecommand onboardingCompleted" "$INCREMENTAL_DEFAULTS"
 assert_not_contains "incremental install preserves Clipboard History preference" "write com.claudecommand cliphistoryEnabled" "$INCREMENTAL_DEFAULTS"
@@ -108,12 +137,41 @@ assert_contains "incremental install preserves vocabulary" "vocabulary-sentinel"
 assert_contains "incremental install preserves background settings" "background-settings-sentinel" "$(cat "$FAKE_HOME/Library/Application Support/claude-command/settings.json")"
 assert_contains "incremental install preserves command history" "command-history-sentinel" "$(cat "$FAKE_HOME/Library/Application Support/claude-command/command-history/item.json")"
 assert_contains "incremental install preserves Clipboard History data" "clipboard-history-sentinel" "$(cat "$FAKE_HOME/.claude/state/cliphistory/index.json")"
+LIFECYCLE_ORDER="$(print -r -- "$INCREMENTAL_LIFECYCLE" | awk '
+  /^launchctl bootout / && !bootout { bootout=NR }
+  /^pkill -x Command$/ && !pkill { pkill=NR }
+  /^rsync / && !rsync { rsync=NR }
+  END { print bootout ":" pkill ":" rsync }
+')"
+assert_true "incremental install stops launchd and Command before bundle sync" \
+  zsh -c 'IFS=: read -r bootout pkill rsync <<< "$1"; (( bootout > 0 && pkill > bootout && rsync > pkill ))' _ "$LIFECYCLE_ORDER"
+
+: > "$LIFECYCLE_LOG"
+STUCK_OUTPUT="$(run_install 1 1)"
+STUCK_STATUS=$?
+assert_true "incremental install cancels when Command does not stop" test "$STUCK_STATUS" -ne 0
+assert_contains "stuck-process failure is actionable" "did not stop; install canceled" "$STUCK_OUTPUT"
+assert_not_contains "stuck process prevents bundle sync" "rsync " "$(cat "$LIFECYCLE_LOG")"
+
+/usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 9.9.10-test' "$SOURCE_APP/Contents/Info.plist"
+codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/null 2>&1
+: > "$LIFECYCLE_LOG"
+rm -f "$RSYNC_STATE"
+COPY_FAILURE_OUTPUT="$(run_install 1 0 1 1)"
+COPY_FAILURE_STATUS=$?
+assert_true "incremental install reports partial copy failure" test "$COPY_FAILURE_STATUS" -ne 0
+assert_contains "partial copy failure restores previous app" "previous app restored" "$COPY_FAILURE_OUTPUT"
+RESTORED_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$FAKE_HOME/Applications/Command.app/Contents/Info.plist")"
+assert_true "rollback keeps previous installed version" test "$RESTORED_VERSION" = "9.9.9-test"
+assert_true "rollback restores valid previous signature" /usr/bin/codesign --verify --deep --strict "$FAKE_HOME/Applications/Command.app"
 
 codesign --force --sign - --identifier com.example.different "$FAKE_HOME/Applications/Command.app" >/dev/null 2>&1
+: > "$LIFECYCLE_LOG"
 MISMATCH_OUTPUT="$(run_install 1)"
 MISMATCH_STATUS=$?
 assert_true "incremental install rejects signing identity change" test "$MISMATCH_STATUS" -ne 0
 assert_contains "identity rejection explains permission protection" "install stopped to preserve macOS permissions" "$MISMATCH_OUTPUT"
+assert_not_contains "identity rejection leaves running app untouched" "launchctl bootout" "$(cat "$LIFECYCLE_LOG")"
 
 print -- ""
 print -- "install state tests: ${PASS} passed, ${FAIL} failed"

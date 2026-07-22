@@ -104,8 +104,35 @@ func waitForActive(_ bundle: String) {
 
 // Post a user-facing banner (LSUIElement agent has no UI of its own otherwise).
 func notify(_ title: String, _ body: String) {
-    runShell("/usr/bin/osascript",
-             ["-e", "display notification \"\(body)\" with title \"\(title)\""])
+    let notification = NSUserNotification()
+    notification.title = title
+    notification.informativeText = body
+    NSUserNotificationCenter.default.deliver(notification)
+}
+
+func clipboardHasImage() -> Bool {
+    NSPasteboard.general.availableType(from: [.png, .tiff]) != nil
+}
+
+func focusedDocumentURL(bundleIdentifier: String) -> String {
+    guard AXIsProcessTrusted(), !bundleIdentifier.isEmpty else { return "" }
+    let applications = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+    guard let application = applications.first(where: \.isActive) ?? applications.first else { return "" }
+    let appElement = AXUIElementCreateApplication(application.processIdentifier)
+    var windowValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(
+        appElement,
+        kAXFocusedWindowAttribute as CFString,
+        &windowValue
+    ) == .success, let windowValue else { return "" }
+    let window = unsafeBitCast(windowValue, to: AXUIElement.self)
+    var documentValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(
+        window,
+        kAXDocumentAttribute as CFString,
+        &documentValue
+    ) == .success else { return "" }
+    return documentValue as? String ?? ""
 }
 
 // ---- spawn the worker on a hotkey ------------------------------------------
@@ -1698,6 +1725,25 @@ func handle(_ line: String) -> String {
         return ready ? "ok" : "wait"
     case "activate":
         if parts.count > 1 { let b = parts[1]; DispatchQueue.main.sync { activate(b) } }
+        return "ok"
+    case "clipboardhasimage":
+        var hasImage = false
+        DispatchQueue.main.sync { hasImage = clipboardHasImage() }
+        return hasImage ? "yes" : "no"
+    case "fronturl":
+        guard parts.count > 1 else { return "" }
+        var url = ""
+        DispatchQueue.main.sync { url = focusedDocumentURL(bundleIdentifier: parts[1]) }
+        return url
+    case "notify":
+        guard parts.count > 1 else { return "err" }
+        let fields = parts[1].split(separator: " ", maxSplits: 1).map(String.init)
+        guard fields.count == 2,
+              let titleData = Data(base64Encoded: fields[0]),
+              let bodyData = Data(base64Encoded: fields[1]),
+              let title = String(data: titleData, encoding: .utf8),
+              let body = String(data: bodyData, encoding: .utf8) else { return "err" }
+        DispatchQueue.main.async { notify(title, body) }
         return "ok"
     case "showpicker":
         let b = parts.count > 1 ? parts[1] : ""
