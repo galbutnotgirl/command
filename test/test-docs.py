@@ -126,6 +126,7 @@ REQUIRED_RELEASE_PATTERNS = [
 PAGES_WORKFLOW = ROOT / ".github/workflows/pages.yml"
 TEST_WORKFLOW = ROOT / ".github/workflows/test.yml"
 REQUIRED_PAGES_WORKFLOW_PATTERNS = [
+    "actions/checkout@v7",
     "permissions:",
     "contents: read",
     "pages: write",
@@ -144,6 +145,9 @@ REQUIRED_PAGES_WORKFLOW_PATTERNS = [
     "path: docs",
 ]
 REQUIRED_TEST_WORKFLOW_PATTERNS = [
+    "actions/checkout@v7",
+    "actions/setup-node@v7",
+    'node-version: "24"',
     "macos-14",
     "maxim-lobanov/setup-xcode",
     "Swift unit tests",
