@@ -35,6 +35,7 @@ cd ../.. && ./test/test-shell.sh
 ./test/test-updater-swap.sh
 ./test/test-release-policy.sh
 python3 ./test/test-docs.py
+python3 ./test/test-pages.py
 python3 ./test/test_string_review.py
 ./release.sh --skip-checks
 ./test/test-release-asset.sh

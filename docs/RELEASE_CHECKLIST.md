@@ -28,6 +28,7 @@ cd ../.. && ./test/test-shell.sh
 ./test/test-updater-swap.sh
 ./test/test-release-policy.sh
 python3 ./test/test-docs.py
+python3 ./test/test-pages.py
 python3 ./test/test_string_review.py
 ./doctor.sh
 ```
@@ -90,7 +91,7 @@ For custom notes, append them to same release command:
 
 Publishing without notarization is blocked by default. `--allow-unnotarized` exists only as an explicit emergency override for alpha versions and leaves users with Gatekeeper warning. Never use override for beta or stable release.
 
-Normal release runs also execute `swift test`, `node --test`, `./test/test-shell.sh`, `./test/test-install-state.sh`, `./test/test-updater-swap.sh`, and `python3 ./test/test-docs.py` before packaging, so app/core test failures, background runner failures, script regressions, fresh/incremental install-state regressions, updater copy/signature/rollback failures, broken docs links, metadata, rendered HTML structure, heading parity, shared CSS, local media assets, sitemap drift, docs-home coverage drift, README docs-table drift, Settings sidebar drift, About docs-button drift, stale bundled docs, or missing bundled-doc guards stop release. GitHub test workflow runs same unit/docs suite, release signing policy tests, plus `./release.sh --skip-checks` and `./test/test-release-asset.sh` as packaging smoke test on macOS. `--skip-checks` is only for local one-off packaging and CI packaging smoke tests.
+Normal release runs also execute `swift test`, `node --test`, `./test/test-shell.sh`, `./test/test-install-state.sh`, `./test/test-updater-swap.sh`, `python3 ./test/test-docs.py`, `python3 ./test/test-pages.py`, and `python3 ./test/test_string_review.py` before packaging, so app/core test failures, background runner failures, script regressions, fresh/incremental install-state regressions, updater copy/signature/rollback failures, broken docs links, metadata, rendered HTML structure, heading parity, shared CSS, local media assets, sitemap drift, docs-home coverage drift, README docs-table drift, Settings sidebar drift, About docs-button drift, stale bundled docs, missing bundled-doc guards, Pages install recovery regressions, or string review round-trip failures stop release. GitHub test workflow runs same unit/docs suite, release signing policy tests, plus `./release.sh --skip-checks` and `./test/test-release-asset.sh` as packaging smoke test on macOS. `--skip-checks` is only for local one-off packaging and CI packaging smoke tests.
 
 ## After Publish
 

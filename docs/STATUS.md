@@ -10,6 +10,8 @@ recent change if something in there needs undoing).
 
 ## Latest release hardening (2026-07-21)
 
+- Release preflight now runs Pages-specific install/download validation alongside docs and
+  string review checks, closing gap between local packaging and GitHub Pages CI.
 - In-app updater now selects highest compatible SemVer, validates exact app name,
   bundle ID, version, executable, code signature, and current designated signing
   requirement before replacement, then repeats validation after copy.

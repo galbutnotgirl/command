@@ -100,6 +100,7 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   "${DIR}/test/test-install-state.sh" || fail "install state tests failed — fix fresh/update behavior before release."
   "${DIR}/test/test-updater-swap.sh" || fail "updater swap tests failed — fix install/rollback before release."
   python3 "${DIR}/test/test-docs.py" || fail "docs validation failed — fix docs links/metadata/packaging guards before release."
+  python3 "${DIR}/test/test-pages.py" || fail "Pages validation failed — fix deploy assets and install recovery before release."
   python3 "${DIR}/test/test_string_review.py" || fail "string review round-trip failed — fix export/apply safety before release."
 fi
 
