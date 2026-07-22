@@ -114,7 +114,7 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-22)
 
-- Automated local suites: 129 Swift, 58 Node, 50 shell, 25 install-state, 11 updater,
+- Automated local suites: 134 Swift, 58 Node, 50 shell, 25 install-state, 11 updater,
   7 release-policy, 65 static syntax/configuration, and 2 string-review; docs, Pages, provider
   contract, and release asset pass.
 - Cached-model streaming probe retains generated speech's distinctive final words after immediate
@@ -122,8 +122,9 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 - Microphone tap frames are deep-copied before crossing the async transcription stream, preventing
   AVAudioEngine buffer reuse from changing audio while Parakeet reads it. Isolated strict-concurrency
   diagnostics no longer report the recorder's non-Sendable buffer transfer.
-- Installed ChatGPT 26.707.72221 and Claude 1.24012.0 contract check passes 12/12:
-  packaged shortcuts, live menus, and Claude Chat/Cowork/Code `/new` handlers match routes.
+- Installed ChatGPT 26.707.72221 and Claude 1.24012.0 contract check passes 9/9:
+  registered URL schemes, packaged shortcut resources, and Claude Chat/Cowork/Code `/new`
+  handlers match routes without driving either app's interface.
 - Installed Codex projectless route passed non-submitting live smoke test.
 - Prompt delivery through Quick Chat and Claude destinations, full live dictation matrix, and
   clean onboarding remain manual release gates.

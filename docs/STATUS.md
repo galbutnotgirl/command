@@ -13,12 +13,19 @@ recent change if something in there needs undoing).
 - Command no longer invokes external automation scripting. Notifications, browser URL context,
   clipboard image detection, and vendored background-core calls now use native AppKit,
   Accessibility, and Command's owner-only Unix socket. Static analysis prevents regressions.
+- Notifications now use UserNotifications directly instead of deprecated notification APIs. The
+  tools menu is named Tools, removing the duplicate Command menu title.
 - Import now validates every selected section before writing and applies file mutations as one
   rollback transaction. Failures stay visible without dismissing preview; vocabulary preview
   distinguishes unchanged, added, updated, and current-only entries.
+- Import validation now lives in the testable core target and rejects malformed JSON types before
+  settings code can cast or mutate files. Five focused regression tests cover supported payloads.
 - Incremental installation now stops launchd before replacing signed bundle contents, rejects
   stuck processes and identity changes before mutation, and restores previous bundle on failed
   copy or signature validation. Updater restarts loaded launchd job instead of detached app.
+- Updater timers, shared state, and UI callbacks are main-actor isolated. Complete Swift
+  concurrency checking no longer reports Updater races; older AppKit and global hotkey state in
+  `main.swift` remains migration debt before enabling strict concurrency project-wide.
 
 - Release preflight now runs Pages-specific install/download validation alongside docs and
   string review checks, closing gap between local packaging and GitHub Pages CI.
@@ -157,7 +164,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 
 ## Current state (alpha.8)
 
-- **Test suites**: 129 Swift (`cd agent && swift test`), 58 Node
+- **Test suites**: 134 Swift (`cd agent && swift test`), 58 Node
   (`cd vendor/claude-command-capture && node --test`), 50 shell (`./test/test-shell.sh`),
   25 isolated install-state, 11 updater rollback/restart, 7 release-policy, 65 static,
   string-review, and docs

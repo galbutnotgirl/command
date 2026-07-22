@@ -23,6 +23,7 @@ import Cocoa
 import Carbon.HIToolbox
 import CoreGraphics
 import ApplicationServices
+import UserNotifications
 import Darwin
 import ClaudeCommandCore
 
@@ -103,11 +104,32 @@ func waitForActive(_ bundle: String) {
 }
 
 // Post a user-facing banner (LSUIElement agent has no UI of its own otherwise).
+private func enqueueNotification(_ center: UNUserNotificationCenter, title: String, body: String) {
+    let content = UNMutableNotificationContent()
+    content.title = title
+    content.body = body
+    center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)) { error in
+        if let error { appendLog("[notify] delivery failed: \(error.localizedDescription)") }
+    }
+}
+
 func notify(_ title: String, _ body: String) {
-    let notification = NSUserNotification()
-    notification.title = title
-    notification.informativeText = body
-    NSUserNotificationCenter.default.deliver(notification)
+    let center = UNUserNotificationCenter.current()
+    center.getNotificationSettings { settings in
+        switch settings.authorizationStatus {
+        case .authorized, .provisional:
+            enqueueNotification(center, title: title, body: body)
+        case .notDetermined:
+            center.requestAuthorization(options: [.alert]) { granted, error in
+                if let error { appendLog("[notify] authorization failed: \(error.localizedDescription)") }
+                if granted { enqueueNotification(center, title: title, body: body) }
+            }
+        case .denied:
+            appendLog("[notify] skipped because notifications are disabled")
+        @unknown default:
+            appendLog("[notify] skipped because notification authorization is unknown")
+        }
+    }
 }
 
 func clipboardHasImage() -> Bool {
@@ -1817,7 +1839,19 @@ func applyDockPolicy() {
 
 // Re-launching the app (Finder double-click, Alfred `open`, or a Dock-icon click)
 // reopens the window — there's no other launch action.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner])
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         openLastSettingsTab()
         return true
@@ -2149,7 +2183,7 @@ func installMainMenu() {
 
     let commandMenuItem = NSMenuItem()
     mainMenu.addItem(commandMenuItem)
-    let commandMenu = NSMenu(title: "Command")
+    let commandMenu = NSMenu(title: "Tools")
     commandMenuItem.submenu = commandMenu
     let importExport = commandMenu.addItem(withTitle: "Import / Export…", action: #selector(AppDelegate.openImportExport(_:)), keyEquivalent: "")
     importExport.target = appDelegate
@@ -2202,7 +2236,7 @@ stopClipwatch()   // kill any stale clipwatch from prior install before launchin
 startClipwatch()
 startServer()
 DispatchQueue.global(qos: .utility).async { pruneHandoffSubmissions() }
-scheduleAutoUpdateCheck()
+Task { @MainActor in scheduleAutoUpdateCheck() }
 
 menuBar.install()                 // greyscale menu-bar icon + Set Up / Shortcuts / Help window
 Task { @MainActor in await recorder.initModels() }  // warm Parakeet from cache if available

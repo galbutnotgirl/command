@@ -2029,6 +2029,18 @@ enum GlobalBundleSection: String, CaseIterable, Identifiable {
         case .appPreferences: return "App preferences"
         }
     }
+    var validationSection: ImportPayloadSection {
+        switch self {
+        case .shortcutBindings: return .shortcutBindings
+        case .customActions: return .customActions
+        case .builtInCompose: return .builtInCompose
+        case .commandTemplates: return .commandTemplates
+        case .contextRules: return .contextRules
+        case .vocabulary: return .vocabulary
+        case .handoffSettings: return .handoffSettings
+        case .appPreferences: return .appPreferences
+        }
+    }
 }
 
 private enum GlobalImportMode: String, CaseIterable, Identifiable {
@@ -2243,84 +2255,30 @@ private func validatedImportPayload(_ section: GlobalBundleSection, object: [Str
     guard let payload = importPayload(section, object: object) else {
         throw GlobalBundleError.invalidSection(section.label)
     }
-    let valid: Bool
-    switch section {
-    case .shortcutBindings:
-        valid = (payload as? [[String: Any]])?.allSatisfy {
-            $0["action"] is String && $0["keycode"] is Int && $0["mods"] is Int
-                && ($0["enabled"] == nil || $0["enabled"] is Bool)
-        } == true
-    case .customActions:
-        valid = (payload as? [[String: Any]])?.allSatisfy {
-            $0["id"] is String && $0["name"] is String && $0["prompt"] is String
-        } == true
-    case .builtInCompose:
-        if let value = payload as? [String: Any] {
-            valid = value["autoSubmitDefault"] is Bool
-                && value["autoSubmitOverrides"] is [String: Bool]
-        } else { valid = false }
-    case .commandTemplates:
-        valid = payload is [String: String]
-    case .contextRules:
-        valid = (payload as? [[String: Any]])?.allSatisfy {
-            guard let rawMatch = $0["match"] as? String else { return false }
-            return EnrichMatchType(rawValue: rawMatch) != nil
-                && $0["pattern"] is String && $0["text"] is String
-        } == true
-    case .vocabulary:
-        if let value = payload as? [String: Any] {
-            let replacementsValid = (value["replacements"] as? [[String: Any]])?.allSatisfy {
-                $0["wrong"] is String && $0["correct"] is String
-            } ?? (value["replacements"] == nil)
-            let termsValid = value["vocab"] is [String] || value["vocab"] == nil
-            let fillersValid = (value["fillers"] as? [[String: Any]])?.allSatisfy {
-                $0["phrase"] is String
-            } ?? (value["fillers"] == nil)
-            valid = replacementsValid && termsValid && fillersValid
-        } else { valid = false }
-    case .handoffSettings:
-        valid = payload is [String: Any]
-    case .appPreferences:
-        if let value = payload as? [String: Any] {
-            let providerValid = value["defaultProvider"] == nil
-                || (value["defaultProvider"] as? String).flatMap(AIProvider.init(rawValue:)) != nil
-            let claudeDestinationValid = value["claudeDestination"] == nil
-                || (value["claudeDestination"] as? String).flatMap(ClaudeDestination.init(rawValue:)).map { $0 != .default } == true
-            let codexDestinationValid = value["codexDestination"] == nil
-                || ["recent", "chat", "code"].contains(value["codexDestination"] as? String ?? "")
-            let workspaceValid = value["codexWorkspace"] == nil || value["codexWorkspace"] is String
-            let retentionValid = ["clipRetentionDays", "commandRetentionDays", "handoffRetentionDays"].allSatisfy {
-                value[$0] == nil || (value[$0] as? Int).map { $0 >= 1 && $0 <= 365 } == true
-            }
-            let boolKeys = [
-                VoiceSettingsKeys.soundsEnabled,
-                VoiceSettingsKeys.dictationEnabled,
-                VoiceSettingsKeys.fillerRemoval,
-                VoiceSettingsKeys.smartFormatting,
-                VoiceSettingsKeys.aiCleanup
-            ]
-            let booleansValid = boolKeys.allSatisfy { value[$0] == nil || value[$0] is Bool }
-            let soundNamesValid = [VoiceSettingsKeys.startSound, VoiceSettingsKeys.stopSound].allSatisfy {
-                value[$0] == nil || value[$0] is String
-            }
-            let volumeValid = value[VoiceSettingsKeys.soundVolume] == nil
-                || (value[VoiceSettingsKeys.soundVolume] as? Double).map { $0 >= 0 && $0 <= 1 } == true
-            let durationValid = value[VoiceSettingsKeys.minDictationDuration] == nil
-                || (value[VoiceSettingsKeys.minDictationDuration] as? Double).map { $0 >= 0 && $0 <= 1.5 } == true
-            let assistantKeys = [
-                VoiceSettingsKeys.dictationAssistantProvider,
-                VoiceSettingsKeys.dictationAssistant2Provider
-            ]
-            let assistantsValid = assistantKeys.allSatisfy {
-                value[$0] == nil || (value[$0] as? String).flatMap(AIProviderChoice.init(rawValue:)) != nil
-            }
-            valid = providerValid && claudeDestinationValid && codexDestinationValid
-                && workspaceValid && retentionValid && booleansValid && soundNamesValid
-                && volumeValid && durationValid && assistantsValid
-        } else { valid = false }
+    guard isValidImportPayload(payload, for: section.validationSection) else {
+        throw GlobalBundleError.invalidSection(section.label)
     }
-    guard valid else { throw GlobalBundleError.invalidSection(section.label) }
     return payload
+}
+
+private func validatedImportArray(
+    _ section: GlobalBundleSection,
+    object: [String: Any]
+) throws -> [[String: Any]] {
+    guard let value = try validatedImportPayload(section, object: object) as? [[String: Any]] else {
+        throw GlobalBundleError.invalidSection(section.label)
+    }
+    return value
+}
+
+private func validatedImportDictionary(
+    _ section: GlobalBundleSection,
+    object: [String: Any]
+) throws -> [String: Any] {
+    guard let value = try validatedImportPayload(section, object: object) as? [String: Any] else {
+        throw GlobalBundleError.invalidSection(section.label)
+    }
+    return value
 }
 
 @MainActor
@@ -2516,14 +2474,14 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
     }
 
     if let mode = modes[.shortcutBindings], mode != .skip {
-        let incoming = try validatedImportPayload(.shortcutBindings, object: obj) as! [[String: Any]]
+        let incoming = try validatedImportArray(.shortcutBindings, object: obj)
         let value = mode == .merge
             ? mergeDictionaryArrays(current: hotkeyJSON(loadBindings()), incoming: incoming, key: "action")
             : incoming
         try appendMutation(value, path: CFG)
     }
     if let mode = modes[.customActions], mode != .skip {
-        let incoming = try validatedImportPayload(.customActions, object: obj) as! [[String: Any]]
+        let incoming = try validatedImportArray(.customActions, object: obj)
         let value = mode == .merge
             ? mergeDictionaryArrays(
                 current: jsonObject(at: CUSTOM_ACTIONS_PATH, fallback: []) as? [[String: Any]] ?? [],
@@ -2534,28 +2492,28 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
         try appendMutation(value, path: CUSTOM_ACTIONS_PATH)
     }
     if let mode = modes[.builtInCompose], mode != .skip {
-        let incoming = try validatedImportPayload(.builtInCompose, object: obj) as! [String: Any]
+        let incoming = try validatedImportDictionary(.builtInCompose, object: obj)
         let value = mode == .merge
             ? mergeDictionaryValues(current: builtInComposeJSON(), incoming: incoming)
             : incoming
         try appendMutation(value, path: BUILTIN_COMPOSE_SETTINGS_PATH)
     }
     if let mode = modes[.commandTemplates], mode != .skip {
-        let incoming = try validatedImportPayload(.commandTemplates, object: obj) as! [String: Any]
+        let incoming = try validatedImportDictionary(.commandTemplates, object: obj)
         let value = mode == .merge
             ? mergeDictionaryValues(current: commandTemplateJSON(), incoming: incoming)
             : incoming
         try appendMutation(value, path: COMMAND_TEMPLATES_PATH)
     }
     if let mode = modes[.contextRules], mode != .skip {
-        let incoming = try validatedImportPayload(.contextRules, object: obj) as! [[String: Any]]
+        let incoming = try validatedImportArray(.contextRules, object: obj)
         let value = mode == .merge
             ? mergeEnrichRuleDictionaries(current: enrichRulesJSON(), incoming: incoming)
             : incoming
         try appendMutation(value, path: ENRICHMENT_RULES_PATH)
     }
     if let mode = modes[.vocabulary], mode != .skip {
-        let incoming = try validatedImportPayload(.vocabulary, object: obj) as! [String: Any]
+        let incoming = try validatedImportDictionary(.vocabulary, object: obj)
         let value = mode == .merge
             ? mergeVocabularyDictionaries(
                 current: jsonObject(at: VocabularyStore.diskURL().path, fallback: [:]) as? [String: Any] ?? [:],
@@ -2566,14 +2524,14 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
         shouldReloadVocabulary = true
     }
     if let mode = modes[.handoffSettings], mode != .skip {
-        let incoming = try validatedImportPayload(.handoffSettings, object: obj) as! [String: Any]
+        let incoming = try validatedImportDictionary(.handoffSettings, object: obj)
         let value = mode == .merge
             ? mergeDictionaryValues(current: handoffSettingsJSON(), incoming: incoming)
             : incoming
         try appendMutation(value, path: HandoffConfig.settingsFile)
     }
     if let mode = modes[.appPreferences], mode != .skip {
-        let incoming = try validatedImportPayload(.appPreferences, object: obj) as! [String: Any]
+        let incoming = try validatedImportDictionary(.appPreferences, object: obj)
         importedPreferences = mode == .overwrite
             ? mergeDictionaryValues(current: defaultAppPreferences(), incoming: incoming)
             : incoming

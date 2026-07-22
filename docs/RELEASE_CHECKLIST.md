@@ -40,7 +40,7 @@ With current Claude and ChatGPT apps running, verify installed assistant contrac
 ./test/test-assistant-contract.sh
 ```
 
-This checks registered URL schemes plus current Quick Chat, New Task, New Projectless Task, and Claude New Conversation shortcuts. Any mismatch means provider routing must be reviewed before release.
+This checks registered URL schemes plus bundled resources for current Quick Chat, New Task, New Projectless Task, Claude New Conversation, and Claude Chat/Cowork/Code deep links. It does not drive assistant UI or prove prompt-field focus; those remain manual checks. Any mismatch means provider routing must be reviewed before release.
 
 Optional local packaging check:
 

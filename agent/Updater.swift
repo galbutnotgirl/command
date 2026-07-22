@@ -182,8 +182,9 @@ private func validateUpdateBundle(
 // button surfaces it. Doesn't auto-install: the user still clicks through.
 private let AUTO_UPDATE_CHECK_INTERVAL: TimeInterval = 86400
 private let AUTO_UPDATE_LAST_CHECK_KEY = "lastAutoUpdateCheckAt"
-private var _autoUpdateTimer: Timer?
+@MainActor private var _autoUpdateTimer: Timer?
 
+@MainActor
 func scheduleAutoUpdateCheck() {
     let last = UserDefaults.standard.double(forKey: AUTO_UPDATE_LAST_CHECK_KEY)
     let elapsed = Date().timeIntervalSince1970 - last
@@ -194,11 +195,12 @@ func scheduleAutoUpdateCheck() {
         runAutoUpdateCheck()
         _autoUpdateTimer?.invalidate()
         _autoUpdateTimer = Timer.scheduledTimer(withTimeInterval: AUTO_UPDATE_CHECK_INTERVAL, repeats: true) { _ in
-            runAutoUpdateCheck()
+            Task { @MainActor in runAutoUpdateCheck() }
         }
     }
 }
 
+@MainActor
 private func runAutoUpdateCheck() {
     UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: AUTO_UPDATE_LAST_CHECK_KEY)
     Updater.shared.check { result in
@@ -208,12 +210,13 @@ private func runAutoUpdateCheck() {
     }
 }
 
+@MainActor
 final class Updater {
     static let shared = Updater()
     private(set) var busy = false
 
     // ── 1. Check the newest release on the selected channel ──────────────────
-    func check(_ completion: @escaping (UpdateCheckResult) -> Void) {
+    func check(_ completion: @escaping @MainActor @Sendable (UpdateCheckResult) -> Void) {
         let channel = currentChannel()
         guard !GH_OWNER.isEmpty, !GH_REPO.isEmpty else {
             completion(.failed("No update repo configured yet.")); return
@@ -227,9 +230,9 @@ final class Updater {
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.setValue("Command", forHTTPHeaderField: "User-Agent")
         busy = true
-        URLSession.shared.dataTask(with: req) { [weak self] data, resp, err in
-            self?.busy = false
-            DispatchQueue.main.async {
+        URLSession.shared.dataTask(with: req) { data, resp, err in
+            Task { @MainActor in
+                Updater.shared.busy = false
                 if let err = err { completion(.failed(err.localizedDescription)); return }
                 guard let http = resp as? HTTPURLResponse else { completion(.failed("No response.")); return }
                 if http.statusCode == 404 { completion(.failed("No releases published yet.")); return }
@@ -276,8 +279,8 @@ final class Updater {
     // status() fires on the main thread with progress text. done() fires once at
     // the end; on success the app quits and the swapper relaunches the new build.
     func install(_ info: UpdateInfo,
-                 status: @escaping (String) -> Void,
-                 done: @escaping (Bool, String) -> Void) {
+                 status: @escaping @MainActor @Sendable (String) -> Void,
+                 done: @escaping @MainActor @Sendable (Bool, String) -> Void) {
         guard let dl = info.downloadURL, let url = URL(string: dl) else {
             if let u = URL(string: info.releaseURL) { NSWorkspace.shared.open(u) }
             done(false, "This release has no downloadable build attached. Opened the release page so you can grab it manually.")
@@ -285,11 +288,10 @@ final class Updater {
         }
         status("Downloading v\(info.latestVersion)…")
         busy = true
-        URLSession.shared.downloadTask(with: url) { [weak self] tmp, _, err in
-            guard let self else { return }
-            self.busy = false
+        URLSession.shared.downloadTask(with: url) { tmp, _, err in
+            Task { @MainActor in Updater.shared.busy = false }
             guard let tmp = tmp, err == nil else {
-                DispatchQueue.main.async { done(false, "Download failed: \(err?.localizedDescription ?? "unknown error").") }
+                Task { @MainActor in done(false, "Download failed: \(err?.localizedDescription ?? "unknown error").") }
                 return
             }
             // Move the download somewhere stable before the URLSession temp is reaped.
@@ -298,21 +300,21 @@ final class Updater {
             try? FileManager.default.createDirectory(atPath: work, withIntermediateDirectories: true)
             let zipPath = work + "/update.zip"
             do { try FileManager.default.moveItem(atPath: tmp.path, toPath: zipPath) }
-            catch { DispatchQueue.main.async { done(false, "Could not stage download: \(error.localizedDescription)") }; return }
+            catch { Task { @MainActor in done(false, "Could not stage download: \(error.localizedDescription)") }; return }
 
-            DispatchQueue.main.async { status("Unpacking…") }
+            Task { @MainActor in status("Unpacking…") }
             // ditto -xk unzips; the archive should contain Command.app at top level.
             let unzipDir = work + "/extracted"
             let (_, code) = runShell("/usr/bin/ditto", ["-xk", zipPath, unzipDir])
             let appNames = (try? FileManager.default.contentsOfDirectory(atPath: unzipDir))?
                 .filter { $0.hasSuffix(".app") } ?? []
             guard code == 0, appNames == ["Command.app"] else {
-                DispatchQueue.main.async { done(false, "Update archive didn't contain an app bundle.") }
+                Task { @MainActor in done(false, "Update archive didn't contain an app bundle.") }
                 return
             }
             let newApp = unzipDir + "/Command.app"
             guard let requirement = appDesignatedRequirement(at: Bundle.main.bundlePath) else {
-                DispatchQueue.main.async { done(false, "Could not verify installed Command signing identity.") }
+                Task { @MainActor in done(false, "Could not verify installed Command signing identity.") }
                 return
             }
             if let validationError = validateUpdateBundle(
@@ -320,12 +322,12 @@ final class Updater {
                 expectedVersion: info.latestVersion,
                 expectedRequirement: requirement
             ) {
-                DispatchQueue.main.async { done(false, validationError) }
+                Task { @MainActor in done(false, validationError) }
                 return
             }
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 status("Installing… the app will restart.")
-                if self.handOffSwap(
+                if Updater.shared.handOffSwap(
                     newApp: newApp,
                     expectedVersion: info.latestVersion,
                     expectedRequirement: requirement

@@ -76,7 +76,7 @@ python3 ./test/test_string_review.py
 ./doctor.sh</code></pre>
         <p>With current Claude and ChatGPT apps running, verify installed assistant contracts without opening or submitting conversations:</p>
         <pre><code>./test/test-assistant-contract.sh</code></pre>
-        <p>This checks registered URL schemes plus current Quick Chat, New Task, New Projectless Task, and Claude New Conversation shortcuts. Any mismatch means provider routing must be reviewed before release.</p>
+        <p>This checks registered URL schemes plus bundled resources for current Quick Chat, New Task, New Projectless Task, Claude New Conversation, and Claude Chat/Cowork/Code deep links. It does not drive assistant UI or prove prompt-field focus; those remain manual checks. Any mismatch means provider routing must be reviewed before release.</p>
         <p>Optional local packaging check:</p>
         <pre><code>./release.sh --skip-checks
 ./test/test-release-asset.sh</code></pre>
