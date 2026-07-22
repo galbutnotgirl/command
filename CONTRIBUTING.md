@@ -42,6 +42,8 @@ python3 ./test/test_string_review.py
 
 `test/test-docs.py` validates README/docs links, rendered HTML structure, metadata, sitemap, bundled-doc asset lists, release docs coverage, About docs buttons, Markdown/HTML parity, local media assets, and repo support/security policy links.
 
+For provider-routing changes, launch current Claude and ChatGPT builds and run `./test/test-assistant-contract.sh`. It reads their URL schemes and native menu shortcuts without creating or submitting conversations.
+
 ## Docs Changes
 
 User docs live in `docs/*.md` and rendered `docs/*.html`. Keep paired Markdown and HTML pages aligned when changing user-facing guidance.

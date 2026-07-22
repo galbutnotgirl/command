@@ -233,9 +233,9 @@ SEND_SOURCE="$(cat "$SEND_SCRIPT")"
 AGENT_SOURCE="$(cat "${DIR}/agent/main.swift")"
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
   'helper_newchat ||'
-assert_contains "Quick Chat uses installed app Command-Option-N shortcut" "$AGENT_SOURCE" \
-  'opt: isChat,'
-assert_contains "Codex projectless task uses installed app Shift-Command-O shortcut" "$AGENT_SOURCE" \
+assert_contains "Native assistant shortcuts use tested core mapping" "$AGENT_SOURCE" \
+  'assistantShortcut(forSocketCommand: parts[0])'
+assert_not_contains "Codex projectless task no longer uses stale Shift-Command-O shortcut" "$AGENT_SOURCE" \
   'shift: isProjectless,'
 assert_contains "Native session commands target assistant process directly" "$AGENT_SOURCE" \
   'd.postToPid(app.processIdentifier)'

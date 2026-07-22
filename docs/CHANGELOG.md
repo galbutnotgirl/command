@@ -2,6 +2,8 @@
 
 ## 1.2.0-alpha.8
 
+- Fixed new projectless Codex sessions in current ChatGPT builds by matching the app's `Command-Option-O` shortcut instead of stale `Shift-Command-O` routing.
+- Warmed dictation cue audio with separate silent playback so first Purr cue starts at same volume as stop cue after cold launch.
 - Added first-class Claude and ChatGPT provider selection globally, per Custom Action, and per trigger, with Codex as a ChatGPT destination.
 - Added ChatGPT destination parity: ChatGPT general chat and workspace-aware Codex, with global, action, and trigger inheritance.
 - Preserved legacy `codex` provider keys while adopting current ChatGPT app and Codex coding-product names.

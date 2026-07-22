@@ -32,6 +32,14 @@ python3 ./test/test_string_review.py
 ./doctor.sh
 ```
 
+With current Claude and ChatGPT apps running, verify installed assistant contracts without opening or submitting conversations:
+
+```bash
+./test/test-assistant-contract.sh
+```
+
+This checks registered URL schemes plus current Quick Chat, New Task, New Projectless Task, and Claude New Conversation shortcuts. Any mismatch means provider routing must be reviewed before release.
+
 Optional local packaging check:
 
 ```bash

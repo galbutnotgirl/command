@@ -48,7 +48,7 @@ func bundledResource(_ name: String) -> String {
 let WORKER: String = bundledResource("send-to-claude.sh")
 
 // ---- keystroke synthesis (own process → one Accessibility grant) -----------
-let kC: CGKeyCode = 0x08, kV: CGKeyCode = 0x09, kO: CGKeyCode = 0x1F, kRet: CGKeyCode = 0x24
+let kC: CGKeyCode = 0x08, kV: CGKeyCode = 0x09, kRet: CGKeyCode = 0x24
 
 func ensureTrusted() {
     if AXIsProcessTrusted() { return }
@@ -1682,15 +1682,14 @@ func handle(_ line: String) -> String {
         }
         return posted ? "ok" : "err"
     case "newtask", "newchat", "newprojectless":
-        guard parts.count > 1 else { return "err" }
+        guard parts.count > 1,
+              let shortcut = assistantShortcut(forSocketCommand: parts[0]) else { return "err" }
         var posted = false
-        let isChat = parts[0] == "newchat"
-        let isProjectless = parts[0] == "newprojectless"
         DispatchQueue.main.sync {
-            posted = postKey(isProjectless ? kO : 45,
-                             cmd: true,
-                             opt: isChat,
-                             shift: isProjectless,
+            posted = postKey(CGKeyCode(shortcut.keycode),
+                             cmd: shortcut.command,
+                             opt: shortcut.option,
+                             shift: shortcut.shift,
                              to: parts[1])
         }
         return posted ? "ok" : "err"

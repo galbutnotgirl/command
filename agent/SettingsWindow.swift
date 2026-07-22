@@ -383,15 +383,22 @@ private final class UISoundPlayer: NSObject, AVAudioPlayerDelegate {
     static let shared = UISoundPlayer()
     private var activePlayers: [AVAudioPlayer] = []
     private var preparedPlayers: [String: AVAudioPlayer] = [:]
+    private var warmupPlayers: [AVAudioPlayer] = []
 
     func preload(_ names: [String]) {
         for name in Set(names) {
-            guard let player = preparedPlayer(for: name, volume: 0) else { continue }
-            player.volume = 0
-            player.currentTime = 0
-            if player.play() {
-                player.stop()
-                player.currentTime = 0
+            guard preparedPlayer(for: name, volume: 0) != nil,
+                  let warmup = makePlayer(for: name, volume: 0) else { continue }
+            // Let a separate silent player render briefly. Stopping in the same
+            // run-loop turn never opens the audio route, which made first cue
+            // much quieter than every later cue on a cold launch.
+            if warmup.play() {
+                warmupPlayers.append(warmup)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self, weak warmup] in
+                    guard let self, let warmup else { return }
+                    warmup.stop()
+                    self.warmupPlayers.removeAll { $0 === warmup }
+                }
             }
         }
     }
@@ -414,6 +421,12 @@ private final class UISoundPlayer: NSObject, AVAudioPlayerDelegate {
             return player
         }
 
+        guard let player = makePlayer(for: name, volume: volume) else { return nil }
+        preparedPlayers[name] = player
+        return player
+    }
+
+    private func makePlayer(for name: String, volume: Float) -> AVAudioPlayer? {
         let url = URL(fileURLWithPath: "/System/Library/Sounds/\(name).aiff")
         guard FileManager.default.fileExists(atPath: url.path) else {
             appendLog("[sound] missing \(url.path)")
@@ -425,7 +438,6 @@ private final class UISoundPlayer: NSObject, AVAudioPlayerDelegate {
             player.volume = volume
             player.delegate = self
             player.prepareToPlay()
-            preparedPlayers[name] = player
             return player
         } catch {
             appendLog("[sound] load failed name=\(name): \(error.localizedDescription)")
