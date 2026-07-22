@@ -18,9 +18,8 @@ recent change if something in there needs undoing).
 - Incremental-install coverage now preserves custom actions, hotkeys, vocabulary, background
   settings, Command History, and Clipboard History data, and rejects signing-identity changes
   that would invalidate macOS privacy grants.
-- Installed assistant contract checks now verify ChatGPT New Task/projectless-task and Claude
-  New Conversation shortcuts from packaged resources even when apps are closed, while keeping
-  live menu inspection as final manual gate.
+- Installed assistant contract checks now verify ChatGPT New Task/projectless-task, Claude
+  Chat/Cowork/Code deep-link handlers, and live menu shortcuts before route testing.
 - In-app updater now selects highest compatible SemVer, validates exact app name,
   bundle ID, version, executable, code signature, and current designated signing
   requirement before replacement, then repeats validation after copy.
@@ -144,12 +143,15 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 ## Current state (alpha.8)
 
 - **Test suites**: 121 Swift (`cd agent && swift test`), 56 Node
-  (`cd vendor/claude-command-capture && node --test`), 47 shell (`./test/test-shell.sh`),
+  (`cd vendor/claude-command-capture && node --test`), 50 shell (`./test/test-shell.sh`),
   16 isolated install-state, 8 updater rollback, 7 release-policy, string-review, and docs
   validation checks. All green. Local release verification also checks current installed
   Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test
   (`./release.sh --skip-checks` and `./test/test-release-asset.sh`) on push/PR
   (`.github/workflows/test.yml`).
+- **Installed provider contract**: ChatGPT 26.707.72221 and Claude 1.24012.0 pass 12/12
+  packaged-resource, live-menu, and Claude Chat/Cowork/Code deep-link checks. Actual prompt
+  insertion remains a manual release gate because contract inspection does not prove field focus.
 - **Provider parity**: Claude and Codex share selected-text, screenshot, popup, voice,
   dictation, Clipboard History, existing/new task, auto-submit, Context, Custom Action,
   background, history, retry, import/export, diagnostics, and Set Up paths. Claude-specific

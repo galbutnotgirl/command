@@ -732,7 +732,7 @@ REQUIRED_TEXT = {
     "docs/STATUS.md": [
         "121 Swift",
         "56 Node",
-        "47 shell",
+        "50 shell",
         "16 isolated install-state",
         "python3 ./test/test-docs.py",
         "compact solid-purple voice-lines",

@@ -107,10 +107,12 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-21)
 
-- Automated local suites: 121 Swift, 56 Node, 47 shell, 16 install-state, 8 updater,
+- Automated local suites: 121 Swift, 56 Node, 50 shell, 16 install-state, 8 updater,
   7 release-policy, 2 string-review; docs, Pages, provider contract, and release asset pass.
+- Installed ChatGPT 26.707.72221 and Claude 1.24012.0 contract check passes 12/12:
+  packaged shortcuts, live menus, and Claude Chat/Cowork/Code `/new` handlers match routes.
 - Installed Codex projectless route passed non-submitting live smoke test.
-- Quick Chat, full Claude/ChatGPT matrix, live dictation matrix, and clean onboarding remain
-  manual release gates.
+- Prompt delivery through Quick Chat and Claude destinations, full live dictation matrix, and
+  clean onboarding remain manual release gates.
 - Developer ID/notarization remains blocked until valid Apple signing identity and notary
   Keychain profile are available. Ad hoc signing cannot remove Gatekeeper download warning.

@@ -272,7 +272,30 @@ CAPTURE_SCRIPT="${DIR}/capture-handoff.sh"
 TMP_CAPTURE_BASE="$(mktemp -d)"
 TMP_MISSING_CORE="$(mktemp -d)"
 TMP_FAKE_CORE="$(mktemp -d)"
-trap 'rm -f "$RULES_FILE"; rm -rf "$TMP_NON_GIT_WORKSPACE" "$TMP_CAPTURE_BASE" "$TMP_MISSING_CORE" "$TMP_FAKE_CORE"' EXIT
+TMP_ASAR="$(mktemp)"
+trap 'rm -f "$RULES_FILE" "$TMP_ASAR"; rm -rf "$TMP_GIT_WORKSPACE" "$TMP_NON_GIT_WORKSPACE" "$TMP_CAPTURE_BASE" "$TMP_MISSING_CORE" "$TMP_FAKE_CORE"' EXIT
+
+# ---- ASAR contract scanner --------------------------------------------------
+node - "$TMP_ASAR" <<'NODE'
+const fs = require('fs');
+const path = process.argv[2];
+const content = Buffer.from('alpha accepts /new with q; beta accepts prompt');
+const header = Buffer.from(JSON.stringify({ files: { 'contract.js': { size: content.length, offset: '0' } } }));
+const asar = Buffer.alloc(16 + header.length + content.length);
+asar.writeUInt32LE(header.length, 12);
+header.copy(asar, 16);
+content.copy(asar, 16 + header.length);
+fs.writeFileSync(path, asar);
+NODE
+ASAR_SCANNER="${DIR}/test/asar-contract.js"
+node "$ASAR_SCANNER" "$TMP_ASAR" 'accepts /new' 'accepts prompt' >/dev/null 2>&1
+assert_status "ASAR scanner finds all contracts in one packed entry" "$?" "0"
+node "$ASAR_SCANNER" "$TMP_ASAR" 'missing contract' >/dev/null 2>&1
+ASAR_MISSING_STATUS=$?
+node "$ASAR_SCANNER" /dev/null 'anything' >/dev/null 2>&1
+ASAR_INVALID_STATUS=$?
+assert_status "ASAR scanner reports a missing contract" "$ASAR_MISSING_STATUS" "1"
+assert_status "ASAR scanner rejects a malformed archive" "$ASAR_INVALID_STATUS" "2"
 
 set +e
 CLAUDE_CAPTURE_CORE="$TMP_MISSING_CORE" \
