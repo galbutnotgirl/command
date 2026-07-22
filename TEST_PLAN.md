@@ -134,11 +134,22 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 - Download release zip in browser, verify SHA-256, install, and launch without bypass steps.
 - Run in-app update from previous release and verify rollback on simulated invalid package.
 
+### Accessibility
+
+- Navigate onboarding, Settings sidebar, Shortcuts, Custom Action editing, Import, Clipboard
+  History, and Dictation Settings using keyboard and VoiceOver only.
+- Verify every picker, toggle, icon button, key-binding field, and status indicator announces a
+  specific purpose, current value or state, and disabled state where applicable.
+- Verify focus order follows visual order, sheets return focus to their opener, and no control
+  requires pointer input.
+
 ## Current Evidence (2026-07-22)
 
 - Automated local suites: 143 Swift, 58 Node, 50 shell, 25 install-state, 11 updater,
-  9 restart-handoff, 7 release-policy, 69 static syntax/configuration, and 2 string-review;
+  9 restart-handoff, 7 release-policy, 70 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
+- Settings pickers and toggles have explicit hidden accessibility labels, and static analysis
+  rejects future empty labels. Full keyboard and VoiceOver traversal remains a manual gate.
 - All 143 Swift tests also pass independently under AddressSanitizer and ThreadSanitizer.
 - Installed `main@2317d29` passes a 60-second launchd/socket runtime soak with stable PID, 61/61
   socket pings, bounded descriptors, no new crashes, and no newly emitted critical diagnostics.
@@ -159,8 +170,8 @@ Preserve user settings for incremental tests. Use clean install only for onboard
   registered URL schemes, packaged shortcut resources, and Claude Chat/Cowork/Code `/new`
   handlers match routes without driving either app's interface.
 - Installed Codex projectless route passed non-submitting live smoke test.
-- Prompt delivery through Quick Chat and Claude destinations, full live dictation matrix, and
-  clean onboarding remain manual release gates.
+- Prompt delivery through Quick Chat and Claude destinations, full live dictation matrix, clean
+  onboarding, and full VoiceOver traversal remain manual release gates.
 - Developer ID/notarization remains blocked until valid Apple signing identity and notary
   Keychain profile are available. Ad hoc signing cannot remove Gatekeeper download warning.
 - Full Swift 6 strict-concurrency migration remains post-release engineering work: current SDK

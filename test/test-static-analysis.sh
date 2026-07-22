@@ -71,5 +71,11 @@ else
   ok
 fi
 
+if git grep -n -E '(Picker|Toggle)\("",' -- agent >/dev/null; then
+  bad "SwiftUI Picker or Toggle has an empty accessibility label"
+else
+  ok
+fi
+
 printf '\nstatic analysis: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -927,10 +927,11 @@ struct ShortcutsView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Default assistant").font(.headline)
-                    Picker("", selection: providerBinding) {
+                    Picker("Default assistant", selection: providerBinding) {
                         Text("Claude").tag("claude")
                         Text("ChatGPT").tag("codex")
                     }
+                    .labelsHidden()
                     .pickerStyle(.segmented).frame(maxWidth: 240)
                 }
 
@@ -939,11 +940,12 @@ struct ShortcutsView: View {
                     Text("Used for New and Go prompts unless a prompt or trigger overrides it. Existing conversation keeps the current assistant surface.")
                         .font(.caption).foregroundColor(.secondary)
                     if model.defaultProvider == "codex" {
-                        Picker("", selection: codexDestBinding) {
+                        Picker("Default ChatGPT destination", selection: codexDestBinding) {
                             Text("Recent").tag("recent")
                             Text("Chat").tag("chat")
                             Text("Codex").tag("code")
                         }
+                        .labelsHidden()
                         .pickerStyle(.segmented).frame(maxWidth: 240)
                         if model.codexDestination == "code" {
                             Text("Default Codex workspace").font(.caption).bold()
@@ -951,12 +953,13 @@ struct ShortcutsView: View {
                                 .frame(maxWidth: 520)
                         }
                     } else {
-                        Picker("", selection: destBinding) {
+                        Picker("Default Claude destination", selection: destBinding) {
                             Text("Recent").tag("recent")
                             Text("Chat").tag("chat")
                             Text("Cowork").tag("cowork")
                             Text("Code").tag("code")
                         }
+                        .labelsHidden()
                         .pickerStyle(.segmented)
                         .frame(maxWidth: 340)
                     }
@@ -1247,7 +1250,7 @@ struct EditableBuiltInComposeRow: View {
             Image(systemName: def.icon).foregroundColor(appPurple).frame(width: 16)
                 .help(def.inputLabel)
             Text(def.behaviorLabel).font(.caption).frame(width: 120, alignment: .leading)
-            Picker("", selection: $autoSubmitChoice) {
+            Picker("Submit behavior for \(def.inputLabel), \(def.behaviorLabel)", selection: $autoSubmitChoice) {
                 ForEach(AutoSubmitChoice.allCases) { choice in
                     Text(choice.label).tag(choice)
                 }
@@ -1456,7 +1459,7 @@ struct CustomActionSheet: View {
                     HStack(alignment: .top, spacing: 18) {
                         VStack(alignment: .leading, spacing: 5) {
                             Text("Assistant").font(.caption).bold()
-                            Picker("", selection: $provider) {
+                            Picker("Assistant", selection: $provider) {
                                 ForEach(AIProviderChoice.allCases, id: \.self) { Text($0.label).tag($0) }
                             }
                             .labelsHidden().pickerStyle(.segmented)
@@ -1476,8 +1479,9 @@ struct CustomActionSheet: View {
                                 }
                                 .buttonStyle(.plain)
                                 .help("Open Shortcut Settings help.")
+                                .accessibilityLabel("Open delivery help")
                             }
-                            Picker("", selection: $delivery) {
+                            Picker("Delivery", selection: $delivery) {
                                 ForEach(ActionDelivery.allCases, id: \.self) { d in Text(d.label).tag(d) }
                             }
                             .labelsHidden()
@@ -1491,7 +1495,7 @@ struct CustomActionSheet: View {
                     if resolvedProvider.supportsDestinations {
                         VStack(alignment: .leading, spacing: 5) {
                             Text("Destination").font(.caption).bold()
-                            Picker("", selection: $destination) {
+                            Picker("Destination", selection: $destination) {
                                 ForEach(ClaudeDestination.available(for: resolvedProvider), id: \.self) { d in
                                     Text(d.label(for: resolvedProvider)).tag(d)
                                 }
@@ -1640,7 +1644,7 @@ struct EditableTriggerRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 Image(systemName: kindIcon).foregroundColor(appPurple).frame(width: 16)
-                Picker("", selection: Binding(
+                Picker("Trigger type", selection: Binding(
                     get: { trigger.kind },
                     set: { model.setTriggerKind(triggerID: trigger.id, kind: $0) }
                 )) {
@@ -1661,7 +1665,7 @@ struct EditableTriggerRow: View {
 
             HStack(spacing: 12) {
                 LabeledPicker(caption: "Assistant") {
-                    Picker("", selection: Binding(
+                    Picker("Assistant", selection: Binding(
                         get: { trigger.providerOverride },
                         set: { model.setTriggerProvider(triggerID: trigger.id, provider: $0) }
                     )) {
@@ -1672,7 +1676,7 @@ struct EditableTriggerRow: View {
                 }
 
                 LabeledPicker(caption: "Delivery") {
-                    Picker("", selection: Binding(
+                    Picker("Delivery", selection: Binding(
                         get: { trigger.deliveryOverride },
                         set: { model.setTriggerDelivery(triggerID: trigger.id, delivery: $0) }
                     )) {
@@ -1685,7 +1689,7 @@ struct EditableTriggerRow: View {
                 }
 
                 if effectiveProvider.supportsDestinations { LabeledPicker(caption: "Destination") {
-                    Picker("", selection: Binding(
+                    Picker("Destination", selection: Binding(
                         get: { trigger.destinationOverride },
                         set: { model.setTriggerDestination(triggerID: trigger.id, destination: $0) }
                     )) {
@@ -1697,7 +1701,7 @@ struct EditableTriggerRow: View {
                 } }
 
                 LabeledPicker(caption: "Submit") {
-                    Picker("", selection: Binding(
+                    Picker("Submit", selection: Binding(
                         get: { AutoSubmitChoice.from(trigger.isAutoSubmitOverride) },
                         set: { model.setTriggerAutoSubmit(triggerID: trigger.id, autoSubmit: $0.boolValue) }
                     )) {
@@ -1759,7 +1763,7 @@ struct TemplatesView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
                             Text("Preview as").font(.caption).foregroundColor(.secondary)
-                            Picker("", selection: $previewSource) {
+                            Picker("Preview source", selection: $previewSource) {
                                 ForEach(sources) { s in Text(s.label).tag(s) }
                             }
                             .labelsHidden().frame(width: 180)
@@ -1950,7 +1954,7 @@ struct EnrichRuleRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Picker("", selection: $match) {
+                Picker("Match type", selection: $match) {
                     ForEach(EnrichMatchType.allCases) { m in Text(m.label).tag(m) }
                 }
                 .labelsHidden()
@@ -2617,7 +2621,7 @@ struct GlobalImportSheet: View {
                                     }
                                 }
                                 Spacer()
-                                Picker("", selection: Binding(
+                                Picker("Import \(section.label)", selection: Binding(
                                     get: { modes[section] ?? .skip },
                                     set: { modes[section] = $0 }
                                 )) {
@@ -2903,7 +2907,7 @@ struct HistoryView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer()
-                        Toggle("", isOn: $enabled)
+                        Toggle("Enable Clipboard History", isOn: $enabled)
                             .labelsHidden()
                             .onChange(of: enabled) { _, v in
                                 UserDefaults.standard.set(v, forKey: "cliphistoryEnabled")
@@ -2948,11 +2952,12 @@ struct HistoryView: View {
                         HStack(spacing: 10) {
                             Text("Picker theme")
                             Spacer()
-                            Picker("", selection: $theme) {
+                            Picker("Picker theme", selection: $theme) {
                                 Text("Auto").tag(PickerTheme.auto)
                                 Text("Light").tag(PickerTheme.light)
                                 Text("Dark").tag(PickerTheme.dark)
                             }
+                            .labelsHidden()
                             .pickerStyle(.segmented)
                             .frame(width: 180)
                             .onChange(of: theme) { _, v in setPickerTheme(v) }
@@ -3067,12 +3072,13 @@ struct HandoffsView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 10) {
-                    Picker("", selection: $statusFilter) {
+                    Picker("Command status", selection: $statusFilter) {
                         Text("All").tag("all")
                         Text("Running").tag("running")
                         Text("Succeeded").tag("succeeded")
                         Text("Failed").tag("failed")
                     }
+                    .labelsHidden()
                     .pickerStyle(.segmented).frame(width: 320)
                     TextField("Search action, source, destination, skill, or prompt", text: $query)
                         .textFieldStyle(.roundedBorder)
@@ -4245,7 +4251,7 @@ struct DictVocabularyView: View {
                         VStack(spacing: 6) {
                             ForEach(vocab.fillers) { f in
                                 HStack {
-                                    Toggle("", isOn: Binding(
+                                    Toggle("Remove \(f.phrase) from transcripts", isOn: Binding(
                                         get: { f.enabled },
                                         set: { _ in vocab.toggleFiller(id: f.id) }
                                     )).labelsHidden().toggleStyle(.checkbox)
@@ -4528,7 +4534,7 @@ struct DictSettingsView: View {
     }
 
     private func assistantProviderPicker(selection: Binding<String>) -> some View {
-        Picker("", selection: selection) {
+        Picker("Assistant", selection: selection) {
             Text("Default").tag("default")
             Text("Claude").tag("claude")
             Text("ChatGPT").tag("codex")

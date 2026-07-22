@@ -748,7 +748,7 @@ REQUIRED_TEXT = {
         "50 shell",
         "25 isolated install-state",
         "9 restart-handoff",
-        "69 static",
+        "70 static",
         "test/test-installed-runtime.sh",
         "python3 ./test/test-docs.py",
         "compact solid-purple voice-lines",
