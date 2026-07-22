@@ -1779,8 +1779,10 @@ func handle(_ line: String) -> String {
         return "ok"
     case "reloadhotkeys": DispatchQueue.main.async { reregisterHotkeys() }; return "ok"
     case "showsettings":  DispatchQueue.main.async { settingsWindow.show(tab: .setup) }; return "ok"
-    case "restart":  // exit now; KeepAlive=true makes launchd relaunch us with fresh TCC grants
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { exit(0) }
+    case "restart":
+        // Reply before beginning the detached handoff so callers can distinguish
+        // an accepted restart from a dead socket.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { restartApp() }
         return "ok"
     case "ping": return "pong"
     default: return "err"
@@ -1932,7 +1934,7 @@ private func reopenAfterExit(appPath: String, pid: Int32) {
     for i in {1..75}; do /bin/kill -0 $PID 2>/dev/null || break; sleep 0.2; done
     /usr/bin/open "$APP"
     """
-    let path = NSTemporaryDirectory() + "claudecommand-reopen.sh"
+    let path = NSTemporaryDirectory() + "command-reopen-\(pid).sh"
     guard (try? script.write(toFile: path, atomically: true, encoding: .utf8)) != nil else {
         appendLog("[restart] could not write reopen helper")
         return
@@ -1944,18 +1946,47 @@ private func reopenAfterExit(appPath: String, pid: Int32) {
     do { try p.run() } catch { appendLog("[restart] could not launch reopen helper: \(error)") }
 }
 
-// Restart: prefer the LaunchAgent so login/restart state stays durable. Downloaded
-// app installs may not have a LaunchAgent yet, so create it on demand and also
-// hand off a detached reopen fallback before exiting.
+private let restartStateLock = NSLock()
+private var restartInProgress = false
+
+private func handOffRestartAfterExit(appPath: String, pid: Int32) -> Bool {
+    let helper = bundledResource("restart-app.sh")
+    guard FileManager.default.isExecutableFile(atPath: helper) else {
+        appendLog("[restart] bundled restart-app.sh missing")
+        return false
+    }
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+    p.arguments = [helper, "\(pid)", appPath, AGENT_LABEL]
+    do {
+        try p.run()
+        return true
+    } catch {
+        appendLog("[restart] could not launch restart helper: \(error)")
+        return false
+    }
+}
+
+// Exit successfully after handing restart to a detached helper. Successful exit
+// suppresses launchd's restart-on-failure rule, preventing competing instances;
+// helper then kickstarts loaded service once or reopens manually launched app.
 func restartApp() {
+    restartStateLock.lock()
+    guard !restartInProgress else {
+        restartStateLock.unlock()
+        return
+    }
+    restartInProgress = true
+    restartStateLock.unlock()
+
     DispatchQueue.global().async {
+        let appPath = Bundle.main.bundlePath
+        let pid = ProcessInfo.processInfo.processIdentifier
+        if !handOffRestartAfterExit(appPath: appPath, pid: pid) {
+            reopenAfterExit(appPath: appPath, pid: pid)
+        }
         try? FileManager.default.removeItem(atPath: SOCK)
-        reopenAfterExit(appPath: Bundle.main.bundlePath, pid: ProcessInfo.processInfo.processIdentifier)
-        _ = ensureLaunchAgentInstalled()
-        let uid = getuid()
-        _ = runShell("/bin/launchctl", ["kickstart", "gui/\(uid)/com.claudecommand"])
-        Thread.sleep(forTimeInterval: 0.15)
-        exit(1)  // if launchd owns us, non-zero exit triggers KeepAlive; detached open covers manual launches
+        exit(0)
     }
 }
 

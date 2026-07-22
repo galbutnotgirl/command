@@ -14,6 +14,7 @@ cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
 ./test/test-install-state.sh
 ./test/test-updater-swap.sh
+./test/test-restart-app.sh
 ./test/test-release-policy.sh
 ./test/test-static-analysis.sh
 python3 ./test/test-docs.py
@@ -33,12 +34,14 @@ With installed Claude and ChatGPT apps available:
 With Command installed and running under launchd:
 
 ```bash
+./test/test-installed-restart.sh
 ./test/test-installed-runtime.sh
 ```
 
-This performs a 15-second idle soak with repeated socket pings and verifies stable PID, bounded
-open descriptors, no new crash reports, and no new fatal or SwiftUI cycle diagnostics. Override
-duration with `COMMAND_SOAK_SECONDS` for longer release-candidate runs.
+Restart test verifies socket acknowledgement, replacement launchd PID, recovered socket, preserved
+UserDefaults, and no crash report. Runtime test then performs a 15-second idle soak with repeated
+socket pings and verifies stable PID, bounded open descriptors, no new crash reports, and no new
+fatal or SwiftUI cycle diagnostics. Override duration with `COMMAND_SOAK_SECONDS` for longer runs.
 
 With Parakeet models cached on release Mac:
 
@@ -134,13 +137,15 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 ## Current Evidence (2026-07-22)
 
 - Automated local suites: 139 Swift, 58 Node, 50 shell, 25 install-state, 11 updater,
-  7 release-policy, 66 static syntax/configuration, and 2 string-review; docs, Pages, provider
-  contract, and release asset pass.
+  9 restart-handoff, 7 release-policy, 66 static syntax/configuration, and 2 string-review;
+  docs, Pages, provider contract, installed restart/runtime, and release asset pass.
 - All 139 Swift tests also pass independently under AddressSanitizer and ThreadSanitizer.
 - Installed `main@2317d29` passes a 60-second launchd/socket runtime soak with stable PID, 61/61
   socket pings, bounded descriptors, no new crashes, and no newly emitted critical diagnostics.
 - Installed `main@034c0ad` passes a post-install 15-second soak with 16/16 pings, stable PID,
   flat descriptors, declining RSS, and no new crash or critical diagnostics.
+- Installed restart regression passes socket-driven restart with a replacement launchd PID,
+  responsive replacement socket, preserved UserDefaults sentinel, and no crash report.
 - Legacy top-level settings, action, template, context, and standalone vocabulary imports are
   detected by testable core logic; dated export filenames use a fixed POSIX calendar format.
 - Cached-model streaming probe rejects an empty synthesized fixture, then retains generated

@@ -168,7 +168,8 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 
 - **Test suites**: 139 Swift (`cd agent && swift test`), 58 Node
   (`cd vendor/claude-command-capture && node --test`), 50 shell (`./test/test-shell.sh`),
-  25 isolated install-state, 11 updater rollback/restart, 7 release-policy, 66 static,
+  25 isolated install-state, 11 updater rollback/restart, 9 restart-handoff,
+  7 release-policy, 66 static,
   string-review, and docs
   validation checks. All green. Local release verification also checks current installed
   Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test
@@ -179,6 +180,10 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 - **Installed runtime soak**: `test/test-installed-runtime.sh` repeatedly pings launchd-owned
   Command and fails on PID changes, descriptor growth, new crash reports, fatal diagnostics, or
   new SwiftUI AttributeGraph cycles. Current installed build passes 60 seconds with 61/61 pings.
+- **Installed restart recovery**: socket and UI restart paths now share a detached helper that
+  waits for old PID, kickstarts loaded launchd job once, and falls back to opening app when no
+  service exists. Local regression proves replacement PID, recovered socket, preserved UserDefaults,
+  and zero crash reports; CI separately covers launchd success, fallback, and invalid input.
 - **Dictation model integration**: `./test/test-dictation-model.sh` generates local speech,
   feeds it through Parakeet's streaming manager in 4096-frame buffers, and verifies its final
   phrase survives immediate stream completion. It rejects zero-audio fixtures before invoking
@@ -424,10 +429,9 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   and dictation state files.
   Support Markdown/HTML now tells maintainers that `./doctor.sh` covers those metadata and
   bundled-doc checks before filing or triaging source-checkout issues.
-- **Manual-launch restart fallback**: restart flows now create the Command LaunchAgent
-  when needed and also hand off a detached reopen helper, so first-run permission restarts
-  and updater restarts do not depend on downloaded users having already enabled Launch at login.
-  Updates docs now call out that Launch at login is not required for Update Now to reopen the app.
+- **Manual-launch restart fallback**: restart flows no longer create login items as a side effect.
+  Detached restart helper uses loaded Command LaunchAgent when present and opens app directly when
+  absent, so first-run permission and updater restarts work without enabling Launch at login.
 - **Copy Diagnostic Info minimum macOS**: About diagnostics now include `Minimum macOS`
   directly from the app bundle's `LSMinimumSystemVersion`, and Support/Settings/
   Permissions/Privacy/Install/Quick Reference/Troubleshooting docs now name that field

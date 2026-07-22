@@ -40,6 +40,9 @@ jobs:
       - name: Updater install and rollback tests
         run: ./test/test-updater-swap.sh
 
+      - name: Restart handoff tests
+        run: ./test/test-restart-app.sh
+
       - name: Release signing policy tests
         run: ./test/test-release-policy.sh
 

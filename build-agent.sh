@@ -83,6 +83,14 @@ if [ -f "$UPDATE_SWAPPER" ]; then
 else
   print -- "[agent] ERROR missing update-swap.sh"; exit 1
 fi
+RESTART_HELPER="${DIR}/restart-app.sh"
+if [ -f "$RESTART_HELPER" ]; then
+  cp "$RESTART_HELPER" "${APP}/Contents/Resources/restart-app.sh"
+  chmod +x "${APP}/Contents/Resources/restart-app.sh"
+  print -- "[agent] bundled restart-app.sh"
+else
+  print -- "[agent] ERROR missing restart-app.sh"; exit 1
+fi
 
 # Bundle end-user docs so About's docs buttons work before a release is pushed
 # and when the user is offline.

@@ -26,6 +26,7 @@ cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
 ./test/test-install-state.sh
 ./test/test-updater-swap.sh
+./test/test-restart-app.sh
 ./test/test-release-policy.sh
 ./test/test-static-analysis.sh
 python3 ./test/test-docs.py
@@ -33,6 +34,10 @@ python3 ./test/test-pages.py
 python3 ./test/test_string_review.py
 ./doctor.sh
 ```
+
+With installed Command running under launchd, run `./test/test-installed-restart.sh` before
+`./test/test-installed-runtime.sh`. Restart must return `ok`, replace PID, recover socket,
+preserve UserDefaults, and produce no crash report before idle soak begins.
 
 With current Claude and ChatGPT apps running, verify installed assistant contracts without opening or submitting conversations:
 
@@ -49,7 +54,7 @@ Optional local packaging check:
 ./test/test-release-asset.sh
 ```
 
-That builds `dist/Command-<version>.zip`, writes `dist/Command-<version>.zip.sha256`, and verifies `Command.app` is at the zip top level, the embedded version matches `VERSION`, the bundle identifier is `com.claudecommand`, the minimum macOS metadata is `14.0`, the packaged executable exists and is executable, codesign metadata identifies `com.claudecommand`, every shareable bundled docs asset plus the bundled README is present and byte-for-byte current with source, including `PRIVACY.md` and `SECURITY.md`, required runtime resources (`send-to-claude.sh`, Clipboard History, and background vendor core) are present, internal `STATUS.md` is absent, and AppleDouble `._*` metadata files are absent. Those checks match what updater install, shortcut dispatch, Clipboard History, background actions, and About -> Documentation expect.
+That builds `dist/Command-<version>.zip`, writes `dist/Command-<version>.zip.sha256`, and verifies `Command.app` is at the zip top level, the embedded version matches `VERSION`, the bundle identifier is `com.claudecommand`, the minimum macOS metadata is `14.0`, the packaged executable exists and is executable, codesign metadata identifies `com.claudecommand`, every shareable bundled docs asset plus the bundled README is present and byte-for-byte current with source, including `PRIVACY.md` and `SECURITY.md`, required runtime resources (`send-to-claude.sh`, Clipboard History, restart/update helpers, and background vendor core) are present, internal `STATUS.md` is absent, and AppleDouble `._*` metadata files are absent. Those checks match what updater install, restart, shortcut dispatch, Clipboard History, background actions, and About -> Documentation expect.
 
 For manual spot checks, run:
 
@@ -92,7 +97,7 @@ For custom notes, append them to same release command:
 
 Publishing without notarization is blocked by default. `--allow-unnotarized` exists only as an explicit emergency override for alpha versions and leaves users with Gatekeeper warning. Never use override for beta or stable release.
 
-Normal release runs also execute `swift test`, `node --test`, `./test/test-shell.sh`, `./test/test-install-state.sh`, `./test/test-updater-swap.sh`, `./test/test-release-policy.sh`, `./test/test-static-analysis.sh`, `python3 ./test/test-docs.py`, `python3 ./test/test-pages.py`, and `python3 ./test/test_string_review.py` before packaging, so app/core test failures, background runner failures, script regressions, fresh/incremental install-state regressions, updater copy/signature/rollback failures, signing/notarization policy regressions, tracked script/configuration syntax errors, broken docs links, metadata, rendered HTML structure, heading parity, shared CSS, local media assets, sitemap drift, docs-home coverage drift, README docs-table drift, Settings sidebar drift, About docs-button drift, stale bundled docs, missing bundled-doc guards, Pages install recovery regressions, or string review round-trip failures stop release. GitHub test workflow runs same suite plus `./release.sh --skip-checks` and `./test/test-release-asset.sh` as packaging smoke test on macOS. `--skip-checks` is only for local one-off packaging and CI packaging smoke tests.
+Normal release runs also execute `swift test`, `node --test`, `./test/test-shell.sh`, `./test/test-install-state.sh`, `./test/test-updater-swap.sh`, `./test/test-restart-app.sh`, `./test/test-release-policy.sh`, `./test/test-static-analysis.sh`, `python3 ./test/test-docs.py`, `python3 ./test/test-pages.py`, and `python3 ./test/test_string_review.py` before packaging, so app/core test failures, background runner failures, script regressions, fresh/incremental install-state regressions, updater copy/signature/rollback failures, restart handoff failures, signing/notarization policy regressions, tracked script/configuration syntax errors, broken docs links, metadata, rendered HTML structure, heading parity, shared CSS, local media assets, sitemap drift, docs-home coverage drift, README docs-table drift, Settings sidebar drift, About docs-button drift, stale bundled docs, missing bundled-doc guards, Pages install recovery regressions, or string review round-trip failures stop release. GitHub test workflow runs same suite plus `./release.sh --skip-checks` and `./test/test-release-asset.sh` as packaging smoke test on macOS. `--skip-checks` is only for local one-off packaging and CI packaging smoke tests.
 
 ## After Publish
 

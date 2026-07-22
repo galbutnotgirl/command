@@ -58,6 +58,7 @@
           <li>Fixed update ordering so stable beats beta and beta beats alpha at same version, and highest compatible SemVer is selected instead of newest publish timestamp.</li>
           <li>Added isolated fresh/incremental install tests; fresh profiles create a missing <code>~/Library/LaunchAgents</code> directory while updates preserve onboarding and Clipboard History preferences.</li>
           <li>Added onboarding resume tests so interrupted setup returns to first incomplete permission or opt-in step without skipping required setup.</li>
+          <li>Fixed Restart Command and onboarding Quit &amp; Reopen so both return through one launchd-safe handoff instead of leaving Command stopped or racing duplicate app instances.</li>
         </ul>
       </header>
       <section id="alpha6">

@@ -182,6 +182,7 @@ cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
 ./test/test-install-state.sh
 ./test/test-updater-swap.sh
+./test/test-restart-app.sh
 ./test/test-release-policy.sh
 ./test/test-static-analysis.sh
 python3 ./test/test-docs.py
@@ -191,6 +192,7 @@ python3 ./test/test_string_review.py
 ./test/test-release-asset.sh
 ./build-agent.sh
 ./install-agent.sh
+./test/test-installed-restart.sh
 ```
 
 Release:
