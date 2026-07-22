@@ -64,8 +64,9 @@ else
   bad "ruby unavailable; cannot parse tracked YAML"
 fi
 
-if git grep -n -Ei 'osascript|NSAppleScript|Script Editor|com\.apple\.scripteditor' \
-    -- . ':!test/test-static-analysis.sh' >/dev/null; then
+if git grep -n -Ei 'osascript|NSAppleScript|Script Editor|com\.apple\.scripteditor|ScriptingBridge|NSAppleEventDescriptor|AEDeterminePermissionToAutomateTarget|com\.apple\.security\.automation\.apple-events' \
+    -- . ':!test/test-static-analysis.sh' >/dev/null \
+    || git ls-files | grep -Ei '\.(applescript|scpt)$' >/dev/null; then
   bad "AppleScript or Script Editor dependency found"
 else
   ok
