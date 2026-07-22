@@ -7,7 +7,7 @@
 - Added first-class Claude and ChatGPT provider selection globally, per Custom Action, and per trigger, with Codex as a ChatGPT destination.
 - Added ChatGPT destination parity: ChatGPT general chat and workspace-aware Codex, with global, action, and trigger inheritance.
 - Preserved legacy `codex` provider keys while adopting current ChatGPT app and Codex coding-product names.
-- Routed ChatGPT through the unified app's Quick Chat command and Codex through a workspace-aware `codex://threads/new` deep link.
+- Routed ChatGPT through the unified app's Quick Chat command and Codex through workspace-aware ChatGPT app routing with a native projectless fallback.
 - Targeted paste and submit keystrokes to the assistant process, fixing delivery when Electron creates a background window without becoming AX-frontmost.
 - Fixed Claude Chat/Cowork/Code routing after a zsh-local variable accidentally replaced the worker's executable search path.
 - Fixed foreground failures that previously logged success when Codex workspace validation or new-task creation failed.

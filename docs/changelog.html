@@ -51,7 +51,7 @@
           <li>Warmed dictation cue audio with separate silent playback so first Purr cue starts at the same volume as the stop cue after a cold launch.</li>
           <li>Added first-class Claude and ChatGPT selection globally, per Custom Action, and per trigger, with Codex as a ChatGPT destination.</li>
           <li>Added ChatGPT general-chat and workspace-aware Codex destinations with global, action, and trigger inheritance.</li>
-          <li>Routed ChatGPT new conversations through Quick Chat and Codex destination conversations through workspace-aware deep links.</li>
+          <li>Routed ChatGPT new conversations through Quick Chat and Codex destination conversations through workspace-aware ChatGPT app routing with a native projectless fallback.</li>
           <li>Fixed foreground failures that could report success after workspace validation or task creation failed.</li>
           <li>Added Codex foreground tasks, workspace routing, background <code>codex exec -</code>, image attachments, safe execution presets, provider-tagged history, and compatible settings migration.</li>
           <li>Hardened in-app updates: only <code>Command-*.zip</code> assets are accepted, extracted app metadata/version/signing identity are verified, replacement is staged, and failed copies or validation restore prior app automatically.</li>

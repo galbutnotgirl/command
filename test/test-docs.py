@@ -723,7 +723,7 @@ REQUIRED_TEXT = {
         "Copy Diagnostic Info",
     ],
     "docs/STATUS.md": [
-        "104 Swift",
+        "115 Swift",
         "56 Node",
         "47 shell",
         "python3 ./test/test-docs.py",

@@ -126,16 +126,19 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
     support paths, legacy `cli` block, provider-less actions, and provider-less history remain
     compatible. Runtime paste and submit target the assistant process directly so backgrounded
     Electron windows cannot send keystrokes into the wrong app. ChatGPT uses the unified app's
-    Quick Chat command; Codex uses `codex://threads/new` with a validated workspace `path`.
-    New-task failures propagate nonzero status instead of logging success.
+    Quick Chat command; Codex uses bundled `codex app <workspace>` routing for valid Git
+    workspaces and the app's native projectless-task command elsewhere. New-task failures
+    propagate nonzero status instead of logging success.
 
 ## Current state (alpha.8)
 
-- **Test suites**: 104 Swift (`cd agent && swift test`), 56 Node
+- **Test suites**: 115 Swift (`cd agent && swift test`), 56 Node
   (`cd vendor/claude-command-capture && node --test`), 47 shell (`./test/test-shell.sh`),
-  plus docs link validation (`python3 ./test/test-docs.py`). All green. CI runs those
-  checks plus a macOS release-asset smoke test (`./release.sh --skip-checks` and
-  `./test/test-release-asset.sh`) on push/PR (`.github/workflows/test.yml`).
+  8 isolated install-state, 8 updater rollback, 7 release-policy, string-review, and docs
+  validation checks. All green. Local release verification also checks current installed
+  Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test
+  (`./release.sh --skip-checks` and `./test/test-release-asset.sh`) on push/PR
+  (`.github/workflows/test.yml`).
 - **Provider parity**: Claude and Codex share selected-text, screenshot, popup, voice,
   dictation, Clipboard History, existing/new task, auto-submit, Context, Custom Action,
   background, history, retry, import/export, diagnostics, and Set Up paths. Claude-specific
