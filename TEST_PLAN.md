@@ -137,7 +137,7 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 ## Current Evidence (2026-07-22)
 
 - Automated local suites: 139 Swift, 58 Node, 50 shell, 25 install-state, 11 updater,
-  9 restart-handoff, 7 release-policy, 66 static syntax/configuration, and 2 string-review;
+  9 restart-handoff, 7 release-policy, 69 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
 - All 139 Swift tests also pass independently under AddressSanitizer and ThreadSanitizer.
 - Installed `main@2317d29` passes a 60-second launchd/socket runtime soak with stable PID, 61/61
