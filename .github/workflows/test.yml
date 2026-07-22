@@ -10,7 +10,7 @@ jobs:
   test:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # FluidAudio (a dependency of the executable target, pulled in when
       # resolving the package graph even though tests don't touch it) needs
@@ -23,9 +23,9 @@ jobs:
         working-directory: agent
         run: swift test
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Node tests (vendored capture core)
         working-directory: vendor/claude-command-capture
