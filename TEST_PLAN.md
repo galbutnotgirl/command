@@ -147,8 +147,8 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-22)
 
-- Automated local suites: 143 Swift, 58 Node, 59 shell, 10 build-transaction,
-  13 release-transaction, 25 install-state, 11 updater, 9 restart-handoff,
+- Automated local suites: 143 Swift, 58 Node, 61 shell, 15 build-transaction,
+  17 release-transaction, 25 install-state, 11 updater, 9 restart-handoff,
   7 release-policy, 72 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
 - Settings pickers and toggles have explicit hidden accessibility labels, and static analysis

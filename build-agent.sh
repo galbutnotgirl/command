@@ -23,7 +23,8 @@ cleanup_build_root() {
   fi
   rm -rf "$BUILD_ROOT"
 }
-trap cleanup_build_root EXIT HUP INT TERM
+trap cleanup_build_root EXIT
+trap 'exit 130' HUP INT TERM
 
 [ -f "${SRC_DIR}/main.swift" ] || { print -- "[agent] missing ${SRC_DIR}/main.swift"; exit 1; }
 

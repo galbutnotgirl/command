@@ -357,6 +357,8 @@ assert_contains "build restores previous artifact when staged install fails" "$B
   'previous build restored'
 assert_not_contains "build never deletes final app during assembly" "$BUILD_AGENT_SOURCE" \
   'rm -rf "$FINAL_APP"'
+assert_contains "build exits after termination signal before rollback" "$BUILD_AGENT_SOURCE" \
+  "trap 'exit 130' HUP INT TERM"
 
 RELEASE_SOURCE="$(<"${DIR}/release.sh")"
 assert_contains "release builds package in a same-volume staging directory" "$RELEASE_SOURCE" \
@@ -369,6 +371,8 @@ assert_contains "release computes checksum beside staged zip" "$RELEASE_SOURCE" 
   'cd "${ZIP:h}"'
 assert_contains "release move failure restores prior package pair" "$RELEASE_SOURCE" \
   'previous release assets will be restored'
+assert_contains "release exits after termination signal before rollback" "$RELEASE_SOURCE" \
+  "trap 'exit 130' HUP INT TERM"
 
 print -r -- ""
 print -r -- "shell tests: ${PASS} passed, ${FAIL} failed"

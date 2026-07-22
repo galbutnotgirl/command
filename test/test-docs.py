@@ -747,9 +747,9 @@ REQUIRED_TEXT = {
     "docs/STATUS.md": [
         "143 Swift",
         "58 Node",
-        "59 shell",
-        "10 isolated build-transaction",
-        "13 isolated release-transaction",
+        "61 shell",
+        "15 isolated build-transaction",
+        "17 isolated release-transaction",
         "25 isolated install-state",
         "9 restart-handoff",
         "72 static",

@@ -167,8 +167,8 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 ## Current state (alpha.8)
 
 - **Test suites**: 143 Swift (`cd agent && swift test`), 58 Node
-  (`cd vendor/claude-command-capture && node --test`), 59 shell (`./test/test-shell.sh`),
-  10 isolated build-transaction, 13 isolated release-transaction, 25 isolated install-state,
+  (`cd vendor/claude-command-capture && node --test`), 61 shell (`./test/test-shell.sh`),
+  15 isolated build-transaction, 17 isolated release-transaction, 25 isolated install-state,
   11 updater rollback/restart, 9 restart-handoff, 7 release-policy, 72 static,
   string-review, and docs
   validation checks. All green. Local release verification also checks current installed

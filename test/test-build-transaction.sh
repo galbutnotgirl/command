@@ -56,6 +56,17 @@ print -r -- signed > "$app/Contents/_CodeSignature/CodeResources"
 CODESIGN
 chmod +x "$FAKE_BIN/codesign"
 
+cat > "$FAKE_BIN/mv" <<'MOVE'
+#!/bin/zsh
+if [[ "${FAKE_MV_SIGNAL:-0}" == "1" && "$1" == */.command-build.*/Command.app && "$2" == */Command.app ]]; then
+  kill -TERM "$PPID"
+  sleep 0.1
+  exit 1
+fi
+exec /bin/mv "$@"
+MOVE
+chmod +x "$FAKE_BIN/mv"
+
 mkdir -p "$FIXTURE/Command.app/Contents/MacOS"
 print -r -- old-build > "$FIXTURE/Command.app/Contents/MacOS/Command"
 print -r -- keep > "$FIXTURE/Command.app/Contents/previous-marker"
@@ -71,6 +82,19 @@ check "failed signing preserves previous marker" test -f "$FIXTURE/Command.app/C
 check "failed signing preserves previous executable" grep -qx old-build "$FIXTURE/Command.app/Contents/MacOS/Command"
 check "failed signing removes staging directory" zsh -c \
   '[[ -z "$(find "$1" -maxdepth 1 -name ".command-build.*" -print -quit)" ]]' _ "$FIXTURE"
+
+set +e
+PATH="$FAKE_BIN:$PATH" SIGN_ID=Fixture FAKE_MV_SIGNAL=1 \
+  zsh "$FIXTURE/build-agent.sh" >/dev/null 2>&1
+signal_status=$?
+set -e
+check "interrupted app swap returns nonzero" test "$signal_status" -ne 0
+check "interrupted app swap restores previous marker" test -f "$FIXTURE/Command.app/Contents/previous-marker"
+check "interrupted app swap restores previous executable" grep -qx old-build "$FIXTURE/Command.app/Contents/MacOS/Command"
+check "interrupted app swap removes staging directory" zsh -c \
+  '[[ -z "$(find "$1" -maxdepth 1 -name ".command-build.*" -print -quit)" ]]' _ "$FIXTURE"
+check "interrupted app swap removes backup directory" zsh -c \
+  '[[ -z "$(find "$1" -maxdepth 1 -name ".Command.app.previous.*" -print -quit)" ]]' _ "$FIXTURE"
 
 PATH="$FAKE_BIN:$PATH" SIGN_ID=Fixture FAKE_BUILD_MARKER=committed-build \
   zsh "$FIXTURE/build-agent.sh" >/dev/null 2>&1

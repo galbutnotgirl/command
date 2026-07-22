@@ -46,7 +46,8 @@ cleanup_package_staging() {
   fi
   [ -n "$PACKAGE_ROOT" ] && rm -rf "$PACKAGE_ROOT"
 }
-trap cleanup_package_staging EXIT HUP INT TERM
+trap cleanup_package_staging EXIT
+trap 'exit 130' HUP INT TERM
 
 PUBLISH=0
 SKIP_CHECKS=0

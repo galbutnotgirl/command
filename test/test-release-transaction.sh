@@ -66,6 +66,12 @@ ln -s /usr/bin/false "$ARCHIVE_FAIL_BIN/ditto"
 
 cat > "$MOVE_FAIL_BIN/mv" <<'MOVE'
 #!/bin/zsh
+if [[ "$2" == "${SIGNAL_SHA_TARGET:-}" && ! -e "${SIGNAL_ONCE_MARKER:-}" ]]; then
+  : > "$SIGNAL_ONCE_MARKER"
+  kill -TERM "$PPID"
+  sleep 0.1
+  exit 1
+fi
 if [[ "$2" == "${FAIL_SHA_TARGET:-}" && ! -e "${FAIL_ONCE_MARKER:-}" ]]; then
   : > "$FAIL_ONCE_MARKER"
   exit 1
@@ -105,6 +111,19 @@ check "pair commit failure returns nonzero" test "$move_status" -ne 0
 check "pair commit failure restores previous zip" test "$(digest "$FINAL_ZIP")" = "$old_zip_digest"
 check "pair commit failure restores previous checksum" test "$(digest "$FINAL_SHA")" = "$old_sha_digest"
 check "pair commit failure removes package staging" no_staging
+
+reset_old_assets
+old_zip_digest="$(digest "$FINAL_ZIP")"
+old_sha_digest="$(digest "$FINAL_SHA")"
+set +e
+PATH="$MOVE_FAIL_BIN:$PATH" SIGNAL_SHA_TARGET="$FINAL_SHA" SIGNAL_ONCE_MARKER="$TMP_ROOT/mv-signaled-once" \
+  zsh "$FIXTURE/release.sh" --skip-checks >/dev/null 2>&1
+signal_status=$?
+set -e
+check "interrupted pair commit returns nonzero" test "$signal_status" -ne 0
+check "interrupted pair commit restores previous zip" test "$(digest "$FINAL_ZIP")" = "$old_zip_digest"
+check "interrupted pair commit restores previous checksum" test "$(digest "$FINAL_SHA")" = "$old_sha_digest"
+check "interrupted pair commit removes package staging" no_staging
 
 reset_old_assets
 old_zip_digest="$(digest "$FINAL_ZIP")"
