@@ -1097,9 +1097,9 @@ enum AutoSubmitChoice: String, CaseIterable, Identifiable {
     }
     static func from(_ value: Bool?) -> AutoSubmitChoice {
         switch value {
-        case true: return .on
-        case false: return .off
-        case nil: return .useDefault
+        case .some(true): return .on
+        case .some(false): return .off
+        case .none: return .useDefault
         }
     }
 }
