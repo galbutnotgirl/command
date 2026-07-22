@@ -114,6 +114,8 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   (cd "${DIR}/agent" && swift test) || fail "Swift tests failed — fix app/core tests before release."
   (cd "${DIR}/vendor/claude-command-capture" && node --test) || fail "Node tests failed — fix background runner tests before release."
   "${DIR}/test/test-shell.sh" || fail "shell tests failed — fix scripts before release."
+  "${DIR}/test/test-build-transaction.sh" || fail "build transaction tests failed — fix artifact preservation before release."
+  "${DIR}/test/test-release-transaction.sh" || fail "release transaction tests failed — fix package preservation before release."
   "${DIR}/test/test-install-state.sh" || fail "install state tests failed — fix fresh/update behavior before release."
   "${DIR}/test/test-updater-swap.sh" || fail "updater swap tests failed — fix install/rollback before release."
   "${DIR}/test/test-restart-app.sh" || fail "restart handoff tests failed — fix relaunch behavior before release."

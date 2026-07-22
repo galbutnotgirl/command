@@ -34,6 +34,12 @@ jobs:
       - name: Shell tests (prompt/context matching)
         run: ./test/test-shell.sh
 
+      - name: Transactional app build tests
+        run: ./test/test-build-transaction.sh
+
+      - name: Transactional release package tests
+        run: ./test/test-release-transaction.sh
+
       - name: Fresh and incremental install state tests
         run: ./test/test-install-state.sh
 

@@ -168,8 +168,8 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 
 - **Test suites**: 143 Swift (`cd agent && swift test`), 58 Node
   (`cd vendor/claude-command-capture && node --test`), 59 shell (`./test/test-shell.sh`),
-  25 isolated install-state, 11 updater rollback/restart, 9 restart-handoff,
-  7 release-policy, 70 static,
+  10 isolated build-transaction, 13 isolated release-transaction, 25 isolated install-state,
+  11 updater rollback/restart, 9 restart-handoff, 7 release-policy, 72 static,
   string-review, and docs
   validation checks. All green. Local release verification also checks current installed
   Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test

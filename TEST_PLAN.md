@@ -12,6 +12,8 @@ Run from repository root on clean `main`:
 cd agent && swift test
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
+./test/test-build-transaction.sh
+./test/test-release-transaction.sh
 ./test/test-install-state.sh
 ./test/test-updater-swap.sh
 ./test/test-restart-app.sh
@@ -145,8 +147,9 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-22)
 
-- Automated local suites: 143 Swift, 58 Node, 59 shell, 25 install-state, 11 updater,
-  9 restart-handoff, 7 release-policy, 70 static syntax/configuration, and 2 string-review;
+- Automated local suites: 143 Swift, 58 Node, 59 shell, 10 build-transaction,
+  13 release-transaction, 25 install-state, 11 updater, 9 restart-handoff,
+  7 release-policy, 72 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
 - Settings pickers and toggles have explicit hidden accessibility labels, and static analysis
   rejects future empty labels. Full keyboard and VoiceOver traversal remains a manual gate.
