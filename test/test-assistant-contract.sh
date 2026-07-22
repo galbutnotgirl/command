@@ -59,6 +59,18 @@ if [ -d "$CHATGPT_APP" ]; then
   else
     fail "ChatGPT Quick Chat contract is Command-Option-N"
   fi
+  if [ -f "$ASAR" ] && LC_ALL=C /usr/bin/grep -aFq 'New Task' "$ASAR" && \
+     LC_ALL=C /usr/bin/grep -aFq 'CmdOrCtrl+N' "$ASAR"; then
+    pass "ChatGPT New Task resource contract is Command-N"
+  else
+    fail "ChatGPT New Task resource contract is Command-N"
+  fi
+  if [ -f "$ASAR" ] && LC_ALL=C /usr/bin/grep -aFq 'New Projectless Task' "$ASAR" && \
+     LC_ALL=C /usr/bin/grep -aFq 'CmdOrCtrl+Alt+O' "$ASAR"; then
+    pass "ChatGPT New Projectless Task resource contract is Command-Option-O"
+  else
+    fail "ChatGPT New Projectless Task resource contract is Command-Option-O"
+  fi
   if [ "$(process_running ChatGPT 2>/dev/null || true)" = "true" ]; then
     assert_eq "ChatGPT New Task menu is Command-N" "$(menu_shortcut ChatGPT File 'New Task' 2>/dev/null || true)" "N|0"
     assert_eq "ChatGPT New Projectless Task menu is Command-Option-O" "$(menu_shortcut ChatGPT File 'New Projectless Task' 2>/dev/null || true)" "O|2"
@@ -74,6 +86,13 @@ if [ -d "$CLAUDE_APP" ]; then
   print -- "Claude ${CLAUDE_VERSION:-unknown}"
   CLAUDE_URL_TYPES="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes' "$CLAUDE_APP/Contents/Info.plist" 2>/dev/null || true)"
   [[ "$CLAUDE_URL_TYPES" == *"claude"* ]] && pass "Claude registers claude URL scheme" || fail "Claude registers claude URL scheme"
+  CLAUDE_ASAR="$CLAUDE_APP/Contents/Resources/app.asar"
+  if [ -f "$CLAUDE_ASAR" ] && LC_ALL=C /usr/bin/grep -aFq 'New Conversation' "$CLAUDE_ASAR" && \
+     LC_ALL=C /usr/bin/grep -aFq 'CmdOrCtrl+N' "$CLAUDE_ASAR"; then
+    pass "Claude New Conversation resource contract is Command-N"
+  else
+    fail "Claude New Conversation resource contract is Command-N"
+  fi
   if [ "$(process_running Claude 2>/dev/null || true)" = "true" ]; then
     assert_eq "Claude New Conversation menu is Command-N" "$(menu_shortcut Claude File 'New Conversation' 2>/dev/null || true)" "N|0"
   else

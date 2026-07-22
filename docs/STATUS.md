@@ -18,6 +18,9 @@ recent change if something in there needs undoing).
 - Incremental-install coverage now preserves custom actions, hotkeys, vocabulary, background
   settings, Command History, and Clipboard History data, and rejects signing-identity changes
   that would invalidate macOS privacy grants.
+- Installed assistant contract checks now verify ChatGPT New Task/projectless-task and Claude
+  New Conversation shortcuts from packaged resources even when apps are closed, while keeping
+  live menu inspection as final manual gate.
 - In-app updater now selects highest compatible SemVer, validates exact app name,
   bundle ID, version, executable, code signature, and current designated signing
   requirement before replacement, then repeats validation after copy.
