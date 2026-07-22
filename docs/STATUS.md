@@ -182,7 +182,8 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   isolated scratch directories.
 - **Installed runtime soak**: `test/test-installed-runtime.sh` repeatedly pings launchd-owned
   Command and fails on PID changes, descriptor growth, new crash reports, fatal diagnostics, or
-  new SwiftUI AttributeGraph cycles. Current installed build passes 60 seconds with 61/61 pings.
+  new SwiftUI AttributeGraph cycles. Current accessibility-label build passes 60 seconds with
+  61/61 pings and flat 50 open descriptors.
 - **Installed restart recovery**: socket and UI restart paths now share a detached helper that
   waits for old PID, kickstarts loaded launchd job once, and falls back to opening app when no
   service exists. Local regression proves replacement PID, recovered socket, preserved UserDefaults,

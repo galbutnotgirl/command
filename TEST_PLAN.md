@@ -151,10 +151,9 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 - Settings pickers and toggles have explicit hidden accessibility labels, and static analysis
   rejects future empty labels. Full keyboard and VoiceOver traversal remains a manual gate.
 - All 143 Swift tests also pass independently under AddressSanitizer and ThreadSanitizer.
-- Installed `main@2317d29` passes a 60-second launchd/socket runtime soak with stable PID, 61/61
-  socket pings, bounded descriptors, no new crashes, and no newly emitted critical diagnostics.
-- Installed `main@034c0ad` passes a post-install 15-second soak with 16/16 pings, stable PID,
-  flat descriptors, declining RSS, and no new crash or critical diagnostics.
+- Current accessibility-label build passes a 60-second launchd/socket runtime soak with stable
+  PID, 61/61 socket pings, flat 50 open descriptors, declining RSS, no new crashes, and no newly
+  emitted critical diagnostics.
 - Installed restart regression passes socket-driven restart with a replacement launchd PID,
   responsive replacement socket, preserved UserDefaults sentinel, and no crash report.
 - Legacy top-level settings, action, template, context, and standalone vocabulary imports are
