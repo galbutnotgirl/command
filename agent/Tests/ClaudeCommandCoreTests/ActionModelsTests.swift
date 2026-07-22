@@ -147,6 +147,28 @@ final class ActionModelsTests: XCTestCase {
         }
     }
 
+    func testExperimentalDefaultsAreEligibleForOneTimeMigration() {
+        let bindings = Dictionary(uniqueKeysWithValues: COMMAND_ACTIONS.map { action in
+            let value = EXPERIMENTAL_DEFAULT_BINDINGS[action.id] ?? (0, 0)
+            return (action.id, HotkeyBinding(action: action.id, keycode: value.keycode, mods: value.mods, enabled: true))
+        })
+        XCTAssertTrue(bindingsMatchExperimentalDefaults(bindings))
+    }
+
+    func testCustomizedExperimentalBindingIsNeverMigrated() {
+        var bindings = Dictionary(uniqueKeysWithValues: COMMAND_ACTIONS.map { action in
+            let value = EXPERIMENTAL_DEFAULT_BINDINGS[action.id] ?? (0, 0)
+            return (action.id, HotkeyBinding(action: action.id, keycode: value.keycode, mods: value.mods, enabled: true))
+        })
+        bindings["dictate"] = HotkeyBinding(action: "dictate", keycode: 63, mods: 0, enabled: true)
+        XCTAssertFalse(bindingsMatchExperimentalDefaults(bindings))
+    }
+
+    func testUnknownActionPreventsExperimentalMigration() {
+        let unknown = HotkeyBinding(action: "future-action", keycode: 1, mods: 0, enabled: true)
+        XCTAssertFalse(bindingsMatchExperimentalDefaults([unknown.action: unknown]))
+    }
+
     func testAutoSubmitDefaultsStayUnboundForNewUsers() {
         let byAction = Dictionary(uniqueKeysWithValues: DEFAULT_BINDINGS.map { ($0.action, (keycode: $0.keycode, mods: $0.mods)) })
         XCTAssertEqual(byAction["go"]?.keycode, 0)

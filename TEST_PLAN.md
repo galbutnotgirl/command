@@ -107,7 +107,7 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-21)
 
-- Automated local suites: 115 Swift, 56 Node, 47 shell, 8 install-state, 8 updater,
+- Automated local suites: 121 Swift, 56 Node, 47 shell, 8 install-state, 8 updater,
   7 release-policy, 2 string-review; docs, Pages, provider contract, and release asset pass.
 - Installed Codex projectless route passed non-submitting live smoke test.
 - Quick Chat, full Claude/ChatGPT matrix, live dictation matrix, and clean onboarding remain

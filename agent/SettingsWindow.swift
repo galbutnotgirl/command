@@ -257,14 +257,10 @@ final class SettingsModel: ObservableObject {
     }
 
     private func fnArrowNavigationKeycode(from ev: NSEvent) -> UInt32? {
-        guard ev.modifierFlags.contains(.function) else { return nil }
-        switch ev.keyCode {
-        case 123: return 115 // Fn+Left = Home
-        case 124: return 119 // Fn+Right = End
-        case 126: return 116 // Fn+Up = PgUp
-        case 125: return 121 // Fn+Down = PgDn
-        default: return nil
-        }
+        fnNavigationKeycode(
+            sourceKeycode: ev.keyCode,
+            functionPressed: ev.modifierFlags.contains(.function)
+        )
     }
 
     // ---- custom action CRUD ----

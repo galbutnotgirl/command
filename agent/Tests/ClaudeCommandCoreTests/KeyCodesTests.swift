@@ -42,4 +42,23 @@ final class KeyCodesTests: XCTestCase {
     func testCarbonModsEmpty() {
         XCTAssertEqual(carbonMods(from: []), 0)
     }
+
+    func testFnArrowNavigationMapsToDistinctNavigationKeys() {
+        XCTAssertEqual(fnNavigationKeycode(sourceKeycode: 123, functionPressed: true), 115)
+        XCTAssertEqual(fnNavigationKeycode(sourceKeycode: 124, functionPressed: true), 119)
+        XCTAssertEqual(fnNavigationKeycode(sourceKeycode: 126, functionPressed: true), 116)
+        XCTAssertEqual(fnNavigationKeycode(sourceKeycode: 125, functionPressed: true), 121)
+    }
+
+    func testPlainLeftArrowNeverBecomesHome() {
+        XCTAssertNil(fnNavigationKeycode(sourceKeycode: 123, functionPressed: false))
+        XCTAssertNotEqual(UInt32(123), fnNavigationKeycode(sourceKeycode: 123, functionPressed: true))
+    }
+
+    func testEventTapOwnsOnlyModifierAndMediaVoiceKeys() {
+        XCTAssertTrue(eventTapOwnsVoiceHotkey(keycode: 63))
+        XCTAssertTrue(eventTapOwnsVoiceHotkey(keycode: 100))
+        XCTAssertFalse(eventTapOwnsVoiceHotkey(keycode: 115))
+        XCTAssertFalse(eventTapOwnsVoiceHotkey(keycode: 123))
+    }
 }

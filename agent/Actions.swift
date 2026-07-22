@@ -54,26 +54,7 @@ private func writeBindings(_ bindings: [HotkeyBinding]) {
 }
 
 private func migrateExperimentalShortcutDefaultsIfNeeded(_ byAction: inout [String: HotkeyBinding]) -> Bool {
-    let legacy: [String: (keycode: UInt32, mods: UInt32)] = [
-        "add": (109, 0),             // F10
-        "comment": (109, 2048),      // Option-F10
-        "go": (0, 0),
-        "shotadd": (101, 0),         // F9
-        "shotcomment": (101, 2048),  // Option-F9
-        "shotgo": (0, 0),
-        "cliphistory": (100, 0),     // F8
-        "dictate": (115, 0),         // Home
-        "dictateadd": (115, 2048),   // Option-Home
-    ]
-    let knownActions = Set(COMMAND_ACTIONS.map(\.id))
-    guard Set(byAction.keys).isSubset(of: knownActions) else { return false }
-    for action in knownActions {
-        let expected = legacy[action] ?? (0, 0)
-        let actual = byAction[action] ?? HotkeyBinding(action: action, keycode: 0, mods: 0, enabled: true)
-        guard actual.keycode == expected.keycode, actual.mods == expected.mods, actual.enabled else {
-            return false
-        }
-    }
+    guard bindingsMatchExperimentalDefaults(byAction) else { return false }
     for def in DEFAULT_BINDINGS {
         let enabled = def.keycode != 0
         byAction[def.action] = HotkeyBinding(action: def.action, keycode: def.keycode, mods: def.mods, enabled: enabled)

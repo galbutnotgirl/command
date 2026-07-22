@@ -30,6 +30,22 @@ public let KEYCODE_NAMES: [UInt32: String] = [
 ]
 
 public let MODIFIER_ONLY_KEYCODES: Set<UInt32> = [54, 55, 56, 58, 59, 60, 61, 62, 63]
+public let MEDIA_KEYCODES: Set<UInt32> = [96, 97, 98, 99, 100, 101]
+
+public func eventTapOwnsVoiceHotkey(keycode: UInt32) -> Bool {
+    MODIFIER_ONLY_KEYCODES.contains(keycode) || MEDIA_KEYCODES.contains(keycode)
+}
+
+public func fnNavigationKeycode(sourceKeycode: UInt16, functionPressed: Bool) -> UInt32? {
+    guard functionPressed else { return nil }
+    switch sourceKeycode {
+    case 123: return 115 // Fn+Left = Home
+    case 124: return 119 // Fn+Right = End
+    case 126: return 116 // Fn+Up = PgUp
+    case 125: return 121 // Fn+Down = PgDn
+    default: return nil
+    }
+}
 
 public func humanShortcut(keycode: UInt32, mods: UInt32) -> String {
     var s = ""

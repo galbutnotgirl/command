@@ -1486,14 +1486,6 @@ func triggerMatching(keycode: UInt32, mods: UInt32) -> (CustomAction, ActionTrig
     return nil
 }
 
-// Carbon keycodes that are also media keys — tap keyDown for these directly
-// so we intercept before Chrome/Carbon/Spotify regardless of keyboard mode.
-let MEDIA_KEYCODES: Set<UInt32> = [96, 97, 98, 99, 100, 101]  // F5–F10
-
-private func eventTapOwnsVoiceHotkey(keycode: UInt32) -> Bool {
-    MODIFIER_ONLY_KEYCODES.contains(keycode) || MEDIA_KEYCODES.contains(keycode)
-}
-
 func startMediaKeyHook() {
     guard AXIsProcessTrusted() else { return }
     // Intercept NX_SYSDEFINED (media-key mode) plus keyDown/keyUp. Voice hotkeys

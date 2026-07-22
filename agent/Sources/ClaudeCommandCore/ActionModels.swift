@@ -66,6 +66,29 @@ public let DEFAULT_BINDINGS: [(action: String, keycode: UInt32, mods: UInt32)] =
     ("dictateadd2", 0,    0),      // unbound — optional second assistant dictation target
 ]
 
+public let EXPERIMENTAL_DEFAULT_BINDINGS: [String: (keycode: UInt32, mods: UInt32)] = [
+    "add": (109, 0),
+    "comment": (109, 2048),
+    "go": (0, 0),
+    "shotadd": (101, 0),
+    "shotcomment": (101, 2048),
+    "shotgo": (0, 0),
+    "cliphistory": (100, 0),
+    "dictate": (115, 0),
+    "dictateadd": (115, 2048),
+    "dictateadd2": (0, 0),
+]
+
+public func bindingsMatchExperimentalDefaults(_ byAction: [String: HotkeyBinding]) -> Bool {
+    let knownActions = Set(COMMAND_ACTIONS.map(\.id))
+    guard Set(byAction.keys).isSubset(of: knownActions) else { return false }
+    return knownActions.allSatisfy { action in
+        let expected = EXPERIMENTAL_DEFAULT_BINDINGS[action] ?? (0, 0)
+        let actual = byAction[action] ?? HotkeyBinding(action: action, keycode: 0, mods: 0, enabled: true)
+        return actual.keycode == expected.keycode && actual.mods == expected.mods && actual.enabled
+    }
+}
+
 // ---- custom actions ---------------------------------------------------------
 // User-defined prompt templates, each with its own capture trigger (kind) and
 // delivery mode (paste into Claude, or isHandoff for a background claude -p
