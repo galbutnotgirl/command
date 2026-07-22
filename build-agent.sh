@@ -148,7 +148,15 @@ if [[ -z "${SIGN_ID:-}" ]]; then
         print -- "[agent]   Name: ClaudeCommandDev, Type: Self-Signed Root, override: Code Signing"
     fi
 fi
-codesign --force --sign "$SIGN_ID" --identifier "$BUNDLE_ID" "$APP" \
+CODESIGN_ARGS=(--force --sign "$SIGN_ID" --identifier "$BUNDLE_ID")
+if [[ "$SIGN_ID" == "Developer ID Application:"* ]]; then
+  # Distribution builds need hardened runtime and a trusted timestamp before
+  # Apple will accept them for notarization. Keep local self-signed builds
+  # unchanged so their stable designated requirement preserves TCC grants.
+  CODESIGN_ARGS+=(--options runtime --timestamp)
+  print -- "[agent] enabling hardened runtime + secure timestamp"
+fi
+codesign "${CODESIGN_ARGS[@]}" "$APP" \
   && print -- "[agent] codesigned ($SIGN_ID)" \
   || { print -- "[agent] ERROR codesign failed (SIGN_ID=$SIGN_ID)"; exit 1; }
 

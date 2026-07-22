@@ -32,7 +32,12 @@ func saveCommandTemplates(_ templates: [CommandTemplate]) {
     var obj: [String: String] = [:]
     for t in templates { obj[t.action] = t.template }
     if let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]) {
-        try? data.write(to: URL(fileURLWithPath: COMMAND_TEMPLATES_PATH))
+        let url = URL(fileURLWithPath: COMMAND_TEMPLATES_PATH)
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? data.write(to: url)
     }
 }
 
@@ -55,7 +60,12 @@ func saveEnrichRules(_ rules: [EnrichRule]) {
     let arr = rules.map { ["match": $0.match.rawValue, "pattern": $0.pattern, "text": $0.text,
                             "displayName": $0.displayName, "pathPrefix": $0.pathPrefix] }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
-        try? data.write(to: URL(fileURLWithPath: ENRICHMENT_RULES_PATH))
+        let url = URL(fileURLWithPath: ENRICHMENT_RULES_PATH)
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? data.write(to: url)
     }
 }
 
@@ -66,6 +76,11 @@ final class TemplatesModel: ObservableObject {
     @Published var templates: [CommandTemplate] = loadCommandTemplates()
     @Published var rules: [EnrichRule] = loadEnrichRules()
     private let builtInComposeActions = BUILT_IN_COMPOSE_TEMPLATE_ACTIONS
+
+    func load() {
+        templates = loadCommandTemplates()
+        rules = loadEnrichRules()
+    }
 
     func setTemplate(action: String, template: String) {
         guard let i = templates.firstIndex(where: { $0.action == action }) else { return }

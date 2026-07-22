@@ -46,19 +46,21 @@ public enum PrimaryAssistantPreference: String, CaseIterable, Codable, Sendable 
     case chatgpt
     case codex
 
+    public static var onboardingCases: [PrimaryAssistantPreference] { [.claude, .chatgpt] }
+
     public var label: String {
         switch self {
         case .claude: return "Claude"
         case .chatgpt: return "ChatGPT"
-        case .codex: return "Codex"
+        case .codex: return "ChatGPT Codex"
         }
     }
 
     public var detail: String {
         switch self {
         case .claude: return "Claude Chat, Cowork, or Code."
-        case .chatgpt: return "ChatGPT chats and general prompts."
-        case .codex: return "Codex coding sessions in a workspace."
+        case .chatgpt: return "ChatGPT chats, plus Codex destination for workspace coding."
+        case .codex: return "ChatGPT with Codex destination for workspace coding."
         }
     }
 
@@ -72,7 +74,8 @@ public enum PrimaryAssistantPreference: String, CaseIterable, Codable, Sendable 
     public var destination: ClaudeDestination {
         switch self {
         case .claude: return .recent
-        case .chatgpt, .codex: return .recent
+        case .chatgpt: return .recent
+        case .codex: return .code
         }
     }
 }

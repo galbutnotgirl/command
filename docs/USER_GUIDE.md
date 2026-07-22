@@ -1,6 +1,6 @@
 # Command User Guide
 
-Command is a native macOS menu-bar app for sending selected text, screenshots, typed notes, and dictated notes to Claude, ChatGPT, or Codex. It also supports background commands through `claude -p` or `codex exec -`, clipboard history, dictation history, import/export, and local troubleshooting.
+Command is a native macOS menu-bar app for sending selected text, screenshots, typed notes, and dictated notes to Claude or ChatGPT. ChatGPT includes Chat and Codex destinations. It also supports background commands through `claude -p` or `codex exec -`, clipboard history, dictation history, import/export, and local troubleshooting.
 
 This guide is written for end users. For a shorter cheat sheet, see [QUICK_REFERENCE.md](QUICK_REFERENCE.md). For ready-to-copy workflow setups, see [EXAMPLES.md](EXAMPLES.md). Maintainer and architecture notes live in [BACKGROUND_TRIGGER_INTEGRATION.md](BACKGROUND_TRIGGER_INTEGRATION.md).
 
@@ -14,7 +14,7 @@ This guide is written for end users. For a shorter cheat sheet, see [QUICK_REFER
 
 For permission details and reset commands, see [PERMISSIONS.md](PERMISSIONS.md).
 
-## Choose Claude, ChatGPT, or Codex
+## Choose Claude Or ChatGPT
 
 Open **Settings -> Shortcuts** and choose **Default assistant**. Fresh installations default to ChatGPT with **Recent** as the destination. Choose **Claude** for Claude Chat/Cowork/Code, or keep **ChatGPT** and switch between **Recent**, **Chat**, and **Codex** destinations inside the ChatGPT app. Codex workspace delivery still needs Codex CLI/workspace readiness in **Set Up**.
 

@@ -63,7 +63,7 @@ def main() -> int:
     install = (DOCS / "install.html").read_text(encoding="utf-8")
     required_home = [
         "Anything in. Anywhere out.",
-        "Claude · New session",
+        "ChatGPT · New conversation",
         ALPHA_ASSET,
         "install.html",
         "guide.html",

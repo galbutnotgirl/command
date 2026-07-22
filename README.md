@@ -121,7 +121,7 @@ Full tab-by-tab details: [docs/SETTINGS_REFERENCE.md](docs/SETTINGS_REFERENCE.md
 | Tab | Use |
 |---|---|
 | Set Up | Permissions and live component checks. |
-| Shortcuts | Default assistant, Claude destination or Codex workspace, built-in prompts, custom actions, trigger overrides. |
+| Shortcuts | Default assistant, Claude destination or ChatGPT destination, Codex workspace, built-in prompts, custom actions, trigger overrides. |
 | Context | App/site context rules and prompt preview. |
 | Command History | Foreground sends, background runs, retries, retention. |
 | Clipboard History | Picker shortcut, retention, theme, clear controls. |
@@ -191,7 +191,7 @@ Release:
 
 ```bash
 ./release.sh --skip-checks  # local package smoke: zip shape, docs/README parity, runtime resources
-./release.sh --publish      # tests, package, tag, push tag, create GitHub Release
+./release.sh --publish --notarize  # Developer ID sign, notarize, staple, Gatekeeper-check, publish
 ```
 
 ## License

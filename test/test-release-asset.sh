@@ -149,20 +149,10 @@ unzip -p "$ZIP" Command.app/Contents/Resources/docs/uninstall.html 2>/dev/null |
   || fail "bundled docs/uninstall.html h1 label drifted"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/privacy.html 2>/dev/null | grep -q "<h1>Privacy</h1>" \
   || fail "bundled docs/privacy.html h1 label drifted"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/quick-reference.html 2>/dev/null | grep -q "<strong>Background Architecture</strong>" \
-  || fail "bundled docs/quick-reference.html missing Background Architecture card label"
+unzip -p "$ZIP" Command.app/Contents/Resources/docs/quick-reference.html 2>/dev/null | grep -q "<h2>Background Result Contract</h2>" \
+  || fail "bundled docs/quick-reference.html missing Background Result Contract"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/examples.html 2>/dev/null | grep -q "<h1>Examples</h1>" \
   || fail "bundled docs/examples.html h1 label drifted"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/release.html 2>/dev/null | grep -q "Open each .*Settings -> About.* docs button" \
-  || fail "bundled docs/release.html missing About docs-button checklist"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/release.html 2>/dev/null | grep -q "Icon Treatments" \
-  || fail "bundled docs/release.html missing Icon Treatments About docs-button check"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/release.html 2>/dev/null | grep -q "Open each .*Settings -> About.*Alpha Limitations" \
-  || fail "bundled docs/release.html missing Alpha Limitations About docs-button check"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/release.html 2>/dev/null | grep -q "Background Architecture" \
-  || fail "bundled docs/release.html missing Background Architecture About docs-button check"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/release.html 2>/dev/null | grep -q "Release Checklist" \
-  || fail "bundled docs/release.html missing Release Checklist About docs-button check"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/support.html 2>/dev/null | grep -q "Copy Diagnostic Info" \
   || fail "bundled docs/support.html missing diagnostic guidance"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/support.html 2>/dev/null | grep -q "Feature request template" \

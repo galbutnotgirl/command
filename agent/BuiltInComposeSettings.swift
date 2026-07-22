@@ -44,7 +44,12 @@ func loadBuiltInComposeSettings() -> BuiltInComposeSettings {
 
 func saveBuiltInComposeSettings(_ settings: BuiltInComposeSettings) {
     guard let data = try? JSONEncoder().encode(settings) else { return }
-    try? data.write(to: URL(fileURLWithPath: BUILTIN_COMPOSE_SETTINGS_PATH), options: .atomic)
+    let url = URL(fileURLWithPath: BUILTIN_COMPOSE_SETTINGS_PATH)
+    try? FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+    try? data.write(to: url, options: .atomic)
 }
 
 func builtInComposeAutoSubmit(_ action: String) -> Bool? {

@@ -45,6 +45,10 @@ private func writeBindings(_ bindings: [HotkeyBinding]) {
     let arr = bindings.filter { $0.keycode != 0 }
         .map { ["action": $0.action, "keycode": Int($0.keycode), "mods": Int($0.mods), "enabled": $0.enabled] as [String: Any] }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
+        try? FileManager.default.createDirectory(
+            at: URL(fileURLWithPath: CFG).deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         try? data.write(to: URL(fileURLWithPath: CFG))
     }
 }

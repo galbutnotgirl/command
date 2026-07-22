@@ -49,7 +49,9 @@ final class ProviderModelsTests: XCTestCase {
         XCTAssertEqual(PrimaryAssistantPreference.chatgpt.provider, .codex)
         XCTAssertEqual(PrimaryAssistantPreference.chatgpt.destination, .recent)
         XCTAssertEqual(PrimaryAssistantPreference.codex.provider, .codex)
-        XCTAssertEqual(PrimaryAssistantPreference.codex.destination, .recent)
+        XCTAssertEqual(PrimaryAssistantPreference.codex.destination, .code)
+        XCTAssertEqual(PrimaryAssistantPreference.onboardingCases, [.claude, .chatgpt])
+        XCTAssertEqual(PrimaryAssistantPreference.codex.label, "ChatGPT Codex")
     }
 
     func testRecentIsFirstExplicitDestination() {

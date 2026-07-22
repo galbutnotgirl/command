@@ -11,8 +11,10 @@
 #
 # Usage:
 #   ./release.sh                      # build + package only, to dist/
-#   ./release.sh --publish            # also tag, push the tag, and gh release create
-#   ./release.sh --publish --notes "custom notes"   # skip --generate-notes
+#   ./release.sh --notarize            # notarize + staple local package
+#   ./release.sh --publish --notarize  # notarize, tag, push, and create release
+#   ./release.sh --publish --notarize --notes="custom notes"  # skip generated notes
+#   ./release.sh --publish --allow-unnotarized       # explicit alpha-only escape hatch
 #   ./release.sh --skip-checks        # bypass the clean-tree/branch/tag guards (CI, one-offs)
 #
 # Bump VERSION first so the tag is newer than what users are running.
@@ -31,16 +33,46 @@ EXPECTED_MIN_MACOS="14.0"
 
 PUBLISH=0
 SKIP_CHECKS=0
+NOTARIZE=0
+ALLOW_UNNOTARIZED=0
+VALIDATE_CONFIG=0
+NOTARY_PROFILE="${COMMAND_NOTARY_PROFILE:-}"
 NOTES=""
 for arg in "$@"; do
   case "$arg" in
     --publish) PUBLISH=1 ;;
+    --notarize) NOTARIZE=1 ;;
+    --allow-unnotarized) ALLOW_UNNOTARIZED=1 ;;
+    --validate-config) VALIDATE_CONFIG=1 ;;
+    --notary-profile=*) NOTARY_PROFILE="${arg#--notary-profile=}" ;;
     --skip-checks) SKIP_CHECKS=1 ;;
     --notes=*) NOTES="${arg#--notes=}" ;;
+    *) print -- "[release] unknown option: $arg"; exit 2 ;;
   esac
 done
 
 fail() { print -- "[release] $1"; exit 1; }
+
+# Publishing an unnotarized app creates Gatekeeper's "Apple could not verify"
+# warning for every download. Require notarization by default; retain one
+# explicit escape hatch for emergency alpha builds while Developer ID setup is
+# unavailable. --validate-config lets CI test policy without building/publishing.
+if [ "$PUBLISH" = "1" ] && [ "$NOTARIZE" = "0" ] && [ "$ALLOW_UNNOTARIZED" = "0" ]; then
+  fail "--publish requires --notarize (or explicit --allow-unnotarized for an alpha-only emergency build)."
+fi
+if [ "$NOTARIZE" = "1" ] && [ -z "$NOTARY_PROFILE" ]; then
+  fail "--notarize needs COMMAND_NOTARY_PROFILE or --notary-profile=<keychain profile>."
+fi
+if [ "$NOTARIZE" = "1" ] && [ "$ALLOW_UNNOTARIZED" = "1" ]; then
+  fail "choose --notarize or --allow-unnotarized, not both."
+fi
+if [ "$ALLOW_UNNOTARIZED" = "1" ] && [[ "$TAG" != *alpha* ]]; then
+  fail "--allow-unnotarized is restricted to alpha versions; notarize beta and stable releases."
+fi
+if [ "$VALIDATE_CONFIG" = "1" ]; then
+  print -- "[release] configuration ok"
+  exit 0
+fi
 
 # ---- pre-flight guards (skippable with --skip-checks) -----------------------
 if [ "$SKIP_CHECKS" = "0" ]; then
@@ -66,11 +98,22 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   (cd "${DIR}/vendor/claude-command-capture" && node --test) || fail "Node tests failed — fix background runner tests before release."
   "${DIR}/test/test-shell.sh" || fail "shell tests failed — fix scripts before release."
   python3 "${DIR}/test/test-docs.py" || fail "docs validation failed — fix docs links/metadata/packaging guards before release."
+  python3 "${DIR}/test/test_string_review.py" || fail "string review round-trip failed — fix export/apply safety before release."
 fi
 
 print -- "[release] building ${TAG}…"
 "${DIR}/build-agent.sh" || fail "build failed"
 [ -d "$APP" ] || fail "missing $APP"
+
+SIGN_INFO="$(codesign -dv --verbose=4 "$APP" 2>&1 || true)"
+if [ "$NOTARIZE" = "1" ]; then
+  print -r -- "$SIGN_INFO" | grep -q '^Authority=Developer ID Application:' \
+    || fail "--notarize requires a Developer ID Application signature. Set SIGN_ID to that Keychain identity."
+  print -r -- "$SIGN_INFO" | grep -Eq '^flags=.*\(runtime\)' \
+    || fail "Developer ID build is missing hardened runtime."
+  codesign --verify --deep --strict --verbose=2 "$APP" \
+    || fail "Developer ID signature verification failed before notarization."
+fi
 
 # The version baked into Info.plist by build-agent.sh should match VERSION
 # exactly — if it doesn't, something read a stale build or a stale file.
@@ -129,6 +172,24 @@ for required_resource in \
     || fail "packaged zip missing bundled runtime resource: ${required_resource}"
 done
 
+if [ "$NOTARIZE" = "1" ]; then
+  command -v xcrun >/dev/null 2>&1 || fail "--notarize needs xcrun/Xcode command-line tools."
+  print -- "[release] submitting ${ZIP:t} to Apple notarization…"
+  xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait \
+    || fail "Apple notarization failed. Inspect notarytool output before publishing."
+  xcrun stapler staple "$APP" || fail "stapling notarization ticket failed."
+  xcrun stapler validate "$APP" || fail "stapled notarization ticket did not validate."
+
+  # Stapling changes app bundle, so rebuild archive from ticket-bearing app.
+  rm -f "$ZIP"
+  COPYFILE_DISABLE=1 ditto -ck --norsrc --keepParent "$APP" "$ZIP" \
+    || fail "repackaging stapled app failed."
+  spctl -a -vv -t exec "$APP" || fail "Gatekeeper rejected notarized app."
+  print -- "[release] notarized, stapled, and Gatekeeper accepted"
+elif [ "$ALLOW_UNNOTARIZED" = "1" ]; then
+  print -- "[release] WARNING publishing unnotarized alpha; users will see a Gatekeeper warning."
+fi
+
 (
   cd "$DIST" || exit 1
   shasum -a 256 "${ZIP:t}" > "${SHA256:t}"
@@ -144,9 +205,9 @@ print -- "[release] checksum: ${SHA256}"
 if [ "$PUBLISH" = "0" ]; then
   print -- ""
   print -- "Next:"
-  print -- "  ./release.sh --publish"
+  print -- "  COMMAND_NOTARY_PROFILE=<profile> SIGN_ID='Developer ID Application: …' ./release.sh --publish --notarize"
   print -- ""
-  print -- "That reruns guards, tags ${TAG}, pushes the tag, and creates the GitHub Release."
+  print -- "That reruns guards, notarizes + staples the app, checks Gatekeeper, tags ${TAG}, and creates the GitHub Release."
   exit 0
 fi
 

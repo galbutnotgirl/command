@@ -54,7 +54,7 @@ CODEX_BIN="${CODEX_BIN:-$(command -v codex 2>/dev/null)}"
 [ -n "$CODEX_BIN" ] || [ ! -x /Applications/ChatGPT.app/Contents/Resources/codex ] || CODEX_BIN=/Applications/ChatGPT.app/Contents/Resources/codex
 if [ "$COMMAND_PROVIDER" = "codex" ]; then
   TARGET_BUNDLE="$CODEX_BUNDLE"
-  [ "$OPENAI_DESTINATION" = "chat" ] && TARGET_LABEL="ChatGPT" || TARGET_LABEL="Codex"
+  [ "$OPENAI_DESTINATION" = "code" ] && TARGET_LABEL="ChatGPT Codex" || TARGET_LABEL="ChatGPT"
 else
   TARGET_BUNDLE="$CLAUDE_BUNDLE"; TARGET_LABEL="Claude"
 fi
@@ -68,7 +68,7 @@ cd / 2>/dev/null || true
 BLOCK_BUNDLES=(com.apple.keychainaccess com.apple.SecurityAgent com.1password.1password com.agilebits.onepassword7 com.apple.wallet com.apple.Passwords)
 
 mkdir -p "$(dirname "$DO_LOG")" 2>/dev/null
-log()    { print -r -- "$(date '+%Y-%m-%d %H:%M:%S') [s2c] $*" >> "$LOG_FILE" 2>/dev/null; }
+log()    { print -r -- "$(date '+%Y-%m-%d %H:%M:%S') [s2c] $*" >> "$LOG_FILE" 2>/dev/null || true; }
 notify() { [ "${COMMAND_TEST_SILENT:-0}" = "1" ] || osascript -e "display notification \"$1\" with title \"${2:-Command}\"" 2>/dev/null; }
 urlencode() { printf '%s' "$1" | /usr/bin/python3 -c 'import sys,urllib.parse; sys.stdout.write(urllib.parse.quote(sys.stdin.read()))'; }
 pb_cc()  { /usr/bin/python3 -c 'from AppKit import NSPasteboard; print(NSPasteboard.generalPasteboard().changeCount())' 2>/dev/null; }
@@ -111,6 +111,7 @@ helper_paste() {
 helper_return(){ [ "$(agent_cmd "returnapp $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]; }
 helper_newtask(){ [ "$(agent_cmd "newtask $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]; }
 helper_newchat(){ [ "$(agent_cmd "newchat $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]; }
+helper_newprojectless(){ [ "$(agent_cmd "newprojectless $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]; }
 helper_copy()  {
   local t
   if t="$(agent_cmd copy)"; then print -r -- "$t"; return; fi
@@ -354,17 +355,21 @@ open_new() {  # $1 = q text (may be empty)
     local dest="$CLAUDE_DESTINATION"; [ "$COMMAND_PROVIDER" = "codex" ] && dest="$OPENAI_DESTINATION"
     local route=""
     if [ "$COMMAND_PROVIDER" = "codex" ]; then
-      if [ "$OPENAI_DESTINATION" = "chat" ] || [ "$OPENAI_DESTINATION" = "recent" ]; then
+      if [ "$OPENAI_DESTINATION" = "recent" ]; then
+        route="native-current-session"
+      elif [ "$OPENAI_DESTINATION" = "chat" ]; then
         route="native-new-session"
+      elif [ -d "$CODEX_WORKSPACE" ] && /usr/bin/git -C "$CODEX_WORKSPACE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        route="codex app $(printf %q "$CODEX_WORKSPACE")"
       else
-        route="codex://threads/new?path=$(urlencode "$CODEX_WORKSPACE")"
+        route="native-projectless-task"
       fi
+    elif [ "$CLAUDE_DESTINATION" = "recent" ]; then
+      route="native-current-session"
     elif [ "$CLAUDE_DESTINATION" = "cowork" ]; then
       route="claude://cowork/new"
     elif [ "$CLAUDE_DESTINATION" = "code" ]; then
       route="claude://code/new"
-    elif [ "$CLAUDE_DESTINATION" = "recent" ]; then
-      route="native-new-session"
     else
       route="claude://claude.ai/new"
     fi
@@ -372,7 +377,14 @@ open_new() {  # $1 = q text (may be empty)
   fi
   ensure_provider_app || return 1
   if [ "$COMMAND_PROVIDER" = "codex" ]; then
-    if [ "$OPENAI_DESTINATION" = "chat" ] || [ "$OPENAI_DESTINATION" = "recent" ]; then
+    if [ "$OPENAI_DESTINATION" = "recent" ]; then
+      helper_activate "$TARGET_BUNDLE" || return 1
+      sleep 0.2
+      copy_for_send "$q" "$COPY_SOURCE"
+      helper_paste || return 1
+      return 0
+    fi
+    if [ "$OPENAI_DESTINATION" = "chat" ]; then
       helper_activate "$TARGET_BUNDLE" || return 1
       sleep 0.2
       helper_newchat || { notify "Command could not open a new ChatGPT chat. Restart Command and try again."; return 1; }
@@ -385,13 +397,16 @@ open_new() {  # $1 = q text (may be empty)
       fi
       return 0
     fi
-    local link="codex://threads/new"
-    [ -d "$CODEX_WORKSPACE" ] || { notify "Codex workspace not found: $CODEX_WORKSPACE"; return 1; }
-    /usr/bin/git -C "$CODEX_WORKSPACE" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-      || { notify "Codex workspace is not a Git repository: $CODEX_WORKSPACE"; return 1; }
-    link="${link}?path=$(urlencode "$CODEX_WORKSPACE")"
-    /usr/bin/open -b "$TARGET_BUNDLE" "$link" 2>/dev/null || { notify "Could not open $TARGET_LABEL."; return 1; }
-    sleep 0.25
+    [ -n "$CODEX_BIN" ] || { notify "Codex CLI not found inside ChatGPT. Open Set Up in Command."; return 1; }
+    if [ -d "$CODEX_WORKSPACE" ] && /usr/bin/git -C "$CODEX_WORKSPACE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      "$CODEX_BIN" app "$CODEX_WORKSPACE" >/dev/null 2>&1 || { notify "Could not open ChatGPT Codex workspace: $CODEX_WORKSPACE"; return 1; }
+      sleep 0.45
+    else
+      helper_activate "$TARGET_BUNDLE" || return 1
+      sleep 0.35
+      helper_newprojectless || { notify "Could not open a new ChatGPT Codex task. Restart Command and try again."; return 1; }
+      sleep 0.45
+    fi
     if [ "${IMG:-0}" = "1" ]; then
       CODEX_PENDING_PROMPT="$q"
     else
@@ -402,8 +417,6 @@ open_new() {  # $1 = q text (may be empty)
   if [ "$CLAUDE_DESTINATION" = "recent" ]; then
     helper_activate "$TARGET_BUNDLE" || return 1
     sleep 0.2
-    helper_newtask || { notify "Command could not open a new Claude session. Restart Command and try again."; return 1; }
-    sleep 0.45
     copy_for_send "$q" "$COPY_SOURCE"
     helper_paste
     return $?
@@ -483,6 +496,7 @@ case "$ACTION" in
       if [ "$SHOULD_SUBMIT" = "1" ] && [ "$DRY_RUN" != "1" ]; then
         wait_for_assistant || log "WARN not frontmost"; sleep 0.3; helper_return
       fi
+      true
     fi
     ;;
 
@@ -525,7 +539,7 @@ case "$ACTION" in
     if [ "${CUSTOM_INCLUDE_SOURCE:-1}" = "0" ]; then
       PREFIX=""
     else
-      PREFIX="${CONTEXT}"
+      PREFIX="${SOURCE_LINE}"
     fi
     log "custom: session=${CUSTOM_SESSION:-new} submit=${CUSTOM_SUBMIT:-} src=${CUSTOM_INCLUDE_SOURCE:-1} img=$IMG sel_bytes=${#SEL}"
     if [ "${CUSTOM_SESSION:-new}" = "add" ]; then

@@ -21,7 +21,7 @@ struct HandoffConfig {
     var skill = ""
     var promptTemplate = ""
     var imagePromptTemplate = ""
-    var claudeCommand = "claude"
+    var claudeCommand = claudeExecutablePath() ?? "claude"
     var claudeCwd = ""
     var claudeExtraArgs: [String] = []
     var codexCommand = codexExecutablePath() ?? "codex"
@@ -51,10 +51,16 @@ struct HandoffConfig {
             c.claudeCwd = claude["cwd"] as? String ?? c.claudeCwd
             c.claudeExtraArgs = claude["extraArgs"] as? [String] ?? c.claudeExtraArgs
         }
+        if c.claudeCommand == "claude", let absolute = claudeExecutablePath() {
+            c.claudeCommand = absolute
+        }
         if let codex = providers?["codex"] as? [String: Any] {
             c.codexCommand = codex["command"] as? String ?? c.codexCommand
             c.codexCwd = codex["cwd"] as? String ?? c.codexCwd
             c.codexExtraArgs = codex["extraArgs"] as? [String] ?? c.codexExtraArgs
+        }
+        if c.codexCommand == "codex", let absolute = codexExecutablePath() {
+            c.codexCommand = absolute
         }
         return c
     }
@@ -303,14 +309,21 @@ private func which(_ name: String) -> String? {
     return nil
 }
 
+private func claudeExecutablePath() -> String? {
+    let candidates = ["/opt/homebrew/bin/claude", "/usr/local/bin/claude",
+                      "\(NSHomeDirectory())/.claude/local/claude",
+                      "\(NSHomeDirectory())/.local/bin/claude"]
+    return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+}
+
 // Shared submit path for retryHandoffSubmission and runCustomHandoff — both hand
 // an already-rendered prompt to submit-cli.js's --retry-prompt mode, skipping
 // buildPrompt() (which would need a matching global settings.json skill/template).
 private func submitHandoffPrompt(_ prompt: String, source: String, kind: String, skill: String?,
                                  provider: AIProvider, attachment: String? = nil,
                                  failureTitle: String) {
+    var config = HandoffConfig.load()
     if provider == .codex {
-        var config = HandoffConfig.load()
         if config.codexCwd.isEmpty { config.codexCwd = settingsModel.codexWorkspace }
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: config.codexCwd, isDirectory: &isDirectory), isDirectory.boolValue else {
@@ -322,8 +335,8 @@ private func submitHandoffPrompt(_ prompt: String, source: String, kind: String,
             notify(failureTitle, "Codex workspace is not a Git repository. Choose a repository or add --skip-git-repo-check explicitly.")
             return
         }
-        config.save()
     }
+    config.save()
     let scriptDir = (bundledResource("capture-handoff.sh") as NSString).deletingLastPathComponent
     var core = (scriptDir as NSString).appendingPathComponent("claude-command-capture")
     if !FileManager.default.fileExists(atPath: core) {
@@ -344,6 +357,9 @@ private func submitHandoffPrompt(_ prompt: String, source: String, kind: String,
                    "--kind", kind, "--provider", provider.rawValue]
         + (skill.map { ["--skill", $0] } ?? [])
         + (attachment.map { ["--file", $0] } ?? [])
+    var env = ProcessInfo.processInfo.environment
+    env["PATH"] = "/opt/homebrew/bin:\(NSHomeDirectory())/.claude/local:\(NSHomeDirectory())/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    p.environment = env
     let stdin = Pipe()
     p.standardInput = stdin
     do {

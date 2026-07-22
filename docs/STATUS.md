@@ -117,8 +117,8 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 
 ## Current state (alpha.8)
 
-- **Test suites**: 100 Swift (`cd agent && swift test`), 56 Node
-  (`cd vendor/claude-command-capture && node --test`), 41 shell (`./test/test-shell.sh`),
+- **Test suites**: 104 Swift (`cd agent && swift test`), 56 Node
+  (`cd vendor/claude-command-capture && node --test`), 47 shell (`./test/test-shell.sh`),
   plus docs link validation (`python3 ./test/test-docs.py`). All green. CI runs those
   checks plus a macOS release-asset smoke test (`./release.sh --skip-checks` and
   `./test/test-release-asset.sh`) on push/PR (`.github/workflows/test.yml`).
@@ -373,6 +373,19 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   the packaged executable is present/executable, then reads codesign metadata to confirm the
   app bundle is a Mach-O app signed with identifier `com.claudecommand`. Release Checklist
   Markdown/HTML documents that executable/signature gate alongside docs and metadata checks.
+- **Notarization-ready publishing**: Developer ID builds now use hardened runtime and secure
+  timestamps. `release.sh --publish` requires notarization by default, validates Developer ID
+  signature, submits with `notarytool`, staples and validates ticket, rebuilds archive, and
+  requires Gatekeeper acceptance before upload. Seven fast policy tests cover required profile,
+  alpha-only emergency override, conflicting modes, and unknown options.
+- **Incremental shortcut preservation**: existing Home dictation bindings no longer migrate to
+  Fn during update. Fn remains fresh-install default while saved user choices survive rebuilds.
+- **Complete export contract**: every Export command now writes all effective shortcuts, built-in
+  compose behavior, prompt text, context rules, vocabulary, background settings, and app
+  preferences. Import remains place where user chooses Keep current, Merge, or Overwrite per
+  section, and previews compare against effective defaults instead of disk files alone.
+- **Mac command labels**: Export and Import buttons use ellipses because they open native file
+  panels, matching macOS command-label conventions.
 - **Release checklist link parity**: rendered Release Checklist now matches Markdown source
   for repo-surface checks by linking Support, Contributing, Bug report, and Feature request
   directly; docs validation guards those URLs.

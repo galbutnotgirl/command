@@ -1,6 +1,6 @@
 # Command FAQ
 
-## How do I switch between Claude and Codex?
+## How do I switch between Claude and ChatGPT?
 
 Choose **Default assistant** in **Settings -> Shortcuts**. Custom Actions and individual triggers can override it. Claude uses Recent/Chat/Cowork/Code destinations. ChatGPT uses Recent/Chat/Codex destinations inside the ChatGPT app, with Codex using your configured workspace. Set Up checks each app and CLI independently, and Command never silently falls back to another provider.
 

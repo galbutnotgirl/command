@@ -169,6 +169,20 @@ final class SettingsModel: ObservableObject {
         reregisterHotkeys()
     }
 
+    func recordModifierOnlyHotkey(keycode: UInt32) {
+        guard let action = recordingAction else { return }
+        let isCustomTrigger = customActions.contains { $0.triggers.contains { $0.id == action } }
+        guard canRecordModifierOnly(action: action, isCustomTrigger: isCustomTrigger) else { return }
+        recordingAction = nil
+        if isCustomTrigger {
+            setTriggerBinding(triggerID: action, keycode: keycode, mods: 0)
+        } else {
+            setBinding(action: action, keycode: keycode, mods: 0)
+        }
+        checkConflict(forAction: action, keycode: keycode, mods: 0)
+        reregisterHotkeys()
+    }
+
     // Called from the global key monitor. Returns true if it consumed the event.
     // `recordingAction` holds a plain action string for fixed bindings, or a
     // trigger's own id for a custom action's trigger (an action's triggers
@@ -193,6 +207,17 @@ final class SettingsModel: ObservableObject {
         if ev.keyCode == 51 || ev.keyCode == 117 {                         // delete / fwd-delete = clear
             recordingAction = nil
             if isCustomTrigger { clearTriggerBinding(triggerID: action) } else { clearBinding(action) }
+            reregisterHotkeys()
+            return true
+        }
+        if let navKey = fnArrowNavigationKeycode(from: ev) {
+            recordingAction = nil
+            if isCustomTrigger {
+                setTriggerBinding(triggerID: action, keycode: navKey, mods: 0)
+            } else {
+                setBinding(action: action, keycode: navKey, mods: 0)
+            }
+            checkConflict(forAction: action, keycode: navKey, mods: 0)
             reregisterHotkeys()
             return true
         }
@@ -227,6 +252,17 @@ final class SettingsModel: ObservableObject {
         case 58, 61: return ev.modifierFlags.contains(.option) ? key : nil
         case 59, 62: return ev.modifierFlags.contains(.control) ? key : nil
         case 63: return ev.modifierFlags.contains(.function) ? key : nil
+        default: return nil
+        }
+    }
+
+    private func fnArrowNavigationKeycode(from ev: NSEvent) -> UInt32? {
+        guard ev.modifierFlags.contains(.function) else { return nil }
+        switch ev.keyCode {
+        case 123: return 115 // Fn+Left = Home
+        case 124: return 119 // Fn+Right = End
+        case 126: return 116 // Fn+Up = PgUp
+        case 125: return 121 // Fn+Down = PgDn
         default: return nil
         }
     }
@@ -341,23 +377,69 @@ final class SettingsModel: ObservableObject {
     }
 }
 
-// NSSound does not retain itself while playing. Keep active cues alive until
-// their delegate callback so short start/stop sounds are not clipped.
-private final class UISoundPlayer: NSObject, NSSoundDelegate {
+// Keep active cue players alive until playback finishes. AVAudioPlayer gives
+// the app a steadier output path for short dictation cues than NSSound previews.
+private final class UISoundPlayer: NSObject, AVAudioPlayerDelegate {
     static let shared = UISoundPlayer()
-    private var activeSounds: [NSSound] = []
+    private var activePlayers: [AVAudioPlayer] = []
+    private var preparedPlayers: [String: AVAudioPlayer] = [:]
 
-    func play(_ name: String, volume: Float) {
-        let url = URL(fileURLWithPath: "/System/Library/Sounds/\(name).aiff")
-        guard let sound = NSSound(contentsOf: url, byReference: true) else { return }
-        sound.volume = volume
-        sound.delegate = self
-        activeSounds.append(sound)
-        if !sound.play() { activeSounds.removeAll { $0 === sound } }
+    func preload(_ names: [String]) {
+        for name in Set(names) {
+            guard let player = preparedPlayer(for: name, volume: 0) else { continue }
+            player.volume = 0
+            player.currentTime = 0
+            if player.play() {
+                player.stop()
+                player.currentTime = 0
+            }
+        }
     }
 
-    func sound(_ sound: NSSound, didFinishPlaying flag: Bool) {
-        activeSounds.removeAll { $0 === sound }
+    func play(_ name: String, volume: Float) {
+        let clampedVolume = min(max(volume, 0), 1)
+        if let player = preparedPlayer(for: name, volume: clampedVolume) {
+            player.volume = clampedVolume
+            player.currentTime = 0
+            if !player.play() {
+                appendLog("[sound] play failed name=\(name)")
+            }
+            return
+        }
+    }
+
+    private func preparedPlayer(for name: String, volume: Float) -> AVAudioPlayer? {
+        if let player = preparedPlayers[name] {
+            player.volume = volume
+            return player
+        }
+
+        let url = URL(fileURLWithPath: "/System/Library/Sounds/\(name).aiff")
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            appendLog("[sound] missing \(url.path)")
+            return nil
+        }
+
+        do {
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.volume = volume
+            player.delegate = self
+            player.prepareToPlay()
+            preparedPlayers[name] = player
+            return player
+        } catch {
+            appendLog("[sound] load failed name=\(name): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        activePlayers.removeAll { $0 === player }
+    }
+
+    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        activePlayers.removeAll { $0 === player }
+        appendLog("[sound] decode failed: \(error?.localizedDescription ?? "unknown")")
     }
 }
 
@@ -365,6 +447,16 @@ private final class UISoundPlayer: NSObject, NSSoundDelegate {
 func playUISound(_ name: String) {
     guard settingsModel.soundsEnabled else { return }
     UISoundPlayer.shared.play(name, volume: Float(settingsModel.soundVolume))
+}
+
+func preloadUISounds() {
+    UISoundPlayer.shared.preload([
+        settingsModel.startSound,
+        settingsModel.stopSound,
+        VoiceSettingsDefaults.startSound,
+        VoiceSettingsDefaults.stopSound,
+        "Ping", "Pop", "Submarine"
+    ])
 }
 
 // ---- window controller ------------------------------------------------------
@@ -813,8 +905,8 @@ struct ShortcutsView: View {
                 HStack {
                     Text("Shortcuts").font(.title2).bold()
                     Spacer()
-                    Button(action: { exportGlobalBundle(sections: Set(GlobalBundleSection.allCases)) }) {
-                        Label("Export", systemImage: "square.and.arrow.up")
+                    Button(action: exportGlobalBundle) {
+                        Label("Export…", systemImage: "square.and.arrow.up")
                     }
                     .help("Export all Command settings. Import later lets you choose what to keep or overwrite.")
                 }
@@ -1023,7 +1115,7 @@ struct BuiltInComposeSheet: View {
     @State private var confirmingReset = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(spacing: 0) {
             HStack {
                 Text("Edit Compose").font(.headline)
                 Spacer()
@@ -1031,39 +1123,51 @@ struct BuiltInComposeSheet: View {
                     .buttonStyle(.bordered)
                     .help("Restore original built-in Compose prompt and row behavior.")
             }
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+            .padding(.bottom, 12)
 
-            Toggle("Default auto-submit", isOn: $defaultAutoSubmit)
-                .help("Used unless a row overrides it.")
+            Divider()
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Prompt text").font(.caption).bold()
-                Text("Shared across selected-text and screenshot compose rows.")
-                    .font(.caption).foregroundColor(.secondary)
-                TextEditor(text: $prompt)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(minHeight: 100)
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
-            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Toggle("Default auto-submit", isOn: $defaultAutoSubmit)
+                        .help("Used unless a row overrides it.")
 
-            if !templates.builtInComposeTemplatesAreUnified {
-                Text("Prompt variants were different before. Saving here will unify them.")
-                    .font(.caption2).foregroundColor(.secondary)
-            }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Prompt text").font(.caption).bold()
+                        Text("Shared across selected-text and screenshot compose rows.")
+                            .font(.caption).foregroundColor(.secondary)
+                        TextEditor(text: $prompt)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minHeight: 120)
+                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
+                    }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Triggers").font(.caption).bold()
-                ForEach(BUILTIN_COMPOSE_ROWS) { def in
-                    EditableBuiltInComposeRow(def: def,
-                                              binding: binding(for: def.action),
-                                              autoSubmitChoice: Binding(
-                                                get: { AutoSubmitChoice.from(overrides[def.action]) },
-                                                set: { overrides[def.action] = $0.boolValue }
-                                              ),
-                                              model: model)
+                    if !templates.builtInComposeTemplatesAreUnified {
+                        Text("Prompt variants were different before. Saving here will unify them.")
+                            .font(.caption2).foregroundColor(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Triggers").font(.caption).bold()
+                        ForEach(BUILTIN_COMPOSE_ROWS) { def in
+                            EditableBuiltInComposeRow(def: def,
+                                                      binding: binding(for: def.action),
+                                                      autoSubmitChoice: Binding(
+                                                        get: { AutoSubmitChoice.from(overrides[def.action]) },
+                                                        set: { overrides[def.action] = $0.boolValue }
+                                                      ),
+                                                      model: model)
+                        }
+                    }
+
+                    TemplateVariablesLegend(compact: true)
                 }
+                .padding(24)
             }
 
-            TemplateVariablesLegend(compact: true)
+            Divider()
 
             HStack {
                 Button("Cancel") { isPresented = false }
@@ -1077,15 +1181,18 @@ struct BuiltInComposeSheet: View {
                 }
                 .keyboardShortcut(.defaultAction)
             }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
         }
-        .padding(24)
-        .frame(minWidth: 620, minHeight: 420)
+        .frame(width: 760, height: 680)
         .alert("Reset built-in Compose?", isPresented: $confirmingReset) {
             Button("Cancel", role: .cancel) {}
             Button("Reset", role: .destructive) {
                 templates.resetBuiltInComposeTemplates()
                 let defaults = DEFAULT_BUILTIN_COMPOSE_SETTINGS
                 saveBuiltInComposeSettings(defaults)
+                templates.load()
+                model.refresh()
                 prompt = templates.builtInComposeTemplate
                 defaultAutoSubmit = defaults.autoSubmitDefault
                 overrides = defaults.autoSubmitOverrides
@@ -1879,12 +1986,15 @@ struct EnrichRuleRow: View {
 // MARK: - Global Import / Export
 
 enum GlobalBundleSection: String, CaseIterable, Identifiable {
-    case shortcuts, templates, vocabulary, handoffSettings, appPreferences
+    case shortcutBindings, customActions, builtInCompose, commandTemplates, contextRules, vocabulary, handoffSettings, appPreferences
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .shortcuts: return "Shortcuts and prompts"
-        case .templates: return "Prompt text and context rules"
+        case .shortcutBindings: return "Shortcut bindings"
+        case .customActions: return "Custom actions"
+        case .builtInCompose: return "Built-in Compose"
+        case .commandTemplates: return "Prompt text"
+        case .contextRules: return "Context rules"
         case .vocabulary: return "Dictation vocabulary"
         case .handoffSettings: return "Background settings"
         case .appPreferences: return "App preferences"
@@ -1911,32 +2021,242 @@ struct GlobalImportBundle: Identifiable {
     let available: Set<GlobalBundleSection>
 }
 
-private func importSectionSummary(_ section: GlobalBundleSection, object: [String: Any]) -> String {
+private struct ImportPreviewStats {
+    let incoming: Int
+    let current: Int
+    let same: Int
+    let added: Int
+    let updated: Int
+    let currentOnly: Int
+    let note: String
+
+    var summary: String {
+        "\(incoming) in file, \(current) current"
+    }
+
+    var mergeSummary: String {
+        let parts = [
+            "\(same) same",
+            "\(added) added",
+            "\(updated) updated",
+            "\(currentOnly) kept current-only"
+        ]
+        return parts.joined(separator: " · ") + (note.isEmpty ? "" : " · \(note)")
+    }
+}
+
+private func canonicalJSON(_ value: Any) -> String {
+    guard JSONSerialization.isValidJSONObject([value]),
+          let data = try? JSONSerialization.data(withJSONObject: [value], options: [.sortedKeys]),
+          let text = String(data: data, encoding: .utf8) else {
+        return String(describing: value)
+    }
+    return text
+}
+
+private func hotkeyJSON(_ bindings: [HotkeyBinding]) -> [[String: Any]] {
+    bindings.map {
+        ["action": $0.action, "keycode": Int($0.keycode), "mods": Int($0.mods), "enabled": $0.enabled]
+    }
+}
+
+private func commandTemplateJSON() -> [String: Any] {
+    Dictionary(uniqueKeysWithValues: loadCommandTemplates().map { ($0.action, $0.template as Any) })
+}
+
+private func enrichRulesJSON() -> [[String: Any]] {
+    loadEnrichRules().map {
+        ["match": $0.match.rawValue, "pattern": $0.pattern, "text": $0.text,
+         "displayName": $0.displayName, "pathPrefix": $0.pathPrefix]
+    }
+}
+
+private func builtInComposeJSON() -> [String: Any] {
+    let settings = loadBuiltInComposeSettings()
+    return [
+        "autoSubmitDefault": settings.autoSubmitDefault,
+        "autoSubmitOverrides": settings.autoSubmitOverrides
+    ]
+}
+
+private func handoffSettingsJSON() -> [String: Any] {
+    var root = jsonObject(at: HandoffConfig.settingsFile, fallback: [:]) as? [String: Any] ?? [:]
+    let config = HandoffConfig.load()
+    root["skill"] = config.skill
+    root["promptTemplate"] = config.promptTemplate
+    root["imagePromptTemplate"] = config.imagePromptTemplate
+    root["notifications"] = config.notifications
+    root["schemaVersion"] = 2
+    root["defaultProvider"] = UserDefaults.standard.string(forKey: "defaultProvider") ?? "codex"
+    root["providers"] = [
+        "claude": ["command": config.claudeCommand, "cwd": config.claudeCwd,
+                   "baseArgs": ["-p"], "extraArgs": config.claudeExtraArgs],
+        "codex": ["command": config.codexCommand, "cwd": config.codexCwd,
+                  "baseArgs": ["exec"], "extraArgs": config.codexExtraArgs]
+    ]
+    return root
+}
+
+private func arrayPreview(current: [[String: Any]], incoming: [[String: Any]], key: String, note: String = "Merge uses imported value when keys match.") -> ImportPreviewStats {
+    var currentByKey: [String: [String: Any]] = [:]
+    for item in current {
+        guard let id = item[key] as? String else { continue }
+        currentByKey[id] = item
+    }
+    var incomingByKey: [String: [String: Any]] = [:]
+    for item in incoming {
+        guard let id = item[key] as? String else { continue }
+        incomingByKey[id] = item
+    }
+    let currentKeys = Set(currentByKey.keys)
+    let incomingKeys = Set(incomingByKey.keys)
+    let shared = currentKeys.intersection(incomingKeys)
+    let same = shared.filter { canonicalJSON(currentByKey[$0] ?? [:]) == canonicalJSON(incomingByKey[$0] ?? [:]) }.count
+    let updated = shared.count - same
+    return ImportPreviewStats(
+        incoming: incoming.count,
+        current: current.count,
+        same: same,
+        added: incomingKeys.subtracting(currentKeys).count,
+        updated: updated,
+        currentOnly: currentKeys.subtracting(incomingKeys).count,
+        note: note
+    )
+}
+
+private func dictionaryPreview(current: [String: Any], incoming: [String: Any], note: String = "Merge uses imported value when keys match.") -> ImportPreviewStats {
+    let currentKeys = Set(current.keys)
+    let incomingKeys = Set(incoming.keys)
+    let shared = currentKeys.intersection(incomingKeys)
+    let same = shared.filter { canonicalJSON(current[$0] ?? "") == canonicalJSON(incoming[$0] ?? "") }.count
+    let updated = shared.count - same
+    return ImportPreviewStats(
+        incoming: incoming.count,
+        current: current.count,
+        same: same,
+        added: incomingKeys.subtracting(currentKeys).count,
+        updated: updated,
+        currentOnly: currentKeys.subtracting(incomingKeys).count,
+        note: note
+    )
+}
+
+private func contextRulesPreview(current: [[String: Any]], incoming: [[String: Any]]) -> ImportPreviewStats {
+    func ruleKey(_ item: [String: Any]) -> String {
+        let match = item["match"] as? String ?? ""
+        let pattern = item["pattern"] as? String ?? ""
+        let pathPrefix = item["pathPrefix"] as? String ?? ""
+        return "\(match)\u{1F}\(pattern)\u{1F}\(pathPrefix)"
+    }
+    var currentByKey: [String: [String: Any]] = [:]
+    for item in current { currentByKey[ruleKey(item)] = item }
+    var incomingByKey: [String: [String: Any]] = [:]
+    for item in incoming { incomingByKey[ruleKey(item)] = item }
+    let currentKeys = Set(currentByKey.keys)
+    let incomingKeys = Set(incomingByKey.keys)
+    let shared = currentKeys.intersection(incomingKeys)
+    let same = shared.filter { canonicalJSON(currentByKey[$0] ?? [:]) == canonicalJSON(incomingByKey[$0] ?? [:]) }.count
+    return ImportPreviewStats(
+        incoming: incoming.count,
+        current: current.count,
+        same: same,
+        added: incomingKeys.subtracting(currentKeys).count,
+        updated: shared.count - same,
+        currentOnly: currentKeys.subtracting(incomingKeys).count,
+        note: "Context rules match by kind, pattern, and path prefix."
+    )
+}
+
+private func importPayload(_ section: GlobalBundleSection, object: [String: Any]) -> Any? {
     switch section {
-    case .shortcuts:
-        let root = object["shortcuts"] as? [String: Any] ?? object
-        let hotkeys = (root["hotkeys"] as? [Any])?.count ?? 0
-        let actions = (root["customActions"] as? [Any])?.count ?? 0
-        let compose = root["builtInComposeSettings"] == nil ? "no compose settings" : "compose settings"
-        return "\(hotkeys) shortcuts, \(actions) custom actions, \(compose)"
-    case .templates:
-        let root = object["templates"] as? [String: Any] ?? object
-        let prompts = (root["commandTemplates"] as? [String: Any])?.count ?? 0
-        let rules = (root["enrichRules"] as? [Any])?.count ?? 0
-        return "\(prompts) prompts, \(rules) context rules"
+    case .shortcutBindings:
+        if let shortcuts = object["shortcuts"] as? [String: Any], let value = shortcuts["hotkeys"] { return value }
+        return object["hotkeys"]
+    case .customActions:
+        if let shortcuts = object["shortcuts"] as? [String: Any], let value = shortcuts["customActions"] { return value }
+        return object["customActions"]
+    case .builtInCompose:
+        if let shortcuts = object["shortcuts"] as? [String: Any], let value = shortcuts["builtInComposeSettings"] { return value }
+        return object["builtInComposeSettings"]
+    case .commandTemplates:
+        if let templates = object["templates"] as? [String: Any], let value = templates["commandTemplates"] { return value }
+        return object["commandTemplates"]
+    case .contextRules:
+        if let templates = object["templates"] as? [String: Any], let value = templates["enrichRules"] { return value }
+        return object["enrichRules"]
     case .vocabulary:
-        let root = object["vocabulary"] as? [String: Any] ?? object
+        return object["vocabulary"] ?? (object["replacements"] != nil || object["vocab"] != nil ? object : nil)
+    case .handoffSettings:
+        return object["handoffSettings"]
+    case .appPreferences:
+        return object["appPreferences"]
+    }
+}
+
+@MainActor
+private func importPreviewStats(_ section: GlobalBundleSection, object: [String: Any]) -> ImportPreviewStats? {
+    guard let payload = importPayload(section, object: object) else { return nil }
+    switch section {
+    case .shortcutBindings:
+        return arrayPreview(current: hotkeyJSON(loadBindings()),
+                            incoming: payload as? [[String: Any]] ?? [],
+                            key: "action")
+    case .customActions:
+        return arrayPreview(current: jsonObject(at: CUSTOM_ACTIONS_PATH, fallback: []) as? [[String: Any]] ?? [],
+                            incoming: payload as? [[String: Any]] ?? [],
+                            key: "id")
+    case .builtInCompose:
+        return dictionaryPreview(current: builtInComposeJSON(),
+                                 incoming: payload as? [String: Any] ?? [:])
+    case .commandTemplates:
+        return dictionaryPreview(current: commandTemplateJSON(),
+                                 incoming: payload as? [String: Any] ?? [:])
+    case .contextRules:
+        return contextRulesPreview(current: enrichRulesJSON(),
+                                   incoming: payload as? [[String: Any]] ?? [])
+    case .vocabulary:
+        let root = payload as? [String: Any] ?? [:]
         let replacements = (root["replacements"] as? [Any])?.count ?? 0
         let terms = (root["vocab"] as? [Any])?.count ?? 0
         let fillers = (root["fillers"] as? [Any])?.count ?? 0
-        return "\(replacements) corrections, \(terms) terms, \(fillers) fillers"
+        let incoming = replacements + terms + fillers
+        let currentRoot = jsonObject(at: VocabularyStore.diskURL().path, fallback: [:]) as? [String: Any] ?? [:]
+        let current = (currentRoot["replacements"] as? [Any])?.count ?? 0
+            + ((currentRoot["vocab"] as? [Any])?.count ?? 0)
+            + ((currentRoot["fillers"] as? [Any])?.count ?? 0)
+        return ImportPreviewStats(incoming: incoming, current: current, same: 0, added: incoming, updated: 0, currentOnly: current, note: "\(replacements) corrections, \(terms) terms, \(fillers) fillers.")
     case .handoffSettings:
-        let root = object["handoffSettings"] as? [String: Any] ?? [:]
-        return "\(root.count) settings"
+        return dictionaryPreview(current: handoffSettingsJSON(),
+                                 incoming: payload as? [String: Any] ?? [:])
     case .appPreferences:
-        let root = object["appPreferences"] as? [String: Any] ?? [:]
-        return "\(root.count) preferences"
+        return dictionaryPreview(current: currentAppPreferencesPreview(),
+                                 incoming: payload as? [String: Any] ?? [:],
+                                 note: "Preferences apply only known keys.")
     }
+}
+
+@MainActor
+private func currentAppPreferencesPreview() -> [String: Any] {
+    [
+        "defaultProvider": UserDefaults.standard.string(forKey: "defaultProvider") ?? "codex",
+        "claudeDestination": UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent",
+        "codexDestination": UserDefaults.standard.string(forKey: "codexDestination") ?? "recent",
+        "codexWorkspace": UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory(),
+        "clipRetentionDays": readRetentionDays(),
+        "commandRetentionDays": readCommandRetentionDays(),
+        "handoffRetentionDays": readHandoffRetentionDays(),
+        VoiceSettingsKeys.soundsEnabled: settingsModel.soundsEnabled,
+        VoiceSettingsKeys.soundVolume: settingsModel.soundVolume,
+        VoiceSettingsKeys.startSound: settingsModel.startSound,
+        VoiceSettingsKeys.stopSound: settingsModel.stopSound,
+        VoiceSettingsKeys.dictationEnabled: settingsModel.dictationEnabled,
+        VoiceSettingsKeys.minDictationDuration: settingsModel.minDictationDuration,
+        VoiceSettingsKeys.dictationAssistantProvider: settingsModel.dictationAssistantProvider,
+        VoiceSettingsKeys.dictationAssistant2Provider: settingsModel.dictationAssistant2Provider,
+        VoiceSettingsKeys.fillerRemoval: UserDefaults.standard.object(forKey: VoiceSettingsKeys.fillerRemoval) as? Bool ?? VoiceSettingsDefaults.fillerRemoval,
+        VoiceSettingsKeys.smartFormatting: UserDefaults.standard.object(forKey: VoiceSettingsKeys.smartFormatting) as? Bool ?? VoiceSettingsDefaults.smartFormatting,
+        VoiceSettingsKeys.aiCleanup: UserDefaults.standard.object(forKey: VoiceSettingsKeys.aiCleanup) as? Bool ?? VoiceSettingsDefaults.aiCleanup
+    ]
 }
 
 private func jsonObject(at path: String, fallback: Any) -> Any {
@@ -1956,32 +2276,20 @@ private func writeJSONObject(_ obj: Any, to path: String) {
 }
 
 @MainActor
-private func globalBundle(sections: Set<GlobalBundleSection>) -> [String: Any] {
+private func globalBundle() -> [String: Any] {
     var bundle: [String: Any] = ["version": 4, "exportedAt": ISO8601DateFormatter().string(from: Date())]
-    if sections.contains(.shortcuts) {
-        bundle["shortcuts"] = [
-            "hotkeys": jsonObject(at: CFG, fallback: []),
-            "customActions": jsonObject(at: CUSTOM_ACTIONS_PATH, fallback: []),
-            "builtInComposeSettings": jsonObject(at: BUILTIN_COMPOSE_SETTINGS_PATH, fallback: [
-                "autoSubmitDefault": DEFAULT_BUILTIN_COMPOSE_SETTINGS.autoSubmitDefault,
-                "autoSubmitOverrides": DEFAULT_BUILTIN_COMPOSE_SETTINGS.autoSubmitOverrides
-            ])
-        ]
-    }
-    if sections.contains(.templates) {
-        bundle["templates"] = [
-            "commandTemplates": jsonObject(at: COMMAND_TEMPLATES_PATH, fallback: [:]),
-            "enrichRules": jsonObject(at: ENRICHMENT_RULES_PATH, fallback: [])
-        ]
-    }
-    if sections.contains(.vocabulary) {
-        bundle["vocabulary"] = jsonObject(at: VocabularyStore.diskURL().path, fallback: [:])
-    }
-    if sections.contains(.handoffSettings) {
-        bundle["handoffSettings"] = jsonObject(at: HandoffConfig.settingsFile, fallback: [:])
-    }
-    if sections.contains(.appPreferences) {
-        bundle["appPreferences"] = [
+    bundle["shortcuts"] = [
+        "hotkeys": hotkeyJSON(loadBindings()),
+        "customActions": jsonObject(at: CUSTOM_ACTIONS_PATH, fallback: []),
+        "builtInComposeSettings": builtInComposeJSON()
+    ]
+    bundle["templates"] = [
+        "commandTemplates": commandTemplateJSON(),
+        "enrichRules": enrichRulesJSON()
+    ]
+    bundle["vocabulary"] = jsonObject(at: VocabularyStore.diskURL().path, fallback: [:])
+    bundle["handoffSettings"] = handoffSettingsJSON()
+    bundle["appPreferences"] = [
             "defaultProvider": UserDefaults.standard.string(forKey: "defaultProvider") ?? "codex",
             "claudeDestination": UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent",
             "codexDestination": UserDefaults.standard.string(forKey: "codexDestination") ?? "recent",
@@ -2000,15 +2308,13 @@ private func globalBundle(sections: Set<GlobalBundleSection>) -> [String: Any] {
             VoiceSettingsKeys.fillerRemoval: UserDefaults.standard.object(forKey: VoiceSettingsKeys.fillerRemoval) as? Bool ?? VoiceSettingsDefaults.fillerRemoval,
             VoiceSettingsKeys.smartFormatting: UserDefaults.standard.object(forKey: VoiceSettingsKeys.smartFormatting) as? Bool ?? VoiceSettingsDefaults.smartFormatting,
             VoiceSettingsKeys.aiCleanup: UserDefaults.standard.object(forKey: VoiceSettingsKeys.aiCleanup) as? Bool ?? VoiceSettingsDefaults.aiCleanup
-        ]
-    }
+    ]
     return bundle
 }
 
 @MainActor
-private func exportGlobalBundle(sections: Set<GlobalBundleSection>) {
-    guard !sections.isEmpty,
-          let data = try? JSONSerialization.data(withJSONObject: globalBundle(sections: sections), options: [.prettyPrinted]) else { return }
+private func exportGlobalBundle() {
+    guard let data = try? JSONSerialization.data(withJSONObject: globalBundle(), options: [.prettyPrinted]) else { return }
     let panel = NSSavePanel()
     panel.allowedContentTypes = [.json]
     let stamp = DateFormatter()
@@ -2028,8 +2334,11 @@ private func chooseGlobalImportBundle() -> GlobalImportBundle? {
           let data = try? Data(contentsOf: url),
           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
     var available = Set<GlobalBundleSection>()
-    if obj["shortcuts"] != nil || obj["hotkeys"] != nil || obj["customActions"] != nil { available.insert(.shortcuts) }
-    if obj["templates"] != nil || obj["commandTemplates"] != nil || obj["enrichRules"] != nil { available.insert(.templates) }
+    if importPayload(.shortcutBindings, object: obj) != nil { available.insert(.shortcutBindings) }
+    if importPayload(.customActions, object: obj) != nil { available.insert(.customActions) }
+    if importPayload(.builtInCompose, object: obj) != nil { available.insert(.builtInCompose) }
+    if importPayload(.commandTemplates, object: obj) != nil { available.insert(.commandTemplates) }
+    if importPayload(.contextRules, object: obj) != nil { available.insert(.contextRules) }
     if obj["vocabulary"] != nil || obj["replacements"] != nil || obj["vocab"] != nil { available.insert(.vocabulary) }
     if obj["handoffSettings"] != nil { available.insert(.handoffSettings) }
     if obj["appPreferences"] != nil { available.insert(.appPreferences) }
@@ -2039,32 +2348,49 @@ private func chooseGlobalImportBundle() -> GlobalImportBundle? {
 @MainActor
 private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundleSection: GlobalImportMode], model: SettingsModel) {
     let obj = bundle.object
-    if let mode = modes[.shortcuts], mode != .skip {
-        if let shortcuts = obj["shortcuts"] as? [String: Any] {
-            if let hotkeys = shortcuts["hotkeys"] { writeJSONObject(mergedArray(currentPath: CFG, incoming: hotkeys, key: "action", mode: mode), to: CFG) }
-            if let actions = shortcuts["customActions"] { writeJSONObject(mergedArray(currentPath: CUSTOM_ACTIONS_PATH, incoming: actions, key: "id", mode: mode), to: CUSTOM_ACTIONS_PATH) }
-            if let compose = shortcuts["builtInComposeSettings"] { writeJSONObject(mergedDictionary(currentPath: BUILTIN_COMPOSE_SETTINGS_PATH, incoming: compose, mode: mode), to: BUILTIN_COMPOSE_SETTINGS_PATH) }
+    if let mode = modes[.shortcutBindings], mode != .skip, let hotkeys = importPayload(.shortcutBindings, object: obj) {
+        let merged: Any
+        if mode == .merge, let incoming = hotkeys as? [[String: Any]] {
+            merged = mergeDictionaryArrays(current: hotkeyJSON(loadBindings()), incoming: incoming, key: "action")
         } else {
-            if let hotkeys = obj["hotkeys"] { writeJSONObject(mergedArray(currentPath: CFG, incoming: hotkeys, key: "action", mode: mode), to: CFG) }
-            if let actions = obj["customActions"] { writeJSONObject(mergedArray(currentPath: CUSTOM_ACTIONS_PATH, incoming: actions, key: "id", mode: mode), to: CUSTOM_ACTIONS_PATH) }
-            if let compose = obj["builtInComposeSettings"] { writeJSONObject(mergedDictionary(currentPath: BUILTIN_COMPOSE_SETTINGS_PATH, incoming: compose, mode: mode), to: BUILTIN_COMPOSE_SETTINGS_PATH) }
+            merged = hotkeys
         }
+        writeJSONObject(merged, to: CFG)
     }
-    if let mode = modes[.templates], mode != .skip {
-        if let templates = obj["templates"] as? [String: Any] {
-            if let t = templates["commandTemplates"] { writeJSONObject(mergedDictionary(currentPath: COMMAND_TEMPLATES_PATH, incoming: t, mode: mode), to: COMMAND_TEMPLATES_PATH) }
-            if let r = templates["enrichRules"] { writeJSONObject(mergedEnrichRules(incoming: r, mode: mode), to: ENRICHMENT_RULES_PATH) }
-        } else {
-            if let t = obj["commandTemplates"] { writeJSONObject(mergedDictionary(currentPath: COMMAND_TEMPLATES_PATH, incoming: t, mode: mode), to: COMMAND_TEMPLATES_PATH) }
-            if let r = obj["enrichRules"] { writeJSONObject(mergedEnrichRules(incoming: r, mode: mode), to: ENRICHMENT_RULES_PATH) }
-        }
+    if let mode = modes[.customActions], mode != .skip, let actions = importPayload(.customActions, object: obj) {
+        writeJSONObject(mergedArray(currentPath: CUSTOM_ACTIONS_PATH, incoming: actions, key: "id", mode: mode), to: CUSTOM_ACTIONS_PATH)
+    }
+    if let mode = modes[.builtInCompose], mode != .skip, let compose = importPayload(.builtInCompose, object: obj) {
+        let merged: Any
+        if mode == .merge, let incoming = compose as? [String: Any] {
+            merged = mergeDictionaryValues(current: builtInComposeJSON(), incoming: incoming)
+        } else { merged = compose }
+        writeJSONObject(merged, to: BUILTIN_COMPOSE_SETTINGS_PATH)
+    }
+    if let mode = modes[.commandTemplates], mode != .skip, let t = importPayload(.commandTemplates, object: obj) {
+        let merged: Any
+        if mode == .merge, let incoming = t as? [String: Any] {
+            merged = mergeDictionaryValues(current: commandTemplateJSON(), incoming: incoming)
+        } else { merged = t }
+        writeJSONObject(merged, to: COMMAND_TEMPLATES_PATH)
+    }
+    if let mode = modes[.contextRules], mode != .skip, let r = importPayload(.contextRules, object: obj) {
+        let merged: Any
+        if mode == .merge, let incoming = r as? [[String: Any]] {
+            merged = mergeEnrichRuleDictionaries(current: enrichRulesJSON(), incoming: incoming)
+        } else { merged = r }
+        writeJSONObject(merged, to: ENRICHMENT_RULES_PATH)
     }
     if let mode = modes[.vocabulary], mode != .skip {
         let vocabObj: Any? = obj["vocabulary"] ?? (obj["replacements"] != nil || obj["vocab"] != nil ? obj : nil)
         if let vocabObj { writeJSONObject(mergedVocabulary(incoming: vocabObj, mode: mode), to: VocabularyStore.diskURL().path); VocabularyStore.shared.load() }
     }
     if let mode = modes[.handoffSettings], mode != .skip, let h = obj["handoffSettings"] {
-        writeJSONObject(mergedDictionary(currentPath: HandoffConfig.settingsFile, incoming: h, mode: mode), to: HandoffConfig.settingsFile)
+        let merged: Any
+        if mode == .merge, let incoming = h as? [String: Any] {
+            merged = mergeDictionaryValues(current: handoffSettingsJSON(), incoming: incoming)
+        } else { merged = h }
+        writeJSONObject(merged, to: HandoffConfig.settingsFile)
     }
     if let mode = modes[.appPreferences], mode != .skip, let prefs = obj["appPreferences"] as? [String: Any] {
         if let v = prefs["claudeDestination"] as? String {
@@ -2122,60 +2448,12 @@ private func mergedArray(currentPath: String, incoming: Any, key: String, mode: 
     return mergeDictionaryArrays(current: current, incoming: inc, key: key)
 }
 
-private func mergedDictionary(currentPath: String, incoming: Any, mode: GlobalImportMode) -> Any {
-    guard mode == .merge,
-          let current = jsonObject(at: currentPath, fallback: [:]) as? [String: Any],
-          let inc = incoming as? [String: Any] else { return incoming }
-    return mergeDictionaryValues(current: current, incoming: inc)
-}
-
-private func mergedEnrichRules(incoming: Any, mode: GlobalImportMode) -> Any {
-    guard mode == .merge,
-          let current = jsonObject(at: ENRICHMENT_RULES_PATH, fallback: []) as? [[String: Any]],
-          let inc = incoming as? [[String: Any]] else { return incoming }
-    return mergeEnrichRuleDictionaries(current: current, incoming: inc)
-}
-
 @MainActor
 private func mergedVocabulary(incoming: Any, mode: GlobalImportMode) -> Any {
     guard mode == .merge,
           let cur = jsonObject(at: VocabularyStore.diskURL().path, fallback: [:]) as? [String: Any],
           let inc = incoming as? [String: Any] else { return incoming }
     return mergeVocabularyDictionaries(current: cur, incoming: inc)
-}
-
-struct GlobalExportSheet: View {
-    @Binding var isPresented: Bool
-    @State private var selected = Set(GlobalBundleSection.allCases)
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Export").font(.headline)
-            Text("Choose what to include in one Command export file.")
-                .font(.caption).foregroundColor(.secondary)
-            ForEach(GlobalBundleSection.allCases) { section in
-                Toggle(section.label, isOn: Binding(
-                    get: { selected.contains(section) },
-                    set: { on in
-                        if on { selected.insert(section) } else { selected.remove(section) }
-                    }
-                ))
-                .toggleStyle(.checkbox)
-            }
-            HStack {
-                Button("Cancel") { isPresented = false }
-                Spacer()
-                Button("Export") {
-                    exportGlobalBundle(sections: selected)
-                    isPresented = false
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(selected.isEmpty)
-            }
-        }
-        .padding(24)
-        .frame(width: 420)
-    }
 }
 
 struct GlobalImportSheet: View {
@@ -2185,38 +2463,69 @@ struct GlobalImportSheet: View {
     @State private var modes: [GlobalBundleSection: GlobalImportMode] = [:]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Import").font(.headline)
-            Text(bundle.url.lastPathComponent).font(.caption).foregroundColor(.secondary)
-            Text("Choose what to keep, merge, or overwrite before anything changes.")
-                .font(.caption).foregroundColor(.secondary)
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Import").font(.headline)
+                Text(bundle.url.lastPathComponent).font(.caption).foregroundColor(.secondary)
+                Text("Choose what to keep, merge, or overwrite before anything changes. Prompt text and context rules can be imported separately. Merge keeps current-only items, adds new imported items, and uses imported values when keys match.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+            .padding(.bottom, 12)
+
+            Divider()
+
             if bundle.available.isEmpty {
                 Text("No importable sections found.")
                     .font(.callout).foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ForEach(GlobalBundleSection.allCases) { section in
-                    HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(section.label)
-                            Text(bundle.available.contains(section) ? importSectionSummary(section, object: bundle.object) : "Not found in file")
-                                .font(.caption2).foregroundColor(.secondary)
-                        }
-                        Spacer()
-                        Picker("", selection: Binding(
-                            get: { modes[section] ?? .skip },
-                            set: { modes[section] = $0 }
-                        )) {
-                            ForEach(GlobalImportMode.allCases) { m in
-                                Text(m.label).tag(m)
+                ScrollView {
+                    VStack(spacing: 10) {
+                        ForEach(GlobalBundleSection.allCases) { section in
+                            let stats = importPreviewStats(section, object: bundle.object)
+                            HStack(alignment: .top, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(section.label).font(.callout.weight(.semibold))
+                                    if let stats {
+                                        Text(stats.summary)
+                                            .font(.caption).foregroundColor(.secondary)
+                                        Text(stats.mergeSummary)
+                                            .font(.caption2).foregroundColor(.secondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    } else {
+                                        Text("Not found in file")
+                                            .font(.caption).foregroundColor(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Picker("", selection: Binding(
+                                    get: { modes[section] ?? .skip },
+                                    set: { modes[section] = $0 }
+                                )) {
+                                    ForEach(GlobalImportMode.allCases) { m in
+                                        Text(m.label).tag(m)
+                                    }
+                                }
+                                .labelsHidden()
+                                .frame(width: 190)
+                                .disabled(stats == nil)
                             }
+                            .padding(12)
+                            .background(Color(NSColor.controlBackgroundColor).opacity(stats == nil ? 0.35 : 1))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .opacity(stats == nil ? 0.45 : 1)
                         }
-                        .labelsHidden()
-                        .frame(width: 190)
-                        .disabled(!bundle.available.contains(section))
                     }
-                    .opacity(bundle.available.contains(section) ? 1 : 0.45)
+                    .padding(24)
                 }
             }
+
+            Divider()
+
             HStack {
                 Button("Cancel") { isPresented = false }
                 Spacer()
@@ -2227,9 +2536,10 @@ struct GlobalImportSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(!modes.values.contains { $0 != .skip })
             }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
         }
-        .padding(24)
-        .frame(width: 460)
+        .frame(width: 760, height: 680)
         .onAppear {
             var initial: [GlobalBundleSection: GlobalImportMode] = [:]
             for s in GlobalBundleSection.allCases {
@@ -3053,7 +3363,6 @@ struct AboutView: View {
     @State private var available: UpdateInfo? = nil
     @State private var channel = currentChannel()
     @State private var diagCopied = false
-    @State private var showingExport = false
     @State private var importBundle: GlobalImportBundle? = nil
 
     private var version: String {
@@ -3137,14 +3446,14 @@ struct AboutView: View {
                         .font(.caption).foregroundColor(.secondary)
                     HStack(spacing: 10) {
                         Button {
-                            showingExport = true
+                            exportGlobalBundle()
                         } label: {
-                            Label("Export", systemImage: "square.and.arrow.up")
+                            Label("Export…", systemImage: "square.and.arrow.up")
                         }
                         Button {
                             importBundle = chooseGlobalImportBundle()
                         } label: {
-                            Label("Import", systemImage: "square.and.arrow.down")
+                            Label("Import…", systemImage: "square.and.arrow.down")
                         }
                     }
                 }
@@ -3156,15 +3465,25 @@ struct AboutView: View {
                     Text("Install, permissions, shortcuts, troubleshooting, updates, and support.")
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10)], alignment: .leading, spacing: 10) {
-                        AboutLinkButton(title: "Website", systemImage: "safari") {
-                            if let u = URL(string: "https://galbutnotgirl.github.io/command/") { NSWorkspace.shared.open(u) }
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            AboutLinkButton(title: "Website", systemImage: "safari") {
+                                if let u = URL(string: "https://galbutnotgirl.github.io/command/") { NSWorkspace.shared.open(u) }
+                            }
+                            AboutLinkButton(title: "Docs", systemImage: "book") {
+                                openHelpDoc(named: "index")
+                            }
+                            AboutLinkButton(title: "GitHub", systemImage: "link") {
+                                if let u = URL(string: GITHUB_REPO_URL) { NSWorkspace.shared.open(u) }
+                            }
                         }
-                        AboutLinkButton(title: "Docs", systemImage: "book") {
-                            openHelpDoc(named: "index")
-                        }
-                        AboutLinkButton(title: "GitHub", systemImage: "link") {
-                            if let u = URL(string: GITHUB_REPO_URL) { NSWorkspace.shared.open(u) }
+                        HStack(spacing: 10) {
+                            AboutLinkButton(title: "Report a Bug", systemImage: "exclamationmark.bubble") {
+                                if let u = reportBugURL() { NSWorkspace.shared.open(u) }
+                            }
+                            AboutLinkButton(title: "Request Feature", systemImage: "lightbulb") {
+                                if let u = requestFeatureURL() { NSWorkspace.shared.open(u) }
+                            }
                         }
                         AboutLinkButton(title: "Copy Diagnostic Info", systemImage: "doc.on.doc") {
                             copyCommandDiagnosticInfo(
@@ -3179,20 +3498,11 @@ struct AboutView: View {
                             diagCopied = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { diagCopied = false }
                         }
-                        AboutLinkButton(title: "Report a Bug", systemImage: "ladybug") {
-                            if let u = reportBugURL() { NSWorkspace.shared.open(u) }
-                        }
-                        AboutLinkButton(title: "Request Feature", systemImage: "sparkles") {
-                            if let u = requestFeatureURL() { NSWorkspace.shared.open(u) }
-                        }
                     }
                     if diagCopied { Text("Diagnostic info copied").font(.caption).foregroundColor(.secondary) }
                 }
             }
             .padding(24)
-        }
-        .sheet(isPresented: $showingExport) {
-            GlobalExportSheet(isPresented: $showingExport)
         }
         .sheet(item: $importBundle) { bundle in
             GlobalImportSheet(isPresented: Binding(
@@ -3829,11 +4139,7 @@ struct SoundRow: View {
         HStack(spacing: 8) {
             Button {
                 playing = true
-                let url = URL(fileURLWithPath: "/System/Library/Sounds/\(name).aiff")
-                if let s = NSSound(contentsOf: url, byReference: true) {
-                    s.volume = Float(model.soundVolume)
-                    s.play()
-                }
+                UISoundPlayer.shared.play(name, volume: Float(model.soundVolume))
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { playing = false }
             } label: {
                 Image(systemName: playing ? "speaker.wave.2.fill" : "play.circle")

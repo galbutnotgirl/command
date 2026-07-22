@@ -18,13 +18,6 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
     func showIfNeeded() {
         guard !UserDefaults.standard.bool(forKey: "onboardingCompleted") else { return }
-        let providerSelected = UserDefaults.standard.bool(forKey: "onboardingPrimaryAssistantSelected")
-        // Permissions already in place (prior install or update) and provider
-        // already chosen — mark done, stay silent.
-        guard !providerSelected || !axTrusted() || !screenRecordingOK() else {
-            UserDefaults.standard.set(true, forKey: "onboardingCompleted")
-            return
-        }
         show()
     }
 
@@ -33,6 +26,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        window?.orderFrontRegardless()
     }
 
     private func build() {
@@ -57,19 +51,42 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     }
 }
 
-// ---- step enum --------------------------------------------------------------
+// ---- step state -------------------------------------------------------------
 
 enum OnbStep { case welcome, assistant, accessibility, screenRecording, microphone, clipboard, done }
+
+private enum OnboardingDefaultsKey {
+    static let completed = "onboardingCompleted"
+    static let primaryAssistantSelected = "onboardingPrimaryAssistantSelected"
+    static let microphoneStepCompleted = "onboardingMicrophoneStepCompleted"
+    static let clipboardStepCompleted = "onboardingClipboardStepCompleted"
+    static let postOnboardingOpenShortcuts = "postOnboardingOpenShortcuts"
+}
+
+private func onboardingInitialStep() -> OnbStep {
+    let defaults = UserDefaults.standard
+    guard defaults.bool(forKey: OnboardingDefaultsKey.primaryAssistantSelected) else { return .welcome }
+    guard axTrusted() else { return .accessibility }
+    guard screenRecordingOK() else { return .screenRecording }
+    guard defaults.bool(forKey: OnboardingDefaultsKey.microphoneStepCompleted) else { return .microphone }
+    guard defaults.bool(forKey: OnboardingDefaultsKey.clipboardStepCompleted) else { return .clipboard }
+    return .done
+}
 
 // ---- root view --------------------------------------------------------------
 
 struct OnboardingView: View {
     let onDismiss: () -> Void
 
-    @State private var step: OnbStep = .welcome
+    @State private var step: OnbStep
     @State private var countdown = 3
     // One always-on ticker drives both live grant-detection and the done-countdown.
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    init(onDismiss: @escaping () -> Void) {
+        self.onDismiss = onDismiss
+        _step = State(initialValue: onboardingInitialStep())
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -114,7 +131,10 @@ struct OnboardingView: View {
             case .microphone:
                 MicrophoneStepView(
                     onEnable: { requestMic() },
-                    onContinue: {
+                    onContinue: { enabled in
+                        UserDefaults.standard.set(enabled, forKey: VoiceSettingsKeys.dictationEnabled)
+                        settingsModel.dictationEnabled = enabled
+                        UserDefaults.standard.set(true, forKey: OnboardingDefaultsKey.microphoneStepCompleted)
                         withAnimation(.easeInOut(duration: 0.3)) { step = .clipboard }
                     }
                 )
@@ -123,6 +143,7 @@ struct OnboardingView: View {
             case .clipboard:
                 ClipboardOptInStepView { enabled in
                     UserDefaults.standard.set(enabled, forKey: "cliphistoryEnabled")
+                    UserDefaults.standard.set(true, forKey: OnboardingDefaultsKey.clipboardStepCompleted)
                     if enabled { startClipwatch() } else { stopClipwatch() }
                     reregisterHotkeys()
                     countdown = 3
@@ -218,8 +239,8 @@ struct OnboardingView: View {
         case .done:
             countdown -= 1
             if countdown <= 0 {
-                UserDefaults.standard.set(true, forKey: "onboardingCompleted")
-                UserDefaults.standard.set(true, forKey: "postOnboardingOpenShortcuts")
+                UserDefaults.standard.set(true, forKey: OnboardingDefaultsKey.completed)
+                UserDefaults.standard.set(true, forKey: OnboardingDefaultsKey.postOnboardingOpenShortcuts)
                 onDismiss()
                 restartApp()
             }
@@ -245,7 +266,7 @@ struct OnboardingView: View {
 private func applyPrimaryAssistantPreference(_ preference: PrimaryAssistantPreference) {
     UserDefaults.standard.set(preference.provider.rawValue, forKey: "defaultProvider")
     UserDefaults.standard.set(preference.rawValue, forKey: "primaryAssistant")
-    UserDefaults.standard.set(true, forKey: "onboardingPrimaryAssistantSelected")
+    UserDefaults.standard.set(true, forKey: OnboardingDefaultsKey.primaryAssistantSelected)
     switch preference.provider {
     case .claude:
         UserDefaults.standard.set(preference.destination.rawValue, forKey: "claudeDestination")
@@ -269,8 +290,10 @@ struct WelcomeStepView: View {
     private let features: [(icon: String, color: Color, label: String, detail: String)] = [
         ("bolt.fill",              .orange, "Prompt Shortcuts",
          "Select text in any app. Press F8 to add it to selected assistant, or Command-F8 to open a new conversation."),
-        ("camera.on.rectangle",    .purple, "Screenshot to Claude",
+        ("camera.on.rectangle",    .purple, "Screenshot to assistant",
          "Drag to capture or press Space for a window. Send screenshots to an existing conversation, a new conversation, or a custom action."),
+        ("waveform",               .green,  "Voice dictation",
+         "Hold Fn to dictate, keep local history and corrections, insert anywhere, or send the transcript straight to an assistant."),
         ("clock.arrow.circlepath", .blue,   "Clipboard History",
          "When enabled, copies stay local. Press F6 for a searchable picker — paste into assistant or anywhere."),
     ]
@@ -296,7 +319,7 @@ struct WelcomeStepView: View {
             VStack(spacing: 3) {
                 Text("Your Mac.")
                     .font(.system(size: 27, weight: .bold))
-                Text("Direct line to Claude, ChatGPT, or Codex.")
+                Text("Direct line to Claude or ChatGPT.")
                     .font(.system(size: 27, weight: .bold))
                     .foregroundColor(.secondary)
             }
@@ -386,7 +409,7 @@ struct PrimaryAssistantStepView: View {
             }
 
             VStack(spacing: 10) {
-                ForEach(PrimaryAssistantPreference.allCases, id: \.self) { preference in
+                ForEach(PrimaryAssistantPreference.onboardingCases, id: \.self) { preference in
                     Button {
                         onChoose(preference)
                     } label: {
@@ -739,8 +762,9 @@ struct QuitReopenMockup: View {
 
 struct MicrophoneStepView: View {
     let onEnable: () -> Void
-    let onContinue: () -> Void
+    let onContinue: (Bool) -> Void
     @State private var requested = false
+    @State private var enableDictation = false
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var micGranted: Bool { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
@@ -756,26 +780,31 @@ struct MicrophoneStepView: View {
                     .foregroundColor(micGranted ? .green : .purple)
             }
 
-            Text("Microphone access")
+            Text("Voice dictation")
                 .font(.title2).bold()
 
-            Text("Optional — for on-device dictation via Parakeet TDT.\nSkip if you don't plan to use Dictate or voice custom actions.")
+            Text("Optional — transcribe on-device with Parakeet TDT. Enable this if you want Fn dictation, voice custom actions, history, corrections, and vocabulary.")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if micGranted {
+            Toggle("Enable voice dictation", isOn: $enableDictation)
+                .toggleStyle(.switch)
+                .font(.headline)
+                .frame(maxWidth: 320)
+
+            if enableDictation && micGranted {
                 Label("Microphone access granted", systemImage: "checkmark.circle.fill")
                     .foregroundColor(.green)
                     .font(.subheadline)
-            } else if requested {
+            } else if enableDictation && requested {
                 Text("Allow access in the macOS alert, then continue.")
                     .font(.subheadline).foregroundColor(.secondary)
             }
 
             HStack(spacing: 12) {
-                if !micGranted {
+                if enableDictation && !micGranted {
                     Button("Enable Microphone") {
                         requested = true
                         onEnable()
@@ -784,18 +813,29 @@ struct MicrophoneStepView: View {
                     .controlSize(.large)
                 }
 
-                if micGranted {
-                    Button("Continue  →", action: onContinue)
-                        .buttonStyle(.borderedProminent).controlSize(.large)
+                if enableDictation {
+                    if micGranted {
+                        Button("Continue  ->") {
+                            onContinue(true)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                    } else {
+                        Button("Skip for now") {
+                            onContinue(false)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                    }
                 } else {
-                    Button("Skip for now", action: onContinue)
+                    Button("Keep off for now") { onContinue(false) }
                         .buttonStyle(.bordered).controlSize(.large)
                 }
             }
         }
         .padding(.horizontal, 44)
         .onReceive(ticker) { _ in
-            if micGranted && requested { onContinue() }
+            if enableDictation && micGranted && requested { onContinue(true) }
         }
     }
 }

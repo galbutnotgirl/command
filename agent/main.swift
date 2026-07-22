@@ -48,7 +48,7 @@ func bundledResource(_ name: String) -> String {
 let WORKER: String = bundledResource("send-to-claude.sh")
 
 // ---- keystroke synthesis (own process → one Accessibility grant) -----------
-let kC: CGKeyCode = 0x08, kV: CGKeyCode = 0x09, kRet: CGKeyCode = 0x24
+let kC: CGKeyCode = 0x08, kV: CGKeyCode = 0x09, kO: CGKeyCode = 0x1F, kRet: CGKeyCode = 0x24
 
 func ensureTrusted() {
     if AXIsProcessTrusted() { return }
@@ -56,18 +56,19 @@ func ensureTrusted() {
     _ = AXIsProcessTrustedWithOptions(o)
 }
 
-func postKey(_ k: CGKeyCode, cmd: Bool, opt: Bool = false) {
+func postKey(_ k: CGKeyCode, cmd: Bool, opt: Bool = false, shift: Bool = false) {
     let s = CGEventSource(stateID: .combinedSessionState)
     guard let d = CGEvent(keyboardEventSource: s, virtualKey: k, keyDown: true),
           let u = CGEvent(keyboardEventSource: s, virtualKey: k, keyDown: false) else { return }
     var flags: CGEventFlags = []
     if cmd { flags.insert(.maskCommand) }
     if opt { flags.insert(.maskAlternate) }
+    if shift { flags.insert(.maskShift) }
     d.flags = flags; u.flags = flags
     d.post(tap: .cghidEventTap); u.post(tap: .cghidEventTap)
 }
 
-func postKey(_ k: CGKeyCode, cmd: Bool, opt: Bool = false, to bundle: String) -> Bool {
+func postKey(_ k: CGKeyCode, cmd: Bool, opt: Bool = false, shift: Bool = false, to bundle: String) -> Bool {
     guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first else {
         return false
     }
@@ -77,6 +78,7 @@ func postKey(_ k: CGKeyCode, cmd: Bool, opt: Bool = false, to bundle: String) ->
     var flags: CGEventFlags = []
     if cmd { flags.insert(.maskCommand) }
     if opt { flags.insert(.maskAlternate) }
+    if shift { flags.insert(.maskShift) }
     d.flags = flags; u.flags = flags
     d.postToPid(app.processIdentifier); u.postToPid(app.processIdentifier)
     return true
@@ -1200,7 +1202,9 @@ func registerFromConfig() {
     let sig = OSType(0x434D4447) // 'CMDG'
     for (i, hk) in loadHotkeys().enumerated() {
         guard hk.keycode != 0 else { continue }  // keycode 0 = 'A' key; 0 means unbound
-        guard !isBuiltInVoiceAction(hk.action) else { continue } // HID event tap owns voice press/release.
+        // HID tap owns modifier-only/Fn/media voice keys. Carbon owns ordinary keys
+        // like external-keyboard Home, which is more reliable for Kinesis keyboards.
+        if isBuiltInVoiceAction(hk.action), eventTapOwnsVoiceHotkey(keycode: hk.keycode) { continue }
         let hkID = UInt32(i + 1)
         let id = EventHotKeyID(signature: sig, id: hkID)
         hotkeyActions[hkID] = hk.action
@@ -1209,6 +1213,9 @@ func registerFromConfig() {
         let status = RegisterEventHotKey(hk.keycode, hk.mods, id, GetApplicationEventTarget(), 0, &ref)
         if status == noErr {
             hotkeyRefs.append(ref)
+            if isBuiltInVoiceAction(hk.action) {
+                appendLog("[hotkeys] registered voice action=\(hk.action) keycode=\(hk.keycode) mods=\(hk.mods) via carbon")
+            }
         } else {
             appendLog("[hotkeys] RegisterEventHotKey failed action=\(hk.action) keycode=\(hk.keycode) mods=\(hk.mods) status=\(status)")
             hotkeyActions.removeValue(forKey: hkID)
@@ -1221,7 +1228,7 @@ func registerFromConfig() {
     var triggerSlot = 0
     for ca in loadCustomActions() where ca.enabled {
         for trig in ca.triggers where trig.enabled && trig.keycode != 0 {
-            guard trig.kind != .voice else { continue } // HID event tap owns voice press/release.
+            if trig.kind == .voice, eventTapOwnsVoiceHotkey(keycode: trig.keycode) { continue }
             let hkID = UInt32(100 + triggerSlot)
             triggerSlot += 1
             let id = EventHotKeyID(signature: sig, id: hkID)
@@ -1231,6 +1238,9 @@ func registerFromConfig() {
             let status = RegisterEventHotKey(trig.keycode, trig.mods, id, GetApplicationEventTarget(), 0, &ref)
             if status == noErr {
                 hotkeyRefs.append(ref)
+                if trig.kind == .voice {
+                    appendLog("[hotkeys] registered custom voice action=\(ca.name) keycode=\(trig.keycode) mods=\(trig.mods) via carbon")
+                }
             } else {
                 appendLog("[hotkeys] RegisterEventHotKey failed custom=\(ca.name) trigger=\(trig.kind.rawValue) keycode=\(trig.keycode) mods=\(trig.mods) status=\(status)")
                 hotkeyActions.removeValue(forKey: hkID)
@@ -1257,6 +1267,7 @@ func unregisterAllHotkeys() {
 
 // NX media key type → Carbon keycode for the same physical key.
 let MEDIA_TO_CARBON: [Int: UInt32] = [
+    4: 63,     // Fn/Globe on newer Mac keyboards
     16: 100,   // NX_KEYTYPE_PLAY      → F8
     17: 101,   // NX_KEYTYPE_NEXT      → F9
     18: 98,    // NX_KEYTYPE_PREVIOUS  → F7 (some Macs)
@@ -1479,6 +1490,10 @@ func triggerMatching(keycode: UInt32, mods: UInt32) -> (CustomAction, ActionTrig
 // so we intercept before Chrome/Carbon/Spotify regardless of keyboard mode.
 let MEDIA_KEYCODES: Set<UInt32> = [96, 97, 98, 99, 100, 101]  // F5–F10
 
+private func eventTapOwnsVoiceHotkey(keycode: UInt32) -> Bool {
+    MODIFIER_ONLY_KEYCODES.contains(keycode) || MEDIA_KEYCODES.contains(keycode)
+}
+
 func startMediaKeyHook() {
     guard AXIsProcessTrusted() else { return }
     // Intercept NX_SYSDEFINED (media-key mode) plus keyDown/keyUp. Voice hotkeys
@@ -1498,16 +1513,35 @@ func startMediaKeyHook() {
                 let keyCode = Int((ns.data1 & 0xFFFF0000) >> 16)
                 let isDown  = ((Int(ns.data1) & 0xFF00) >> 8) == 0xA
                 let cm = physicalModifierMask(fallback: ns.modifierFlags)
-                appendLog("[eventTap] NX_SYSDEFINED keyCode=\(keyCode) isDown=\(isDown) carbon=\(MEDIA_TO_CARBON[keyCode] ?? 0)")
                 if !isDown {
                     _nxHeld[keyCode] = false   // key released — next isDown is a genuine press
+                    if MEDIA_TO_CARBON[keyCode] == 63, _voiceHeldKeycodes.contains(63) {
+                        releaseVoiceHotkey(keycode: 63)
+                        return nil
+                    }
                     return passthrough
                 }
                 // Swallow NX key-repeat: isDown=true fires repeatedly while held.
-                // wasHeld=true means the key never released — this is a repeat, not a new tap.
+                // wasHeld=true means key never released: repeat, not new tap.
                 if _nxHeld[keyCode] == true { return nil }
                 _nxHeld[keyCode] = true
                 guard let carbon = MEDIA_TO_CARBON[keyCode] else { return passthrough }
+                appendLog("[eventTap] NX keyCode=\(keyCode) carbon=\(carbon) mods=\(cm)")
+                if carbon == 63, settingsModel.recordingAction != nil {
+                    DispatchQueue.main.async {
+                        settingsModel.recordModifierOnlyHotkey(keycode: carbon)
+                    }
+                    return nil
+                }
+                if carbon == 63, let voiceTarget = voiceHotkeyTarget(keycode: carbon, mods: 0) {
+                    if _voiceHeldKeycodes.contains(carbon) { return nil }
+                    appendLog("[eventTap] NX voice down kc=\(carbon)")
+                    _voiceHeldKeycodes.insert(carbon)
+                    DispatchQueue.main.async {
+                        Task { @MainActor in triggerVoiceHotkey(voiceTarget, keycode: CGKeyCode(carbon)) }
+                    }
+                    return nil
+                }
                 let bound = loadHotkeys().contains { $0.keycode == carbon && $0.mods == cm }
                     || triggerMatching(keycode: carbon, mods: cm) != nil
                 appendLog("[eventTap] NX bound=\(bound) carbon=\(carbon) mods=\(cm)")
@@ -1543,7 +1577,7 @@ func startMediaKeyHook() {
                 let kc = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
                 let f  = event.flags
 
-                // Capture copy/cut source at keypress time — fires BEFORE the app writes to
+                // Capture copy/cut source at keypress time — fires BEFORE app writes to
                 // clipboard, so clipwatch's 25ms poll always sees the correct bundle.
                 // NSEvent.addGlobalMonitorForEvents fires AFTER the write (too late).
                 // Skip our own bundle so paste-ops don't overwrite a real copy source.
@@ -1569,12 +1603,18 @@ func startMediaKeyHook() {
                     releaseVoiceHotkey(keycode: kc)
                     return nil
                 }
-                if let voiceTarget = voiceHotkeyTarget(keycode: kc, mods: cm) {
+                if type == .keyDown,
+                   event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
+                   _voiceHeldKeycodes.contains(kc) {
+                    return nil
+                }
+                if eventTapOwnsVoiceHotkey(keycode: kc),
+                   let voiceTarget = voiceHotkeyTarget(keycode: kc, mods: cm) {
                     guard type == .keyDown else { return passthrough }
                     if _voiceHeldKeycodes.contains(kc) { return nil }
-                    appendLog("[eventTap] voice down kc=\(kc) mods=\(cm)")
                     let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
                     guard !isRepeat else { return nil }
+                    appendLog("[eventTap] voice down kc=\(kc) mods=\(cm)")
                     _voiceHeldKeycodes.insert(kc)
                     DispatchQueue.main.async {
                         Task { @MainActor in triggerVoiceHotkey(voiceTarget, keycode: CGKeyCode(kc)) }
@@ -1609,6 +1649,12 @@ func startMediaKeyHook() {
 
 func tapWatchdog() {
     guard let tap = _mediaEventTap else { return }
+    guard AXIsProcessTrusted() else {
+        CGEvent.tapEnable(tap: tap, enable: false)
+        _mediaEventTap = nil
+        appendLog("[tapWatchdog] disabled media event tap because Accessibility is no longer trusted")
+        return
+    }
     if !CGEvent.tapIsEnabled(tap: tap) {
         CGEvent.tapEnable(tap: tap, enable: true)
         appendLog("[tapWatchdog] re-enabled media event tap")
@@ -1635,12 +1681,17 @@ func handle(_ line: String) -> String {
             posted = postKey(isPaste ? kV : kRet, cmd: isPaste, to: parts[1])
         }
         return posted ? "ok" : "err"
-    case "newtask", "newchat":
+    case "newtask", "newchat", "newprojectless":
         guard parts.count > 1 else { return "err" }
         var posted = false
         let isChat = parts[0] == "newchat"
+        let isProjectless = parts[0] == "newprojectless"
         DispatchQueue.main.sync {
-            posted = postKey(45, cmd: true, opt: isChat, to: parts[1])
+            posted = postKey(isProjectless ? kO : 45,
+                             cmd: true,
+                             opt: isChat,
+                             shift: isProjectless,
+                             to: parts[1])
         }
         return posted ? "ok" : "err"
     case "editable":
@@ -2064,6 +2115,7 @@ UserDefaults.standard.register(defaults: [
     VoiceSettingsKeys.minDictationDuration: VoiceSettingsDefaults.minDictationDuration
 ])
 applyDockPolicy()                 // menu-bar only unless the user enabled "Show in Dock"
+preloadUISounds()
 if MainActor.assumeIsolated({ offerMoveToApplicationsIfNeeded() }) { exit(0) }
 validateInstall()
 installHotkeys()
@@ -2077,14 +2129,21 @@ scheduleAutoUpdateCheck()
 menuBar.install()                 // greyscale menu-bar icon + Set Up / Shortcuts / Help window
 Task { @MainActor in await recorder.initModels() }  // warm Parakeet from cache if available
 // First run: show onboarding wizard. Subsequent runs with permission problems: go straight to Setup.
-if UserDefaults.standard.bool(forKey: "onboardingCompleted") {
-    if UserDefaults.standard.bool(forKey: "postOnboardingOpenShortcuts") {
-        UserDefaults.standard.set(false, forKey: "postOnboardingOpenShortcuts")
-        settingsWindow.show(tab: .shortcuts)
-    } else if !axTrusted() || !screenRecordingOK() { settingsWindow.show(tab: .setup) }
-} else {
-    onboardingWindow.showIfNeeded()
+func presentInitialWindowAfterLaunch() {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+        if UserDefaults.standard.bool(forKey: "onboardingCompleted") {
+            if UserDefaults.standard.bool(forKey: "postOnboardingOpenShortcuts") {
+                UserDefaults.standard.set(false, forKey: "postOnboardingOpenShortcuts")
+                settingsWindow.show(tab: .shortcuts)
+            } else if !axTrusted() || !screenRecordingOK() {
+                settingsWindow.show(tab: .setup)
+            }
+        } else {
+            onboardingWindow.showIfNeeded()
+        }
+    }
 }
+presentInitialWindowAfterLaunch()
 // Key handling while a window is up: the picker swallows keys while open; the
 // Shortcuts editor swallows the next combo while recording a rebind.
 NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { ev in

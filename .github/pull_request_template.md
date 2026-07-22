@@ -27,7 +27,9 @@ Paste relevant results:
 cd agent && swift test
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
+./test/test-release-policy.sh
 python3 ./test/test-docs.py
+python3 ./test/test_string_review.py
 ./release.sh --skip-checks
 ./test/test-release-asset.sh
 ```

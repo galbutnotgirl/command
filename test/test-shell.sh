@@ -185,11 +185,19 @@ CLAUDE_DRY_OUTPUT="$(ACTION=go DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=claude
 assert_contains "Claude foreground dry run keeps Claude provider" "$CLAUDE_DRY_OUTPUT" \
   "DRY_RUN open: provider=claude dest=code"
 
-CODEX_DRY_OUTPUT="$(ACTION=go DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=codex CODEX_WORKSPACE='/tmp/project space' zsh "$SEND_SCRIPT" 2>/dev/null)"
+TMP_GIT_WORKSPACE="$(mktemp -d)"
+git -C "$TMP_GIT_WORKSPACE" init -q
+CODEX_DRY_OUTPUT="$(ACTION=go DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=codex CODEX_WORKSPACE="$TMP_GIT_WORKSPACE" zsh "$SEND_SCRIPT" 2>/dev/null)"
 assert_contains "Codex foreground dry run preserves workspace with spaces" "$CODEX_DRY_OUTPUT" \
+  "provider=codex dest=code workspace=$TMP_GIT_WORKSPACE"
+assert_contains "Codex new session uses ChatGPT bundled workspace opener" "$CODEX_DRY_OUTPUT" \
+  "route=codex app $TMP_GIT_WORKSPACE"
+
+CODEX_PROJECTLESS_DRY_OUTPUT="$(ACTION=go DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=codex CODEX_WORKSPACE='/tmp/project space' zsh "$SEND_SCRIPT" 2>/dev/null)"
+assert_contains "Codex non-Git workspace uses ChatGPT projectless task" "$CODEX_PROJECTLESS_DRY_OUTPUT" \
   "provider=codex dest=code workspace=/tmp/project space"
-assert_contains "Codex new session uses explicit workspace deep link" "$CODEX_DRY_OUTPUT" \
-  "route=codex://threads/new?path=/tmp/project%20space"
+assert_contains "Codex projectless task avoids workspace rejection" "$CODEX_PROJECTLESS_DRY_OUTPUT" \
+  "route=native-projectless-task"
 
 CHATGPT_DRY_OUTPUT="$(ACTION=go DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=codex OPENAI_DESTINATION=chat CODEX_WORKSPACE='/tmp/project space' zsh "$SEND_SCRIPT" 2>/dev/null)"
 assert_contains "ChatGPT foreground dry run selects general chat without changing provider key" "$CHATGPT_DRY_OUTPUT" \
@@ -201,7 +209,15 @@ CHATGPT_RECENT_DRY_OUTPUT="$(ACTION=go DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDE
 assert_contains "ChatGPT Recent foreground dry run stays in native app route" "$CHATGPT_RECENT_DRY_OUTPUT" \
   "provider=codex dest=recent workspace=/tmp/project space"
 assert_contains "ChatGPT Recent avoids Codex workspace deep link" "$CHATGPT_RECENT_DRY_OUTPUT" \
-  "route=native-new-session chars="
+  "route=native-current-session chars="
+
+set +e
+CLAUDE_RECENT_DRY_OUTPUT="$(ACTION=comment DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=claude CLAUDE_DESTINATION=recent zsh "$SEND_SCRIPT" 2>/dev/null)"
+CLAUDE_RECENT_STATUS=$?
+set +e
+assert_status "Claude Recent New dry run exits cleanly without auto-submit" "$CLAUDE_RECENT_STATUS" "0"
+assert_contains "Claude Recent keeps current selected Claude surface" "$CLAUDE_RECENT_DRY_OUTPUT" \
+  "route=native-current-session"
 
 CLAUDE_COWORK_DRY_OUTPUT="$(ACTION=comment DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=claude CLAUDE_DESTINATION=cowork zsh "$SEND_SCRIPT" 2>/dev/null)"
 assert_contains "Claude Cowork uses installed app deep link contract" "$CLAUDE_COWORK_DRY_OUTPUT" \
@@ -218,7 +234,9 @@ AGENT_SOURCE="$(cat "${DIR}/agent/main.swift")"
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
   'helper_newchat ||'
 assert_contains "Quick Chat uses installed app Command-Option-N shortcut" "$AGENT_SOURCE" \
-  'posted = postKey(45, cmd: true, opt: isChat, to: parts[1])'
+  'opt: isChat,'
+assert_contains "Codex projectless task uses installed app Shift-Command-O shortcut" "$AGENT_SOURCE" \
+  'shift: isProjectless,'
 assert_contains "Native session commands target assistant process directly" "$AGENT_SOURCE" \
   'd.postToPid(app.processIdentifier)'
 assert_contains "paste targets assistant process when Electron window stays backgrounded" "$SEND_SOURCE" \
@@ -238,18 +256,12 @@ assert_contains "doctor accepts built-in shortcuts without override file" "$DOCT
 assert_not_contains "doctor no longer reports missing override file as failure" "$DOCTOR_SOURCE" \
   'fail "no hotkey config"'
 
-ACTION=comment CAPTURED_TEXT=x COMMAND_PROVIDER=codex OPENAI_DESTINATION=code \
-  CODEX_WORKSPACE='/private/tmp/command-definitely-missing-workspace' \
-  COMMAND_TEST_ASSUME_APP=1 COMMAND_TEST_SILENT=1 zsh "$SEND_SCRIPT" >/dev/null 2>&1
-MISSING_WORKSPACE_STATUS=$?
-assert_status "Codex missing workspace fails instead of logging success" "$MISSING_WORKSPACE_STATUS" "1"
-
 TMP_NON_GIT_WORKSPACE="$(mktemp -d)"
-ACTION=comment CAPTURED_TEXT=x COMMAND_PROVIDER=codex OPENAI_DESTINATION=code \
+NON_GIT_WORKSPACE_OUTPUT="$(ACTION=comment DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=codex OPENAI_DESTINATION=code \
   CODEX_WORKSPACE="$TMP_NON_GIT_WORKSPACE" \
-  COMMAND_TEST_ASSUME_APP=1 COMMAND_TEST_SILENT=1 zsh "$SEND_SCRIPT" >/dev/null 2>&1
-NON_GIT_WORKSPACE_STATUS=$?
-assert_status "Codex non-Git workspace fails instead of logging success" "$NON_GIT_WORKSPACE_STATUS" "1"
+  COMMAND_TEST_ASSUME_APP=1 COMMAND_TEST_SILENT=1 zsh "$SEND_SCRIPT" 2>/dev/null)"
+assert_contains "Codex non-Git workspace opens projectless task instead of failing" "$NON_GIT_WORKSPACE_OUTPUT" \
+  "route=native-projectless-task"
 
 # ---- capture-handoff.sh compatibility path ---------------------------------
 # ClaudeCommand's native background actions use submit-cli.js --retry-prompt

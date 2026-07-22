@@ -24,7 +24,9 @@ Run:
 cd agent && swift test
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
+./test/test-release-policy.sh
 python3 ./test/test-docs.py
+python3 ./test/test_string_review.py
 ./doctor.sh
 ```
 
@@ -51,21 +53,34 @@ For the metadata scan, `rg` should return no matches and exit 1. That is the exp
 
 ## Publish
 
-Release from `main` with clean working tree:
+Store notarization credentials once in Keychain using an Apple Developer account:
 
 ```bash
-./release.sh --publish
+xcrun notarytool store-credentials "command-notary" \
+  --apple-id "APPLE_ID" \
+  --team-id "TEAM_ID" \
+  --password "APP_SPECIFIC_PASSWORD"
 ```
 
-For custom notes:
+Release from `main` with clean working tree and a `Developer ID Application` certificate:
 
 ```bash
-./release.sh --publish --notes="Short release notes here."
+SIGN_ID="Developer ID Application: NAME (TEAM_ID)" \
+COMMAND_NOTARY_PROFILE="command-notary" \
+./release.sh --publish --notarize
 ```
 
-`release.sh` builds app, checks embedded version, bundle identifier, and minimum macOS `14.0`, creates zip, tags release, pushes tag, and creates GitHub Release. Alpha and beta tags are marked prerelease automatically.
+For custom notes, append them to same release command:
 
-Normal release runs also execute `swift test`, `node --test`, `./test/test-shell.sh`, and `python3 ./test/test-docs.py` before packaging, so app/core test failures, background runner failures, script regressions, broken docs links, metadata, rendered HTML structure, heading parity, shared CSS, local media assets, sitemap drift, docs-home coverage drift, README docs-table drift, Settings sidebar drift, About docs-button drift, stale bundled docs, or missing bundled-doc guards stop the release. The GitHub test workflow runs the same unit/docs suite plus `./release.sh --skip-checks` and `./test/test-release-asset.sh` as a packaging smoke test on macOS. `--skip-checks` is only for local one-off packaging and CI packaging smoke tests.
+```bash
+./release.sh --publish --notarize --notes="Short release notes here."
+```
+
+`release.sh` checks embedded version, bundle identifier, and minimum macOS `14.0`; enables hardened runtime and secure timestamp for Developer ID builds; submits zip to Apple; staples ticket to app; validates ticket; rebuilds zip; checks Gatekeeper acceptance; tags release; pushes tag; and creates GitHub Release. Alpha and beta tags are marked prerelease automatically.
+
+Publishing without notarization is blocked by default. `--allow-unnotarized` exists only as an explicit emergency override for alpha versions and leaves users with Gatekeeper warning. Never use override for beta or stable release.
+
+Normal release runs also execute `swift test`, `node --test`, `./test/test-shell.sh`, and `python3 ./test/test-docs.py` before packaging, so app/core test failures, background runner failures, script regressions, broken docs links, metadata, rendered HTML structure, heading parity, shared CSS, local media assets, sitemap drift, docs-home coverage drift, README docs-table drift, Settings sidebar drift, About docs-button drift, stale bundled docs, or missing bundled-doc guards stop release. GitHub test workflow runs same unit/docs suite, release signing policy tests, plus `./release.sh --skip-checks` and `./test/test-release-asset.sh` as packaging smoke test on macOS. `--skip-checks` is only for local one-off packaging and CI packaging smoke tests.
 
 ## After Publish
 
