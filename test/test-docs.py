@@ -736,7 +736,7 @@ REQUIRED_TEXT = {
         "Copy Diagnostic Info",
     ],
     "docs/STATUS.md": [
-        "134 Swift",
+        "138 Swift",
         "58 Node",
         "50 shell",
         "25 isolated install-state",
@@ -1383,7 +1383,7 @@ REQUIRED_TEXT = {
         "Stable is visible but unavailable until the first stable release exists",
         "openHelpDoc(named: \"install\", fragment: \"source\")",
         "Text(\"Help & Documentation\")",
-        "panel.nameFieldStringValue = \"command-export-\\(",
+        "panel.nameFieldStringValue = commandExportFilename(for: Date())",
         "AboutLinkButton(title: \"Website\"",
         "AboutLinkButton(title: \"Docs\"",
         "AboutLinkButton(title: \"GitHub\"",

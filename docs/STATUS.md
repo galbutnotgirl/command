@@ -20,6 +20,8 @@ recent change if something in there needs undoing).
   distinguishes unchanged, added, updated, and current-only entries.
 - Import validation now lives in the testable core target and rejects malformed JSON types before
   settings code can cast or mutate files. Five focused regression tests cover supported payloads.
+- Legacy/current import-section detection and dated export naming now live in the core target.
+  Regression tests cover nested current exports, legacy top-level files, and standalone vocabulary.
 - Incremental installation now stops launchd before replacing signed bundle contents, rejects
   stuck processes and identity changes before mutation, and restores previous bundle on failed
   copy or signature validation. Updater restarts loaded launchd job instead of detached app.
@@ -164,7 +166,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 
 ## Current state (alpha.8)
 
-- **Test suites**: 134 Swift (`cd agent && swift test`), 58 Node
+- **Test suites**: 138 Swift (`cd agent && swift test`), 58 Node
   (`cd vendor/claude-command-capture && node --test`), 50 shell (`./test/test-shell.sh`),
   25 isolated install-state, 11 updater rollback/restart, 7 release-policy, 65 static,
   string-review, and docs
@@ -172,6 +174,8 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test
   (`./release.sh --skip-checks` and `./test/test-release-asset.sh`) on push/PR
   (`.github/workflows/test.yml`).
+- **Sanitizers**: all 138 Swift tests pass under both AddressSanitizer and ThreadSanitizer using
+  isolated scratch directories.
 - **Dictation model integration**: `./test/test-dictation-model.sh` generates local speech,
   feeds it through Parakeet's streaming manager in 4096-frame buffers, and verifies its final
   phrase survives immediate stream completion. It runs on release Mac with cached models, not CI.

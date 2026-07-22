@@ -36,6 +36,15 @@ With Parakeet models cached on release Mac:
 ./test/test-dictation-model.sh
 ```
 
+Before release-candidate packaging, run memory and data-race instrumentation in isolated build
+directories so sanitizer flags never contaminate normal products:
+
+```bash
+cd agent
+swift test --scratch-path /tmp/command-asan --sanitize=address
+swift test --scratch-path /tmp/command-tsan --sanitize=thread
+```
+
 Pass criteria: every command exits 0, release zip checksum exists, worktree remains clean,
 and GitHub Test, Pages, and Pages deployment workflows pass for release commit.
 
@@ -114,9 +123,12 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-22)
 
-- Automated local suites: 134 Swift, 58 Node, 50 shell, 25 install-state, 11 updater,
+- Automated local suites: 138 Swift, 58 Node, 50 shell, 25 install-state, 11 updater,
   7 release-policy, 65 static syntax/configuration, and 2 string-review; docs, Pages, provider
   contract, and release asset pass.
+- All 138 Swift tests also pass independently under AddressSanitizer and ThreadSanitizer.
+- Legacy top-level settings, action, template, context, and standalone vocabulary imports are
+  detected by testable core logic; dated export filenames use a fixed POSIX calendar format.
 - Cached-model streaming probe retains generated speech's distinctive final words after immediate
   stream drain and Parakeet `finish()`.
 - Microphone tap frames are deep-copied before crossing the async transcription stream, preventing

@@ -1,6 +1,6 @@
 import Foundation
 
-public enum ImportPayloadSection: Sendable {
+public enum ImportPayloadSection: CaseIterable, Hashable, Sendable {
     case shortcutBindings
     case customActions
     case builtInCompose
@@ -9,6 +9,45 @@ public enum ImportPayloadSection: Sendable {
     case vocabulary
     case handoffSettings
     case appPreferences
+}
+
+public func importPayload(_ section: ImportPayloadSection, from object: [String: Any]) -> Any? {
+    switch section {
+    case .shortcutBindings:
+        if let shortcuts = object["shortcuts"] as? [String: Any], let value = shortcuts["hotkeys"] { return value }
+        return object["hotkeys"]
+    case .customActions:
+        if let shortcuts = object["shortcuts"] as? [String: Any], let value = shortcuts["customActions"] { return value }
+        return object["customActions"]
+    case .builtInCompose:
+        if let shortcuts = object["shortcuts"] as? [String: Any], let value = shortcuts["builtInComposeSettings"] { return value }
+        return object["builtInComposeSettings"]
+    case .commandTemplates:
+        if let templates = object["templates"] as? [String: Any], let value = templates["commandTemplates"] { return value }
+        return object["commandTemplates"]
+    case .contextRules:
+        if let templates = object["templates"] as? [String: Any], let value = templates["enrichRules"] { return value }
+        return object["enrichRules"]
+    case .vocabulary:
+        return object["vocabulary"] ?? (object["replacements"] != nil || object["vocab"] != nil ? object : nil)
+    case .handoffSettings:
+        return object["handoffSettings"]
+    case .appPreferences:
+        return object["appPreferences"]
+    }
+}
+
+public func availableImportPayloadSections(in object: [String: Any]) -> Set<ImportPayloadSection> {
+    Set(ImportPayloadSection.allCases.filter { importPayload($0, from: object) != nil })
+}
+
+public func commandExportFilename(for date: Date, timeZone: TimeZone = .current) -> String {
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = timeZone
+    formatter.dateFormat = "yyyy-MM-dd"
+    return "command-export-\(formatter.string(from: date)).json"
 }
 
 public func isValidImportPayload(_ payload: Any, for section: ImportPayloadSection) -> Bool {

@@ -2225,34 +2225,8 @@ private func contextRulesPreview(current: [[String: Any]], incoming: [[String: A
     )
 }
 
-private func importPayload(_ section: GlobalBundleSection, object: [String: Any]) -> Any? {
-    switch section {
-    case .shortcutBindings:
-        if let shortcuts = object["shortcuts"] as? [String: Any], let value = shortcuts["hotkeys"] { return value }
-        return object["hotkeys"]
-    case .customActions:
-        if let shortcuts = object["shortcuts"] as? [String: Any], let value = shortcuts["customActions"] { return value }
-        return object["customActions"]
-    case .builtInCompose:
-        if let shortcuts = object["shortcuts"] as? [String: Any], let value = shortcuts["builtInComposeSettings"] { return value }
-        return object["builtInComposeSettings"]
-    case .commandTemplates:
-        if let templates = object["templates"] as? [String: Any], let value = templates["commandTemplates"] { return value }
-        return object["commandTemplates"]
-    case .contextRules:
-        if let templates = object["templates"] as? [String: Any], let value = templates["enrichRules"] { return value }
-        return object["enrichRules"]
-    case .vocabulary:
-        return object["vocabulary"] ?? (object["replacements"] != nil || object["vocab"] != nil ? object : nil)
-    case .handoffSettings:
-        return object["handoffSettings"]
-    case .appPreferences:
-        return object["appPreferences"]
-    }
-}
-
 private func validatedImportPayload(_ section: GlobalBundleSection, object: [String: Any]) throws -> Any {
-    guard let payload = importPayload(section, object: object) else {
+    guard let payload = importPayload(section.validationSection, from: object) else {
         throw GlobalBundleError.invalidSection(section.label)
     }
     guard isValidImportPayload(payload, for: section.validationSection) else {
@@ -2283,7 +2257,7 @@ private func validatedImportDictionary(
 
 @MainActor
 private func importPreviewStats(_ section: GlobalBundleSection, object: [String: Any]) -> ImportPreviewStats? {
-    guard let payload = importPayload(section, object: object) else { return nil }
+    guard let payload = importPayload(section.validationSection, from: object) else { return nil }
     switch section {
     case .shortcutBindings:
         return arrayPreview(current: hotkeyJSON(loadBindings()),
@@ -2423,9 +2397,7 @@ private func exportGlobalBundle() throws {
     let data = try encodeImportJSONObject(globalBundle())
     let panel = NSSavePanel()
     panel.allowedContentTypes = [.json]
-    let stamp = DateFormatter()
-    stamp.dateFormat = "yyyy-MM-dd"
-    panel.nameFieldStringValue = "command-export-\(stamp.string(from: Date())).json"
+    panel.nameFieldStringValue = commandExportFilename(for: Date())
     if panel.runModal() == .OK, let url = panel.url {
         do { try data.write(to: url, options: .atomic) }
         catch { throw GlobalBundleError.saveFailed(error.localizedDescription) }
@@ -2447,15 +2419,8 @@ private func chooseGlobalImportBundle() throws -> GlobalImportBundle? {
     guard let obj = value as? [String: Any] else {
         throw GlobalBundleError.invalidImportFile("expected a Command settings object")
     }
-    var available = Set<GlobalBundleSection>()
-    if importPayload(.shortcutBindings, object: obj) != nil { available.insert(.shortcutBindings) }
-    if importPayload(.customActions, object: obj) != nil { available.insert(.customActions) }
-    if importPayload(.builtInCompose, object: obj) != nil { available.insert(.builtInCompose) }
-    if importPayload(.commandTemplates, object: obj) != nil { available.insert(.commandTemplates) }
-    if importPayload(.contextRules, object: obj) != nil { available.insert(.contextRules) }
-    if obj["vocabulary"] != nil || obj["replacements"] != nil || obj["vocab"] != nil { available.insert(.vocabulary) }
-    if obj["handoffSettings"] != nil { available.insert(.handoffSettings) }
-    if obj["appPreferences"] != nil { available.insert(.appPreferences) }
+    let coreAvailable = availableImportPayloadSections(in: obj)
+    let available = Set(GlobalBundleSection.allCases.filter { coreAvailable.contains($0.validationSection) })
     return GlobalImportBundle(url: url, object: obj, available: available)
 }
 
