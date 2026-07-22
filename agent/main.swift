@@ -2274,15 +2274,24 @@ Task { @MainActor in await recorder.initModels() }  // warm Parakeet from cache 
 // First run: show onboarding wizard. Subsequent runs with permission problems: go straight to Setup.
 func presentInitialWindowAfterLaunch() {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-        if UserDefaults.standard.bool(forKey: "onboardingCompleted") {
-            if UserDefaults.standard.bool(forKey: "postOnboardingOpenShortcuts") {
-                UserDefaults.standard.set(false, forKey: "postOnboardingOpenShortcuts")
-                settingsWindow.show(tab: .shortcuts)
-            } else if !axTrusted() || !screenRecordingOK() {
-                settingsWindow.show(tab: .setup)
-            }
-        } else {
+        let route = initialWindowRoute(
+            onboardingCompleted: UserDefaults.standard.bool(forKey: "onboardingCompleted"),
+            postOnboardingOpenShortcuts: UserDefaults.standard.bool(forKey: "postOnboardingOpenShortcuts"),
+            accessibilityGranted: axTrusted(),
+            screenRecordingGranted: screenRecordingOK()
+        )
+        switch route {
+        case .onboarding:
             onboardingWindow.showIfNeeded()
+        case .shortcuts:
+            if route.consumesPostOnboardingShortcutRequest {
+                UserDefaults.standard.set(false, forKey: "postOnboardingOpenShortcuts")
+            }
+            settingsWindow.show(tab: .shortcuts)
+        case .setup:
+            settingsWindow.show(tab: .setup)
+        case .none:
+            break
         }
     }
 }

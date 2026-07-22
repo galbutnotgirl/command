@@ -32,6 +32,61 @@ final class OnboardingLogicTests: XCTestCase {
         XCTAssertEqual(progress.resumeStep, .accessibility)
     }
 
+    func testIncompleteOnboardingAlwaysShowsWizard() {
+        XCTAssertEqual(
+            initialWindowRoute(
+                onboardingCompleted: false,
+                postOnboardingOpenShortcuts: true,
+                accessibilityGranted: false,
+                screenRecordingGranted: false
+            ),
+            .onboarding
+        )
+    }
+
+    func testCompletionRestartOpensShortcutsBeforePermissionFallback() {
+        let route = initialWindowRoute(
+            onboardingCompleted: true,
+            postOnboardingOpenShortcuts: true,
+            accessibilityGranted: false,
+            screenRecordingGranted: false
+        )
+        XCTAssertEqual(route, .shortcuts)
+        XCTAssertTrue(route.consumesPostOnboardingShortcutRequest)
+    }
+
+    func testMissingRequiredPermissionOpensSetup() {
+        XCTAssertEqual(
+            initialWindowRoute(
+                onboardingCompleted: true,
+                postOnboardingOpenShortcuts: false,
+                accessibilityGranted: false,
+                screenRecordingGranted: true
+            ),
+            .setup
+        )
+        XCTAssertEqual(
+            initialWindowRoute(
+                onboardingCompleted: true,
+                postOnboardingOpenShortcuts: false,
+                accessibilityGranted: true,
+                screenRecordingGranted: false
+            ),
+            .setup
+        )
+    }
+
+    func testHealthySubsequentLaunchStaysMenuBarOnly() {
+        let route = initialWindowRoute(
+            onboardingCompleted: true,
+            postOnboardingOpenShortcuts: false,
+            accessibilityGranted: true,
+            screenRecordingGranted: true
+        )
+        XCTAssertEqual(route, .none)
+        XCTAssertFalse(route.consumesPostOnboardingShortcutRequest)
+    }
+
     private func progress(
         _ accessibility: Bool,
         _ screenRecording: Bool,

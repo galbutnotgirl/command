@@ -37,3 +37,26 @@ public struct OnboardingProgress: Equatable, Sendable {
         return .done
     }
 }
+
+public enum InitialWindowRoute: Equatable, Sendable {
+    case onboarding
+    case shortcuts
+    case setup
+    case none
+
+    public var consumesPostOnboardingShortcutRequest: Bool {
+        self == .shortcuts
+    }
+}
+
+public func initialWindowRoute(
+    onboardingCompleted: Bool,
+    postOnboardingOpenShortcuts: Bool,
+    accessibilityGranted: Bool,
+    screenRecordingGranted: Bool
+) -> InitialWindowRoute {
+    guard onboardingCompleted else { return .onboarding }
+    if postOnboardingOpenShortcuts { return .shortcuts }
+    guard accessibilityGranted, screenRecordingGranted else { return .setup }
+    return .none
+}

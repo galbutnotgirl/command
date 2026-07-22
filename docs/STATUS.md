@@ -166,7 +166,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 
 ## Current state (alpha.8)
 
-- **Test suites**: 139 Swift (`cd agent && swift test`), 58 Node
+- **Test suites**: 143 Swift (`cd agent && swift test`), 58 Node
   (`cd vendor/claude-command-capture && node --test`), 50 shell (`./test/test-shell.sh`),
   25 isolated install-state, 11 updater rollback/restart, 9 restart-handoff,
   7 release-policy, 69 static,
@@ -175,7 +175,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test
   (`./release.sh --skip-checks` and `./test/test-release-asset.sh`) on push/PR
   (`.github/workflows/test.yml`).
-- **Sanitizers**: all 139 Swift tests pass under both AddressSanitizer and ThreadSanitizer using
+- **Sanitizers**: all 143 Swift tests pass under both AddressSanitizer and ThreadSanitizer using
   isolated scratch directories.
 - **Installed runtime soak**: `test/test-installed-runtime.sh` repeatedly pings launchd-owned
   Command and fails on PID changes, descriptor growth, new crash reports, fatal diagnostics, or
