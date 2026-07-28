@@ -1676,6 +1676,9 @@ REQUIRED_TEXT = {
     "test/test-build-transaction.sh": [
         "uninstall-command.sh",
     ],
+    "test/test-release-transaction.sh": [
+        "uninstall-command.sh",
+    ],
     "docs/site.css": [
         ".skip-link",
         ".media-frame",
