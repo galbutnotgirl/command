@@ -36,17 +36,24 @@
       <a href="troubleshooting.html">Troubleshooting</a>
       <a href="support.html">Support</a>
       <a href="security.html">Security Policy</a>
+      <a href="#beta1">1.2.0-beta.1</a>
       <a href="#alpha6">1.2.0-alpha.6</a>
       <a href="#defaults">Defaults</a>
-      <a href="#notes">Alpha notes</a>
+      <a href="#notes">Beta notes</a>
       <a href="CHANGELOG.md">Markdown source</a>
     </nav>
     <main id="content" class="doc-main">
       <header class="doc-hero">
         <h1>Changelog</h1>
-        <p class="lead">User-facing release notes for alpha builds.</p>
-        <h2>1.2.0-alpha.8</h2>
+        <p class="lead">User-facing release notes for beta builds.</p>
+        <h2 id="beta1">1.2.0-beta.1</h2>
         <ul>
+          <li>Added up to two shortcuts per action, including external-keyboard and laptop alternatives.</li>
+          <li>Fixed Add Shortcut so its second capture field appears immediately and aligned shortcut controls into stable columns.</li>
+          <li>Combined Claude Chat and Cowork into one supported destination and restored reliable deep-link prompt delivery.</li>
+          <li>Improved dictation tail retention, event-tap recovery after permission grants, and compact keyboard modifier glyphs.</li>
+          <li>Preserved settings, Clipboard History, and macOS permission identity across incremental installs.</li>
+          <li>Removed optional right-click actions from Set Up status and diagnostics.</li>
           <li>Fixed new projectless Codex sessions in current ChatGPT builds by matching the app's Command-Option-O shortcut instead of stale Shift-Command-O routing.</li>
           <li>Warmed dictation cue audio with separate silent playback so first Purr cue starts at the same volume as the stop cue after a cold launch.</li>
           <li>Added first-class Claude and ChatGPT selection globally, per Custom Action, and per trigger, with Codex as a ChatGPT destination.</li>
@@ -81,7 +88,7 @@
         </ul>
       </section>
       <section id="defaults">
-        <h2>Defaults In This Alpha</h2>
+        <h2>Defaults In This Beta</h2>
         <table>
           <thead><tr><th>Built-in combination</th><th>Default</th></tr></thead>
           <tbody>
@@ -99,7 +106,7 @@
         </table>
       </section>
       <section id="notes">
-        <h2>Alpha Notes</h2>
+        <h2>Beta Notes</h2>
         <ul>
           <li>Structured <code>KEY=value</code> results are displayed in notifications and Command History, but do not run follow-up actions yet.</li>
           <li>Background actions use local <code>claude -p</code>; file/network/tool access depends on your Claude CLI setup and prompt.</li>

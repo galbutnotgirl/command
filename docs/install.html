@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Command install guide for alpha downloads, first launch, macOS permissions, setup checks, and source installs.">
+  <meta name="description" content="Command install guide for beta downloads, first launch, macOS permissions, setup checks, and source installs.">
   <title>Command Install Guide</title>
   <link rel="canonical" href="https://galbutnotgirl.github.io/command/install.html">
   <meta property="og:site_name" content="Command">
   <meta property="og:title" content="Command Install Guide">
-  <meta property="og:description" content="Command install guide for alpha downloads, first launch, macOS permissions, setup checks, and source installs.">
+  <meta property="og:description" content="Command install guide for beta downloads, first launch, macOS permissions, setup checks, and source installs.">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Command Install Guide">
-  <meta name="twitter:description" content="Command install guide for alpha downloads, first launch, macOS permissions, setup checks, and source installs.">
+  <meta name="twitter:description" content="Command install guide for beta downloads, first launch, macOS permissions, setup checks, and source installs.">
   <link rel="stylesheet" href="site.css">
 </head>
 <body>
@@ -36,8 +36,8 @@
       <a href="troubleshooting.html">Troubleshooting</a>
       <a href="support.html">Support</a>
       <a href="security.html">Security Policy</a>
-      <a href="#download">Download Alpha</a>
-      <a href="#existing-alpha">Existing Alpha Installs</a>
+      <a href="#download">Download Beta</a>
+      <a href="#existing-alpha">Existing Installs</a>
       <a href="#first-run">First Run</a>
       <a href="#verify">Verify Install</a>
       <a href="#help">Help After Install</a>
@@ -48,27 +48,27 @@
     <main id="content" class="doc-main">
       <header class="doc-hero">
         <h1>Install Guide</h1>
-        <p class="lead">First-time alpha install, macOS permissions, setup checks, and source install.</p>
+        <p class="lead">First-time beta install, macOS permissions, setup checks, and source install.</p>
       </header>
 
       <section id="download">
-        <h2>Download Alpha</h2>
+        <h2>Download Beta</h2>
         <p>Command requires macOS 14 or later.</p>
         <ol>
           <li>Open the <a href="https://github.com/galbutnotgirl/command/releases/latest">latest GitHub Release</a>.</li>
-          <li>Download <a href="https://github.com/galbutnotgirl/command/releases/download/v1.2.0-alpha.6/ClaudeCommand-1.2.0-alpha.6.zip"><code>ClaudeCommand-1.2.0-alpha.6.zip</code></a>.</li>
+          <li>Download <a href="https://github.com/galbutnotgirl/command/releases/download/v1.2.0-beta.1/Command-1.2.0-beta.1.zip"><code>Command-1.2.0-beta.1.zip</code></a>.</li>
           <li>Unzip it.</li>
-          <li>Move <code>ClaudeCommand.app</code> to <code>~/Applications</code>.</li>
-          <li>Control-click <code>ClaudeCommand.app</code>, choose <strong>Open</strong>, then confirm <strong>Open</strong>.</li>
+          <li>Move <code>Command.app</code> to <code>~/Applications</code>.</li>
+          <li>Control-click <code>Command.app</code> in Finder, choose <strong>Open</strong>, then choose <strong>Open</strong> again.</li>
         </ol>
-        <p>If macOS says ClaudeCommand cannot be verified and only shows <strong>Move to Trash</strong>, open <strong>System Settings -> Privacy &amp; Security</strong>, scroll down, click <strong>Open Anyway</strong>, authenticate, then reopen ClaudeCommand.</p>
-        <pre><code>xattr -dr com.apple.quarantine ~/Applications/ClaudeCommand.app</code></pre>
-        <p>This Terminal command is a fallback because alpha.6 is not Apple-notarized. Never bypass this warning for an app from an untrusted source.</p>
-        <p>Binary installs do not require Terminal scripts. Global shortcuts, screenshots, clipboard history, and dictation run from the app. Optional right-click Services are only for source installs that run <code>./install-quick-action.sh</code>.</p>
+        <p>If macOS only shows <strong>Move to Trash</strong>, open <strong>System Settings -> Privacy &amp; Security</strong>, scroll down, click <strong>Open Anyway</strong>, authenticate, then reopen Command.</p>
+        <pre><code>xattr -dr com.apple.quarantine ~/Applications/Command.app</code></pre>
+        <p>Published beta builds are signed and notarized. Never bypass a verification warning for an app from an untrusted source.</p>
+        <p>Binary installs do not require Terminal scripts. Global shortcuts, screenshots, clipboard history, and dictation run from the app.</p>
       </section>
 
       <section id="existing-alpha">
-        <h2>Existing Alpha Installs</h2>
+        <h2>Existing Installs</h2>
         <p>Command was previously named ClaudeCommand. New installers use <code>Command.app</code> and remove the old <code>~/Applications/ClaudeCommand.app</code> bundle during source installs. The bundle identifier and local support paths stay compatible (<code>com.claudecommand</code> and <code>~/Library/Application Support/claude-command/</code>) so macOS permissions, shortcuts, history, and exports keep working across the rename.</p>
         <p>For permission details, optional items, and reset commands, see <a href="permissions.html">Permissions</a>.</p>
       </section>

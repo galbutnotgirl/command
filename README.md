@@ -9,7 +9,7 @@ Native macOS menu-bar shortcuts for Claude and ChatGPT. Capture selected text, s
 
 App site: [galbutnotgirl.github.io/command](https://galbutnotgirl.github.io/command/)
 
-Alpha downloads: [Latest GitHub Release](https://github.com/galbutnotgirl/command/releases/latest)
+Beta downloads: [Latest GitHub Release](https://github.com/galbutnotgirl/command/releases/latest)
 
 Core docs:
 
@@ -72,7 +72,7 @@ Quick start for most users:
 2. Unzip and launch `Command.app`. Choose **Move to Applications** when prompted, or move it to `~/Applications` manually.
 3. Open **Settings -> Set Up**, grant required permissions, then verify **Accessibility** is green.
 
-For alpha builds, use the [latest GitHub Release](https://github.com/galbutnotgirl/command/releases/latest) and download the latest `Command-*.zip`. The matching `.zip.sha256` file is available for checksum verification when kept beside the matching zip. See [docs/INSTALL.md](docs/INSTALL.md) for first launch, permissions, setup checks, and source install.
+For beta builds, use the [latest GitHub Release](https://github.com/galbutnotgirl/command/releases/latest) and download the latest `Command-*.zip`. The matching `.zip.sha256` file is available for checksum verification when kept beside the matching zip. See [docs/INSTALL.md](docs/INSTALL.md) for first launch, permissions, setup checks, and source install.
 
 Binary installs do not require Terminal scripts. Global shortcuts, screenshots, clipboard history, and dictation run from the app.
 
@@ -139,7 +139,7 @@ Export can include shortcuts, prompt settings, context rules, dictation vocabula
 
 ## Updates
 
-Open **Settings -> About** to pick Alpha or Beta, check for updates, and install available releases. Stable is visible but unavailable until the first stable release exists. In-app update checks GitHub Releases for the newest accepted channel, downloads the attached `Command-*.zip`, replaces `~/Applications/Command.app`, clears quarantine, and restarts. For manual alpha installs, backup/export before updating, failed updates, and rollback, see [docs/UPDATES.md](docs/UPDATES.md).
+Open **Settings -> About** to pick Alpha or Beta, check for updates, and install available releases. Stable is visible but unavailable until the first stable release exists. In-app update checks GitHub Releases for the newest accepted channel, downloads the attached `Command-*.zip`, replaces `~/Applications/Command.app`, clears quarantine, and restarts. For manual beta installs, backup/export before updating, failed updates, and rollback, see [docs/UPDATES.md](docs/UPDATES.md).
 
 ## Background Actions
 

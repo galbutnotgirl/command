@@ -11,7 +11,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
-ALPHA_ASSET = "ClaudeCommand-1.2.0-alpha.6.zip"
+BETA_ASSET = "Command-1.2.0-beta.1.zip"
 
 
 class Links(HTMLParser):
@@ -64,16 +64,16 @@ def main() -> int:
     required_home = [
         "Anything in. Anywhere out.",
         "ChatGPT · New conversation",
-        ALPHA_ASSET,
+        BETA_ASSET,
         "install.html",
         "guide.html",
     ]
     required_install = [
-        ALPHA_ASSET,
+        BETA_ASSET,
         "Control-click",
         "Open Anyway",
         "Privacy &amp; Security",
-        "xattr -dr com.apple.quarantine ~/Applications/ClaudeCommand.app",
+        "xattr -dr com.apple.quarantine ~/Applications/Command.app",
     ]
     for value in required_home:
         if value not in home:
@@ -85,7 +85,7 @@ def main() -> int:
     if failures:
         print("\n".join(f"FAIL: {failure}" for failure in failures))
         return 1
-    print(f"pages ok: {len(pages)} HTML files, alpha asset and install recovery verified")
+    print(f"pages ok: {len(pages)} HTML files, beta asset and install recovery verified")
     return 0
 
 

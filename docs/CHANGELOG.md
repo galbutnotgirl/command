@@ -1,6 +1,13 @@
 # Command Changelog
 
-## 1.2.0-alpha.8
+## 1.2.0-beta.1
+
+- Added up to two shortcuts per action, including external-keyboard and laptop alternatives.
+- Fixed Add Shortcut so its second capture field appears immediately and aligned shortcut controls into stable columns.
+- Combined Claude Chat and Cowork into one supported destination and restored reliable deep-link prompt delivery.
+- Improved dictation tail retention, event-tap recovery after permission grants, and compact keyboard modifier glyphs.
+- Preserved settings, Clipboard History, and macOS permission identity across incremental installs.
+- Removed optional right-click actions from Set Up status and diagnostics.
 
 - Fixed new projectless Codex sessions in current ChatGPT builds by matching the app's `Command-Option-O` shortcut instead of stale `Shift-Command-O` routing.
 - Warmed dictation cue audio with separate silent playback so first Purr cue starts at same volume as stop cue after cold launch.
@@ -40,7 +47,7 @@ Current alpha line. Major changes:
 - App bundle includes offline HTML/CSS/SVG/Markdown docs.
 - Release packaging verifies zip shape, bundled docs/README source parity, and required runtime resources; CI runs a release-asset smoke test.
 
-## Defaults In This Alpha
+## Defaults In This Beta
 
 | Built-in combination | Default |
 |---|---:|
@@ -55,7 +62,7 @@ Current alpha line. Major changes:
 | Dictate -> Assistant | Unbound |
 | Dictate -> Assistant 2 | Unbound |
 
-## Alpha Notes
+## Beta Notes
 
 - Structured `KEY=value` results are displayed in notifications and Command History, but do not run follow-up actions yet.
 - Background actions use local `claude -p`; file/network/tool access depends on your Claude CLI setup and prompt.

@@ -2,33 +2,33 @@
 
 Use this for first-time installs. For updating an existing install, see [UPDATES.md](UPDATES.md).
 
-## Download Alpha
+## Download Beta
 
 Command requires macOS 14 or later.
 
 1. Open the [latest GitHub Release](https://github.com/galbutnotgirl/command/releases/latest).
-2. Download [`ClaudeCommand-1.2.0-alpha.6.zip`](https://github.com/galbutnotgirl/command/releases/download/v1.2.0-alpha.6/ClaudeCommand-1.2.0-alpha.6.zip).
+2. Download [`Command-1.2.0-beta.1.zip`](https://github.com/galbutnotgirl/command/releases/download/v1.2.0-beta.1/Command-1.2.0-beta.1.zip).
 3. Unzip it.
-4. Move `ClaudeCommand.app` to `~/Applications`.
-5. Control-click `ClaudeCommand.app`, choose **Open**, then confirm **Open**.
+4. Move `Command.app` to `~/Applications`.
+5. Open `Command.app`.
 
 If macOS says Command cannot be verified:
 
-1. Control-click `ClaudeCommand.app` in Finder and choose **Open**.
+1. Control-click `Command.app` in Finder and choose **Open**.
 2. Click **Open** in the confirmation dialog.
 3. If only **Move to Trash** appears, open **System Settings -> Privacy & Security**, scroll down, click **Open Anyway**, authenticate, then reopen Command.
 
 Terminal fallback:
 
 ```bash
-xattr -dr com.apple.quarantine ~/Applications/ClaudeCommand.app
+xattr -dr com.apple.quarantine ~/Applications/Command.app
 ```
 
-This warning exists because alpha.6 is not Apple-notarized. Never bypass this warning for an app from an untrusted source.
+Published beta builds are signed and notarized. Never bypass a verification warning for an app from an untrusted source.
 
-Binary installs do not require Terminal scripts. Global shortcuts, screenshots, clipboard history, and dictation run from the app. Optional right-click Services are only for source installs that run `./install-quick-action.sh`.
+Binary installs do not require Terminal scripts. Global shortcuts, screenshots, clipboard history, and dictation run from the app.
 
-## Existing Alpha Installs
+## Existing Installs
 
 Command was previously named ClaudeCommand. New installers use `Command.app` and remove the old `~/Applications/ClaudeCommand.app` bundle during source installs. The bundle identifier and local support paths stay compatible (`com.claudecommand` and `~/Library/Application Support/claude-command/`) so macOS permissions, shortcuts, history, and exports keep working across the rename.
 
