@@ -72,21 +72,26 @@ public struct DictationActivityGate: Equatable, Sendable {
 
 public struct DictationStopTailPolicy: Equatable, Sendable {
     public let activeAudioLevelThreshold: Float
+    public let recentSpeechWindowSeconds: Double
     public let quietTailNanoseconds: UInt64
     public let activeTailNanoseconds: UInt64
 
     public init(
         activeAudioLevelThreshold: Float = 0.035,
+        recentSpeechWindowSeconds: Double = 0.45,
         quietTailNanoseconds: UInt64 = 250_000_000,
         activeTailNanoseconds: UInt64 = 850_000_000
     ) {
         self.activeAudioLevelThreshold = activeAudioLevelThreshold
+        self.recentSpeechWindowSeconds = recentSpeechWindowSeconds
         self.quietTailNanoseconds = quietTailNanoseconds
         self.activeTailNanoseconds = activeTailNanoseconds
     }
 
-    public func tailNanoseconds(for audioLevel: Float) -> UInt64 {
-        audioLevel > activeAudioLevelThreshold ? activeTailNanoseconds : quietTailNanoseconds
+    public func tailNanoseconds(for audioLevel: Float, secondsSinceActiveSpeech: Double = .infinity) -> UInt64 {
+        let speechIsCurrent = audioLevel > activeAudioLevelThreshold
+        let speechWasRecent = secondsSinceActiveSpeech <= recentSpeechWindowSeconds
+        return speechIsCurrent || speechWasRecent ? activeTailNanoseconds : quietTailNanoseconds
     }
 }
 

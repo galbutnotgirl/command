@@ -85,6 +85,7 @@ final class Recorder: ObservableObject {
     private let stopTailPolicy = DEFAULT_DICTATION_STOP_TAIL_POLICY
     private var totalAudioSeconds: Double = 0
     private var activeSpeechSeconds: Double = 0
+    private var secondsSinceStopTailActivity: Double = .infinity
     private var noiseFloorRMS: Float = 0.003
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
@@ -176,7 +177,8 @@ final class Recorder: ObservableObject {
         currentMode = mode
         stopRequestedDuringStart = false
         lastTranscript = ""; liveTranscript = ""
-        totalAudioSeconds = 0; activeSpeechSeconds = 0; noiseFloorRMS = 0.003
+        totalAudioSeconds = 0; activeSpeechSeconds = 0
+        secondsSinceStopTailActivity = .infinity; noiseFloorRMS = 0.003
         state = .starting
         log("▶ session \(mySession) start mode=\(mode)")
 
@@ -292,7 +294,15 @@ final class Recorder: ObservableObject {
 
         let capturedStreamTask = streamTask
         streamTask = nil
-        let stopTailNanoseconds = stopTailPolicy.tailNanoseconds(for: audioLevel)
+        let stopTailNanoseconds = stopTailPolicy.tailNanoseconds(
+            for: audioLevel,
+            secondsSinceActiveSpeech: secondsSinceStopTailActivity
+        )
+        let stopLevel = String(format: "%.3f", audioLevel)
+        let recentSpeech = String(format: "%.3f", secondsSinceStopTailActivity)
+        let activeDuration = String(format: "%.3f", activeSpeechSeconds)
+        let totalDuration = String(format: "%.3f", totalAudioSeconds)
+        appendLog("[dictation] stop session=\(finishingSession) tailMs=\(stopTailNanoseconds / 1_000_000) level=\(stopLevel) recentSpeech=\(recentSpeech)s active=\(activeDuration)s total=\(totalDuration)s")
         // Don't tear the tap/engine down synchronously here — that was the actual
         // source of dropped tail words, not the flush step below. People keep
         // talking through the last syllable as they release the key/hotkey;
@@ -327,6 +337,7 @@ final class Recorder: ObservableObject {
                 // returns less than the last partial (e.g. model flush gap), keep the
                 // partial — it's less likely to have dropped tail words than finish().
                 let best = preferredDictationTranscript(final: text, lastPartial: self.lastTranscript)
+                appendLog("[dictation] finish session=\(finishingSession) finalChars=\(text.count) partialChars=\(self.lastTranscript.count) selectedChars=\(best.count)")
                 await capturedStreamTask?.value
                 guard self.sessionID == finishingSession else { return }
                 self.state = .idle
@@ -363,7 +374,8 @@ final class Recorder: ObservableObject {
         bufferFeederTask?.cancel(); bufferFeederTask = nil
         cancelSilenceTimer()
         lastTranscript = ""; liveTranscript = ""
-        totalAudioSeconds = 0; activeSpeechSeconds = 0; noiseFloorRMS = 0.003
+        totalAudioSeconds = 0; activeSpeechSeconds = 0
+        secondsSinceStopTailActivity = .infinity; noiseFloorRMS = 0.003
         audioLevel = 0
         state = .idle
         let mgr = currentMgr; currentMgr = nil
@@ -396,6 +408,11 @@ final class Recorder: ObservableObject {
             noiseFloorRMS = max(0.0005, min(0.03, (noiseFloorRMS * 0.96) + (rms * 0.04)))
         }
         audioLevel = min(rms * 20, 1.0)
+        if audioLevel > stopTailPolicy.activeAudioLevelThreshold {
+            secondsSinceStopTailActivity = 0
+        } else if secondsSinceStopTailActivity.isFinite {
+            secondsSinceStopTailActivity += seconds
+        }
     }
 
     private func minimumDictationDuration() -> Double {

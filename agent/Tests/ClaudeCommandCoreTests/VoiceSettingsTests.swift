@@ -67,11 +67,28 @@ final class VoiceSettingsTests: XCTestCase {
     func testDictationStopTailPolicyKeepsFastQuietStopsAndLongerActiveTail() {
         let policy = DEFAULT_DICTATION_STOP_TAIL_POLICY
         XCTAssertEqual(policy.activeAudioLevelThreshold, 0.035, accuracy: 0.0001)
+        XCTAssertEqual(policy.recentSpeechWindowSeconds, 0.45, accuracy: 0.0001)
         XCTAssertEqual(policy.quietTailNanoseconds, 250_000_000)
         XCTAssertEqual(policy.activeTailNanoseconds, 850_000_000)
         XCTAssertEqual(policy.tailNanoseconds(for: 0.0), 250_000_000)
         XCTAssertEqual(policy.tailNanoseconds(for: 0.035), 250_000_000)
         XCTAssertEqual(policy.tailNanoseconds(for: 0.036), 850_000_000)
+    }
+
+    func testDictationStopTailProtectsSpeechBeforeQuietReleaseFrame() {
+        let policy = DEFAULT_DICTATION_STOP_TAIL_POLICY
+        XCTAssertEqual(
+            policy.tailNanoseconds(for: 0.0, secondsSinceActiveSpeech: 0.10),
+            850_000_000
+        )
+        XCTAssertEqual(
+            policy.tailNanoseconds(for: 0.0, secondsSinceActiveSpeech: 0.45),
+            850_000_000
+        )
+        XCTAssertEqual(
+            policy.tailNanoseconds(for: 0.0, secondsSinceActiveSpeech: 0.46),
+            250_000_000
+        )
     }
 
     func testDictationCapturePhaseBlocksRestartWhileFinishing() {
