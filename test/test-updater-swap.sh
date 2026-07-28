@@ -63,6 +63,9 @@ TEST_REQUIREMENT='identifier "com.claudecommand"'
 SUCCESS_ROOT="${TMP_ROOT}/path with spaces and 'quote"
 SUCCESS_DEST="${SUCCESS_ROOT}/Applications/Command.app"
 SUCCESS_NEW="${SUCCESS_ROOT}/download/Command.app"
+CLIP_HISTORY="${TMP_ROOT}/home/.claude/state/cliphistory/index.json"
+mkdir -p "${CLIP_HISTORY:h}"
+print 'clipboard-history-sentinel' > "$CLIP_HISTORY"
 make_app "$SUCCESS_DEST" "1.0.0"
 make_app "$SUCCESS_NEW" "2.0.0"
 HOME="${TMP_ROOT}/home" zsh "$SWAPPER" 999999 "$SUCCESS_NEW" "$SUCCESS_DEST" \
@@ -70,6 +73,7 @@ HOME="${TMP_ROOT}/home" zsh "$SWAPPER" 999999 "$SUCCESS_NEW" "$SUCCESS_DEST" \
 assert_status "valid update installs" "$?" 0
 assert_eq "valid update replaces version" "$(version_of "$SUCCESS_DEST")" "2.0.0"
 assert_eq "valid update removes backup" "$([[ -e "${SUCCESS_DEST}.old" ]] && print yes || print no)" "no"
+assert_eq "in-app update preserves local Clipboard History" "$(cat "$CLIP_HISTORY")" "clipboard-history-sentinel"
 
 ROLLBACK_ROOT="${TMP_ROOT}/version rollback"
 ROLLBACK_DEST="${ROLLBACK_ROOT}/Applications/Command.app"

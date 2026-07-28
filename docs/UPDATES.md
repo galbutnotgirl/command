@@ -42,6 +42,8 @@ Export settings if you are testing many alpha builds:
 
 Export includes shortcuts, prompt settings, context rules, dictation vocabulary, background settings, and app preferences.
 
+Incremental and in-app updates keep local Clipboard History in `~/.claude/state/cliphistory/`. Only explicit clean-install or uninstall cleanup removes it.
+
 ## If Update Fails
 
 | Symptom | Fix |
