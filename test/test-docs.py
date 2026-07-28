@@ -615,20 +615,18 @@ REQUIRED_TEXT = {
         "./test/test-release-asset.sh",
     ],
     "docs/index.html": [
-        "<title>Command — Stop copy-pasting into your AI</title>",
+        "<title>Command — Stop copy-pasting into Claude</title>",
         "href=\"#content\">Skip to content</a>",
         "<main id=\"content\">",
         "install.html",
-        "settings.html",
-        "Stop copy-pasting into your AI.",
-        "Prompt once. Reuse the context.",
-        "Capture from your work",
-        "Add useful context",
-        "Find what you copied this week.",
+        "Stop copy-pasting into Claude.",
+        "Save instructions. Use them anywhere.",
+        "Capture what matters",
+        "Define the task",
+        "Find it again in seconds.",
+        "Clipboard History preview",
         "https://github.com/galbutnotgirl/command/releases/latest",
-        "permissions.html",
-        "troubleshooting.html",
-        "Local development:",
+        "privacy.html",
         "https://github.com/galbutnotgirl/command",
     ],
     "docs/404.html": [
@@ -1626,10 +1624,7 @@ REQUIRED_TEXT = {
         "The identifier remains <code>com.claudecommand</code>",
         "Why do some local paths still say <code>claude-command</code>",
         "command-export-",
-        "bundled docs/index.html missing auto-submit FAQ wording",
         "bundled docs/index.html still has stale Go behavior wording",
-        "bundled docs/index.html missing neutral local-development wording",
-        "bundled docs/index.html still has tool-specific local-development wording",
         "bundled docs/404.html missing polished fallback preview wording",
         "bundled docs/404.html missing current FAQ card wording",
         "bundled docs/404.html still has rough missing-links preview wording",
@@ -2405,7 +2400,7 @@ def validate_release_checklist_doc_label_parity(failures: list[str]) -> None:
 
 def validate_docs_home_coverage(failures: list[str]) -> None:
     home = (ROOT / "docs/index.html").read_text(encoding="utf-8")
-    required_home_links = ["install.html", "guide.html", "settings.html", "quick-reference.html", "permissions.html", "troubleshooting.html", "privacy.html", "support.html"]
+    required_home_links = ["install.html", "guide.html", "privacy.html"]
     for html in required_home_links:
         if f'href="{html}"' not in home:
             failures.append(f"docs/index.html: docs home missing docs page: {html}")
@@ -2413,11 +2408,15 @@ def validate_docs_home_coverage(failures: list[str]) -> None:
 
 def validate_docs_home_card_label_parity(failures: list[str]) -> None:
     home = (ROOT / "docs/index.html").read_text(encoding="utf-8")
-    for href in ["install.html", "guide.html", "settings.html", "quick-reference.html", "permissions.html", "troubleshooting.html", "privacy.html", "support.html"]:
-        label = CORE_DOC_NAV_LABELS[href]
-        pattern = rf'<a[^>]*href="{re.escape(href)}"[^>]*>\s*(?:<strong>)?{re.escape(label)}'
-        if not re.search(pattern, home):
-            failures.append(f"docs/index.html: docs home card label missing or mismatched: {href} -> {label}")
+    expected_labels = {
+        "install.html": ["Install", "Install Guide"],
+        "guide.html": ["Docs"],
+        "privacy.html": ["Privacy"],
+    }
+    for href, labels in expected_labels.items():
+        patterns = [rf'<a[^>]*href="{re.escape(href)}"[^>]*>\s*{re.escape(label)}' for label in labels]
+        if not any(re.search(pattern, home) for pattern in patterns):
+            failures.append(f"docs/index.html: docs home link label missing or mismatched: {href}")
 
 
 def validate_rendered_docs_grid_label_parity(failures: list[str]) -> None:
@@ -2441,13 +2440,13 @@ def validate_rendered_docs_grid_label_parity(failures: list[str]) -> None:
 
 def validate_docs_home_repo_trust_routes(failures: list[str]) -> None:
     home = (ROOT / "docs/index.html").read_text(encoding="utf-8")
-    required_routes = {
-        "GitHub": "https://github.com/galbutnotgirl/command",
-        "Latest Release": "https://github.com/galbutnotgirl/command/releases/latest",
-    }
-    for label, href in required_routes.items():
-        if label not in home or f'href="{href}"' not in home:
-            failures.append(f"docs/index.html: docs home missing repo trust route: {label}")
+    required_routes = [
+        "https://github.com/galbutnotgirl/command",
+        "https://github.com/galbutnotgirl/command/releases/latest",
+    ]
+    for href in required_routes:
+        if f'href="{href}"' not in home:
+            failures.append(f"docs/index.html: docs home missing repo trust route: {href}")
 
 
 def validate_about_docs_button_coverage(failures: list[str]) -> None:

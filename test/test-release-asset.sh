@@ -147,8 +147,8 @@ else
   fail "could not extract zip for executable/signature checks"
 fi
 
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/index.html 2>/dev/null | grep -q "Default Shortcuts" \
-  || fail "bundled docs/index.html missing Default Shortcuts"
+unzip -p "$ZIP" Command.app/Contents/Resources/docs/index.html 2>/dev/null | grep -q "Clipboard History preview" \
+  || fail "bundled docs/index.html missing Clipboard History visual"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/uninstall.html 2>/dev/null | grep -q "<title>Command Uninstall</title>" \
   || fail "bundled docs/uninstall.html title label drifted"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/uninstall.html 2>/dev/null | grep -q "<h1>Uninstall</h1>" \
@@ -183,14 +183,8 @@ unzip -p "$ZIP" Command.app/Contents/Resources/docs/faq.html 2>/dev/null | grep 
   || fail "bundled docs/faq.html missing local-path compatibility answer"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/settings.html 2>/dev/null | grep -q "command-export-" \
   || fail "bundled docs/settings.html missing Command export filename"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/index.html 2>/dev/null | grep -Eqi "auto-submit (behavior|when)" \
-  || fail "bundled docs/index.html missing auto-submit FAQ wording"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/index.html 2>/dev/null | grep -qv "Go behavior" \
   || fail "bundled docs/index.html still has stale Go behavior wording"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/index.html 2>/dev/null | grep -q "Local development:" \
-  || fail "bundled docs/index.html missing neutral local-development wording"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/index.html 2>/dev/null | grep -qv "Codex local development:" \
-  || fail "bundled docs/index.html still has tool-specific local-development wording"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/404.html 2>/dev/null | grep -q "Command docs fallback for moved or mistyped links" \
   || fail "bundled docs/404.html missing polished fallback preview wording"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/404.html 2>/dev/null | grep -q "Shortcut conflicts, auto-submit behavior, inheritance, privacy, dictation, background runs, and imports." \

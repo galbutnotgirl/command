@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Command stops repetitive copy, paste, and prompt work by sending text, screenshots, voice, URLs, and reusable context to Claude or ChatGPT from any Mac app.">
-  <title>Command — Stop copy-pasting into your AI</title>
+  <meta name="description" content="Command sends text, screenshots, clipboard items, and dictated notes from any Mac app to Claude, with saved instructions and context attached.">
+  <title>Command — Stop copy-pasting into Claude</title>
   <link rel="canonical" href="https://galbutnotgirl.github.io/command/">
   <meta property="og:site_name" content="Command">
-  <meta property="og:title" content="Command — Stop copy-pasting into your AI">
-  <meta property="og:description" content="Command stops repetitive copy, paste, and prompt work by sending text, screenshots, voice, URLs, and reusable context to Claude or ChatGPT from any Mac app.">
+  <meta property="og:title" content="Command — Stop copy-pasting into Claude">
+  <meta property="og:description" content="Command sends text, screenshots, clipboard items, and dictated notes from any Mac app to Claude, with saved instructions and context attached.">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="Command — Stop copy-pasting into your AI">
-  <meta name="twitter:description" content="Command stops repetitive copy, paste, and prompt work by sending text, screenshots, voice, URLs, and reusable context to Claude or ChatGPT from any Mac app.">
+  <meta name="twitter:title" content="Command — Stop copy-pasting into Claude">
+  <meta name="twitter:description" content="Command sends text, screenshots, clipboard items, and dictated notes from any Mac app to Claude, with saved instructions and context attached.">
   <link rel="stylesheet" href="site.css">
   <style>
     :root {
@@ -64,7 +64,7 @@
     .button:hover { filter: brightness(1.08); }
     .hero { min-height: 680px; padding: 86px 0 72px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr); gap: 72px; align-items: center; }
     .eyebrow { margin: 0 0 16px; color: var(--purple); font: 700 12px/1 var(--mono); text-transform: uppercase; }
-    h1 { margin: 0; max-width: 11ch; font-size: clamp(52px, 7vw, 86px); line-height: .98; font-weight: 730; letter-spacing: 0; }
+    h1 { margin: 0; max-width: 11ch; font-size: 72px; line-height: .98; font-weight: 730; letter-spacing: 0; }
     .hero-copy { margin: 26px 0 30px; max-width: 570px; color: var(--muted); font-size: 19px; }
     .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
     .trust { display: flex; gap: 18px; margin-top: 22px; color: #817990; font-size: 13px; }
@@ -74,30 +74,40 @@
     .dot:nth-child(2) { background: #febc2e; } .dot:nth-child(3) { background: #28c840; }
     .demo-title { margin-left: auto; margin-right: auto; color: var(--muted); font-size: 11px; }
     .demo-body { padding: 22px; }
-    .capture { padding: 16px; border: 1px solid #3a3152; border-radius: 7px; background: #100d19; font-family: var(--mono); color: #d9d2e8; font-size: 13px; }
-    .route { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-top: 18px; }
-    .route-box { min-height: 74px; padding: 13px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); }
-    .route-box strong { display: block; font-size: 13px; } .route-box span { color: var(--muted); font-size: 11px; }
-    .arrow { color: var(--purple); font: 700 18px var(--mono); }
-    .keys { display: flex; gap: 8px; margin-top: 18px; }
+    .demo-source { padding: 16px; border: 1px solid #3a3152; border-radius: 7px; background: #100d19; }
+    .demo-label { color: var(--purple); font: 700 10px var(--mono); }
+    .demo-source p { margin: 8px 0 0; color: #d9d2e8; font: 13px/1.5 var(--mono); }
+    .command-step { display: flex; align-items: center; gap: 13px; margin: 14px 0; padding: 13px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); }
+    .step-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px; border-radius: 7px; background: #2c2046; color: var(--purple); font-size: 21px; }
+    .command-step small, .demo-send small { display: block; color: var(--muted); font: 700 9px var(--mono); }
+    .command-step strong, .demo-send strong { display: block; margin-top: 3px; font-size: 13px; }
+    .demo-send { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px; border: 1px solid #4a396c; border-radius: 7px; background: #201730; }
     kbd { padding: 7px 10px; border: 1px solid #4b4065; border-bottom-width: 3px; border-radius: 6px; background: #211b31; color: #f5f2fb; font: 700 12px var(--mono); }
     section { padding: 92px 0; border-top: 1px solid var(--line); }
-    h2 { margin: 0 0 14px; font-size: clamp(34px, 5vw, 52px); line-height: 1.05; font-weight: 700; letter-spacing: 0; }
+    h2 { margin: 0 0 14px; font-size: 46px; line-height: 1.05; font-weight: 700; letter-spacing: 0; }
     .section-lead { max-width: 620px; margin: 0 0 42px; color: var(--muted); font-size: 18px; }
     .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
     .feature { min-height: 190px; padding: 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
-    .feature-icon { color: var(--purple); font: 700 24px var(--mono); }
-    .feature h3 { margin: 34px 0 7px; font-size: 18px; }
+    .feature-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 7px; background: #2a1e42; color: var(--purple); font: 700 30px var(--mono); }
+    .feature h3 { margin: 25px 0 7px; font-size: 18px; }
     .feature p { margin: 0; color: var(--muted); font-size: 14px; }
-    .feature:nth-child(2) .feature-icon { color: var(--green); } .feature:nth-child(3) .feature-icon { color: var(--blue); }
-    .flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; counter-reset: flow; }
-    .flow article { counter-increment: flow; }
-    .flow article::before { content: "0" counter(flow); color: var(--purple); font: 700 12px var(--mono); }
-    .flow h3 { margin: 18px 0 7px; font-size: 20px; }
-    .flow p { margin: 0; color: var(--muted); }
-    .shortcut-strip { display: flex; flex-wrap: wrap; gap: 12px; }
-    .shortcut { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
-    .shortcut span { color: var(--muted); font-size: 13px; }
+    .feature:nth-child(2) .feature-icon { background: #183528; color: var(--green); } .feature:nth-child(3) .feature-icon { background: #172a43; color: var(--blue); }
+    .history-layout { display: grid; grid-template-columns: minmax(0, .75fr) minmax(480px, 1.25fr); align-items: center; gap: 72px; }
+    .history-copy p { max-width: 450px; margin: 0; color: var(--muted); font-size: 18px; }
+    .history-demo { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 24px 70px rgba(0,0,0,.32); }
+    .history-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; min-height: 52px; padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+    .filter { min-width: 34px; height: 30px; padding: 0 10px; border: 1px solid #3a324c; border-radius: 6px; background: #211c2d; color: var(--muted); font: 700 10px var(--sans); }
+    .filter.active { border-color: var(--purple); background: var(--purple); color: #0b0912; }
+    .history-search { margin-left: auto; color: #82798f; font-size: 11px; }
+    .history-list { padding: 5px 0; }
+    .history-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 11px; min-height: 61px; padding: 9px 13px; border-bottom: 1px solid rgba(255,255,255,.055); }
+    .history-row:last-child { border-bottom: 0; }
+    .history-type { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 7px; background: #2b2140; color: var(--purple); font: 700 15px var(--mono); }
+    .history-row:nth-child(2) .history-type { background: #17352a; color: var(--green); }
+    .history-row:nth-child(3) .history-type { background: #192d46; color: var(--blue); }
+    .history-row strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+    .history-row span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; }
+    .history-age { color: #756d82; font: 10px var(--mono); }
     .install-band { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 30px; padding: 38px; border: 1px solid #473768; border-radius: 8px; background: #181225; }
     .install-band h2 { font-size: 34px; }
     .install-band p { margin: 8px 0 0; color: var(--muted); }
@@ -106,12 +116,15 @@
     .footer-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px 18px; max-width: 650px; }
     .footer-links a { color: var(--muted); text-decoration: none; font-size: 13px; }
     .footer-links a:hover { color: var(--text); }
-    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
     @media (max-width: 820px) {
       .nav-links a:not(.button) { display: none; }
       .hero { min-height: auto; padding: 64px 0; grid-template-columns: 1fr; gap: 48px; }
       .demo { transform: none; }
-      .feature-grid, .flow { grid-template-columns: 1fr; }
+      h1 { font-size: 50px; }
+      h2 { font-size: 36px; }
+      .feature-grid, .history-layout { grid-template-columns: 1fr; }
+      .history-layout { gap: 36px; }
+      .history-search { width: 100%; margin: 2px 0 0; }
       .install-band { grid-template-columns: 1fr; padding: 26px; }
       .footer-row { display: block; }
       .footer-links { justify-content: flex-start; margin-top: 26px; }
@@ -135,9 +148,9 @@
   <main id="content">
     <div class="shell hero">
       <div>
-        <p class="eyebrow">Your AI, one shortcut away</p>
-        <h1>Stop copy-pasting into your AI.</h1>
-        <p class="hero-copy">Capture what you are working on, add saved instructions and context, then send it directly to Claude or ChatGPT without the usual tool switching.</p>
+        <p class="eyebrow">Claude, one shortcut away</p>
+        <h1>Stop copy-pasting into Claude.</h1>
+        <p class="hero-copy">Send selected text, screenshots, clipboard items, or dictated notes straight from any Mac app, with your instructions and context already attached.</p>
         <div class="hero-actions">
           <a class="button primary" href="https://github.com/galbutnotgirl/command/releases/latest">Download Command</a>
           <a class="button" href="install.html">Install Guide</a>
@@ -147,61 +160,60 @@
       <div class="demo" aria-label="Command workflow preview">
         <div class="demo-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="demo-title">Command</span></div>
         <div class="demo-body">
-          <div class="capture">Turn this meeting note into clear next steps.</div>
-          <div class="route">
-            <div class="route-box"><strong>Selected text</strong><span>Captured from any app</span></div>
-            <div class="arrow">→</div>
-            <div class="route-box"><strong>ChatGPT · New conversation</strong><span>Prompt + source context</span></div>
+          <div class="demo-source">
+            <span class="demo-label">SELECTED IN SLACK</span>
+            <p>Customer needs a migration plan by Friday.</p>
           </div>
-          <div class="keys"><kbd>F8</kbd><kbd>⌘F8</kbd><kbd>F7</kbd></div>
+          <div class="command-step">
+            <span class="step-icon">✦</span>
+            <div><small>SAVED INSTRUCTION</small><strong>Turn this into clear next steps.</strong></div>
+          </div>
+          <div class="demo-send">
+            <div><small>SEND TO</small><strong>Claude · Current conversation</strong></div>
+            <kbd>F8</kbd>
+          </div>
         </div>
       </div>
     </div>
 
     <section id="features">
       <div class="shell">
-        <p class="eyebrow">Reusable actions</p>
-        <h2>Prompt once. Reuse the context.</h2>
-        <p class="section-lead">Pair captured content with saved prompting, background information, and a destination. Stop typing the same instructions every time you ask an agent for help.</p>
+        <p class="eyebrow">Build your commands</p>
+        <h2>Save instructions. Use them anywhere.</h2>
+        <p class="section-lead">Set up what you want done once, then run it whenever you ask an agent to do something.</p>
         <div class="feature-grid">
-          <article class="feature"><div class="feature-icon">⌁</div><h3>Capture from your work</h3><p>Send selected text, screenshots, typed notes, URLs, or hold-to-talk voice from the app already in front of you.</p></article>
-          <article class="feature"><div class="feature-icon">↗</div><h3>Add useful context</h3><p>Attach saved prompting or bring in custom context from sources such as Slack and Google Drive.</p></article>
-          <article class="feature"><div class="feature-icon">◌</div><h3>Run it your way</h3><p>Continue a conversation, start a new one, or trigger a configured action quietly in background. Choose auto-submit when speed matters.</p></article>
+          <article class="feature"><div class="feature-icon">⌘</div><h3>Capture what matters</h3><p>Use selected text, screenshots, clipboard items, typed notes, URLs, or voice from any app.</p></article>
+          <article class="feature"><div class="feature-icon">✦</div><h3>Define the task</h3><p>Custom prompts are reusable instructions for what Claude should do. Add source context from Slack, Google Drive, and more.</p></article>
+          <article class="feature"><div class="feature-icon">↗</div><h3>Choose how it runs</h3><p>Continue a conversation, start a new one, or trigger an action silently in the background.</p></article>
         </div>
       </div>
     </section>
 
     <section>
-      <div class="shell">
+      <div class="shell history-layout">
+        <div class="history-copy">
         <p class="eyebrow">Clipboard History</p>
-        <h2>Find what you copied this week.</h2>
-        <div class="flow">
-          <article><h3>Seven days, local</h3><p>Search recent copies without sending clipboard history to a cloud service.</p></article>
-          <article><h3>Filter intelligently</h3><p>Narrow history to text, images, URLs, dictated text, or content already sent to an agent.</p></article>
-          <article><h3>Use it immediately</h3><p>Paste a result, open a URL, or send the selected item into your configured AI action.</p></article>
+        <h2>Find it again in seconds.</h2>
+        <p>Command keeps your last seven days on your Mac. Search everything or filter instantly by text, images, URLs, dictation, and items sent to Claude.</p>
         </div>
-      </div>
-    </section>
-
-    <section>
-      <div class="shell">
-        <p class="eyebrow">Default Shortcuts</p>
-        <h2>Useful on first launch.</h2>
-        <p class="section-lead">Beta ships with Mac function-row shortcuts and supports two bindings per action. Customize every binding in Settings.</p>
-        <div class="shortcut-strip">
-          <div class="shortcut"><kbd>F8</kbd><span>Selected text</span></div>
-          <div class="shortcut"><kbd>⌘F8</kbd><span>New conversation</span></div>
-          <div class="shortcut"><kbd>F7</kbd><span>Screenshot</span></div>
-          <div class="shortcut"><kbd>F6</kbd><span>Clipboard</span></div>
-          <div class="shortcut"><kbd>F5</kbd><span>Dictate</span></div>
+        <div class="history-demo" aria-label="Clipboard History preview">
+          <div class="history-toolbar">
+            <button class="filter active" type="button">All</button><button class="filter" type="button">Text</button><button class="filter" type="button">Images</button><button class="filter" type="button">Voice</button><button class="filter" type="button">URLs</button>
+            <span class="history-search">⌕ Search</span>
+          </div>
+          <div class="history-list">
+            <div class="history-row"><div class="history-type">↗</div><div><strong>docs.google.com/document/d/launch-plan</strong><span>Google Docs · URL</span></div><div class="history-age">4m</div></div>
+            <div class="history-row"><div class="history-type">▧</div><div><strong>Product roadmap screenshot</strong><span>Image · 1440 × 900</span></div><div class="history-age">18m</div></div>
+            <div class="history-row"><div class="history-type">≋</div><div><strong>Follow up with the customer about migration timing.</strong><span>Dictated with Command</span></div><div class="history-age">1h</div></div>
+            <div class="history-row"><div class="history-type">Aa</div><div><strong>Customer needs a migration plan by Friday.</strong><span>Slack · Sent to Claude</span></div><div class="history-age">2h</div></div>
+          </div>
         </div>
-        <p class="sr-only">Local development:</p>
       </div>
     </section>
 
     <section>
       <div class="shell install-band">
-        <div><h2>Spend less time moving context.</h2><p>Download beta, move Command to Applications, then follow guided permission setup.</p></div>
+        <div><h2>Give Claude a shortcut to your work.</h2><p>Download Command beta and finish setup in a few minutes.</p></div>
         <div class="hero-actions"><a class="button primary" href="https://github.com/galbutnotgirl/command/releases/latest">Download Command</a><a class="button" href="install.html">Open Install Guide</a></div>
       </div>
     </section>
@@ -211,7 +223,7 @@
     <div class="shell footer-row">
       <a class="brand" href="#content"><span class="mark"><img src="app-icon.png" alt="Command orbital icon"></span>Command</a>
       <div class="footer-links">
-        <a href="install.html">Install</a><a href="guide.html">User Guide</a><a href="settings.html">Settings Reference</a><a href="quick-reference.html">Quick Reference</a><a href="permissions.html">Permissions</a><a href="troubleshooting.html">Troubleshooting</a><a href="privacy.html">Privacy</a><a href="support.html">Support</a><a href="https://github.com/galbutnotgirl/command/releases/latest">Latest Release</a><a href="https://github.com/galbutnotgirl/command">GitHub</a>
+        <a href="install.html">Install</a><a href="guide.html">Docs</a><a href="privacy.html">Privacy</a><a href="https://github.com/galbutnotgirl/command">GitHub</a>
       </div>
     </div>
   </footer>
