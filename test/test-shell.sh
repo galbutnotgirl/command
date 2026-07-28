@@ -227,10 +227,10 @@ CLAUDE_CODE_DRY_OUTPUT="$(ACTION=comment DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVI
 assert_contains "Claude Code uses installed app deep link contract" "$CLAUDE_CODE_DRY_OUTPUT" \
   "route=claude://code/new"
 CLAUDE_OPEN_NEW_SOURCE="$(sed -n '/open_new()/,/paste_codex_pending()/p' "$SEND_SCRIPT")"
-assert_contains "Claude Chat and Cowork wait for requested composer" "$CLAUDE_OPEN_NEW_SOURCE" \
+assert_contains "Claude Chat/Cowork deep link carries rendered prompt" "$CLAUDE_OPEN_NEW_SOURCE" \
+  'link="${link}${separator}q=$(urlencode "$q")"'
+assert_not_contains "Claude Chat/Cowork no longer depends on focused editor" "$CLAUDE_OPEN_NEW_SOURCE" \
   'wait_for_editor ||'
-assert_contains "Claude Chat and Cowork paste after navigation" "$CLAUDE_OPEN_NEW_SOURCE" \
-  'copy_for_send "$q" "$COPY_SOURCE"'
 assert_not_contains "Claude route variable never shadows zsh PATH array" "$(sed -n '/open_new()/,/paste_codex_pending()/p' "$SEND_SCRIPT")" \
   'local path'
 

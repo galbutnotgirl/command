@@ -424,21 +424,15 @@ open_new() {  # $1 = q text (may be empty)
   local separator="?"
   [[ "$routePath" == *\?* ]] && separator="&"
   local link="claude://${routePath}"
-  # Latest Claude combines Chat and Cowork in one window. Navigate first, then
-  # paste text into that surface. Screenshot delivery keeps q in the URL because
-  # replacing the clipboard here would discard the captured image.
-  if [ "${IMG:-0}" = "1" ] || [ "$CLAUDE_DESTINATION" = "code" ]; then
+  # Claude's shared Chat/Cowork surface does not reliably focus its editor after
+  # a deep link. Let Claude populate the composer from q instead of depending on
+  # an Accessibility focus check followed by a synthetic paste.
+  if [ -n "$q" ]; then
     link="${link}${separator}q=$(urlencode "$q")"
   fi
   log "open new session dest=$CLAUDE_DESTINATION chars=${#link}"
   /usr/bin/open -b "$TARGET_BUNDLE" "$link" 2>/dev/null || return 1
   sleep 0.45
-  if [ "${IMG:-0}" != "1" ] && [ "$CLAUDE_DESTINATION" != "code" ] && [ -n "$q" ]; then
-    wait_for_assistant || { notify "Claude did not open the requested $CLAUDE_DESTINATION surface."; return 1; }
-    wait_for_editor || { notify "Claude $CLAUDE_DESTINATION input is not ready. Open a conversation and try again."; return 1; }
-    copy_for_send "$q" "$COPY_SOURCE"
-    helper_paste || return 1
-  fi
 }
 
 paste_codex_pending() {
