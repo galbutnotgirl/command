@@ -120,7 +120,7 @@ final class SettingsModel: ObservableObject {
     @Published var recordingAction: String? = nil
     @Published var recordingShortcutIndex: Int = 0
     @Published var bindingConflict: String? = nil
-    @Published var claudeDestination: String = UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent"
+    @Published var claudeDestination: String
     @Published var codexDestination: String = UserDefaults.standard.string(forKey: "codexDestination") ?? "recent"
     @Published var defaultProvider: String = UserDefaults.standard.string(forKey: "defaultProvider") ?? "codex"
     @Published var codexWorkspace: String = UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory()
@@ -132,6 +132,15 @@ final class SettingsModel: ObservableObject {
     @Published var minDictationDuration: Double = (UserDefaults.standard.object(forKey: VoiceSettingsKeys.minDictationDuration) as? Double) ?? VoiceSettingsDefaults.minDictationDuration
     @Published var dictationAssistantProvider: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.dictationAssistantProvider) ?? VoiceSettingsDefaults.dictationAssistantProvider
     @Published var dictationAssistant2Provider: String = UserDefaults.standard.string(forKey: VoiceSettingsKeys.dictationAssistant2Provider) ?? VoiceSettingsDefaults.dictationAssistant2Provider
+
+    init() {
+        let raw = UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent"
+        let canonical = ClaudeDestination.canonical(rawValue: raw)?.rawValue ?? "recent"
+        claudeDestination = canonical
+        if raw != canonical {
+            UserDefaults.standard.set(canonical, forKey: "claudeDestination")
+        }
+    }
 
     func refresh() {
         perms = permissionChecks()
@@ -349,9 +358,6 @@ final class SettingsModel: ObservableObject {
         for i in customActions.indices {
             if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
                 customActions[i].triggers[j].providerOverride = provider
-                if provider?.provider == .codex && customActions[i].triggers[j].destinationOverride == .cowork {
-                    customActions[i].triggers[j].destinationOverride = nil
-                }
                 break
             }
         }
@@ -1000,8 +1006,7 @@ struct ShortcutsView: View {
                     } else {
                         Picker("Default Claude destination", selection: destBinding) {
                             Text("Recent").tag("recent")
-                            Text("Chat").tag("chat")
-                            Text("Cowork").tag("cowork")
+                            Text("Chat/Cowork").tag("chat")
                             Text("Code").tag("code")
                         }
                         .labelsHidden()
@@ -1496,9 +1501,6 @@ struct CustomActionSheet: View {
                                 ForEach(AIProviderChoice.allCases, id: \.self) { Text($0.label).tag($0) }
                             }
                             .labelsHidden().pickerStyle(.segmented)
-                            .onChange(of: provider) { _, _ in
-                                if resolvedProvider == .codex && destination == .cowork { destination = .default }
-                            }
                         }
                         .frame(width: CustomActionSheetLayout.fieldColumn, alignment: .leading)
 
@@ -1535,7 +1537,7 @@ struct CustomActionSheet: View {
                             }
                             .labelsHidden()
                             .pickerStyle(.segmented)
-                            .help(resolvedProvider == .claude ? "Applies to New and Go prompts. Default uses global Claude destination; Recent, Chat, Cowork, and Code override it." : "Applies to New and Go prompts. Default uses global ChatGPT destination; Recent, Chat, and Codex override it.")
+                            .help(resolvedProvider == .claude ? "Applies to New and Go prompts. Default uses global Claude destination; Recent, Chat/Cowork, and Code override it." : "Applies to New and Go prompts. Default uses global ChatGPT destination; Recent, Chat, and Codex override it.")
                         }
                         .frame(maxWidth: CustomActionSheetLayout.fieldColumn, alignment: .leading)
                     }
@@ -2347,7 +2349,7 @@ private func importPreviewStats(_ section: GlobalBundleSection, object: [String:
 private func currentAppPreferencesPreview() -> [String: Any] {
     [
         "defaultProvider": UserDefaults.standard.string(forKey: "defaultProvider") ?? "codex",
-        "claudeDestination": UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent",
+        "claudeDestination": ClaudeDestination.canonical(rawValue: UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent")?.rawValue ?? "recent",
         "codexDestination": UserDefaults.standard.string(forKey: "codexDestination") ?? "recent",
         "codexWorkspace": UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory(),
         "clipRetentionDays": readRetentionDays(),
@@ -2424,7 +2426,7 @@ private func globalBundle() -> [String: Any] {
     bundle["handoffSettings"] = handoffSettingsJSON()
     bundle["appPreferences"] = [
             "defaultProvider": UserDefaults.standard.string(forKey: "defaultProvider") ?? "codex",
-            "claudeDestination": UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent",
+            "claudeDestination": ClaudeDestination.canonical(rawValue: UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent")?.rawValue ?? "recent",
             "codexDestination": UserDefaults.standard.string(forKey: "codexDestination") ?? "recent",
             "codexWorkspace": UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory(),
             "clipRetentionDays": readRetentionDays(),
@@ -2584,9 +2586,9 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
 
     if let prefs = importedPreferences {
         if let v = prefs["claudeDestination"] as? String,
-           let destination = ClaudeDestination(rawValue: v), destination != .default {
-                UserDefaults.standard.set(v, forKey: "claudeDestination")
-                model.claudeDestination = v
+           let destination = ClaudeDestination.canonical(rawValue: v), destination != .default {
+                UserDefaults.standard.set(destination.rawValue, forKey: "claudeDestination")
+                model.claudeDestination = destination.rawValue
         }
         if let v = prefs["codexDestination"] as? String, v == "recent" || v == "chat" || v == "code" {
             UserDefaults.standard.set(v, forKey: "codexDestination")

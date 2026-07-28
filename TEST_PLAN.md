@@ -84,7 +84,7 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 - Existing conversation: selected text and screenshot paste into current conversation.
 - New conversation: selected text and screenshot open new conversation before paste.
 - Recent destination preserves current Chat/Cowork location.
-- Explicit Chat and Cowork destinations switch to requested surface or show clear failure.
+- Chat/Cowork opens Claude's shared conversation surface.
 - Auto-submit sends once; disabled auto-submit leaves prompt editable.
 
 ### ChatGPT

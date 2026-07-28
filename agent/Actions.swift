@@ -74,7 +74,7 @@ private func decodeTrigger(_ d: [String: Any]) -> ActionTrigger? {
     guard let id = d["id"] as? String,
           let rawKind = d["kind"] as? String, let kind = ActionKind(rawValue: rawKind) else { return nil }
     let delivery = (d["deliveryOverride"] as? String).flatMap(ActionDelivery.init(rawValue:))
-    let destination = (d["destinationOverride"] as? String).flatMap(ClaudeDestination.init(rawValue:))
+    let destination = (d["destinationOverride"] as? String).flatMap(ClaudeDestination.canonical(rawValue:))
     let provider = (d["providerOverride"] as? String).flatMap(AIProviderChoice.init(rawValue:))
     let aliases = decodeShortcutFields(d)
     return ActionTrigger(
@@ -132,7 +132,7 @@ func loadCustomActions() -> [CustomAction] {
             isHandoff: d["isHandoff"] as? Bool ?? false,
             skill: d["skill"] as? String ?? "",
             delivery: (d["delivery"] as? String).flatMap(ActionDelivery.init(rawValue:)),
-            destination: (d["destination"] as? String).flatMap(ClaudeDestination.init(rawValue:)) ?? .default,
+            destination: (d["destination"] as? String).flatMap(ClaudeDestination.canonical(rawValue:)) ?? .default,
             provider: (d["provider"] as? String).flatMap(AIProviderChoice.init(rawValue:)) ?? .default,
             triggers: triggers
         )
@@ -148,7 +148,7 @@ private func encodeTrigger(_ t: ActionTrigger) -> [String: Any] {
     if let v = t.sessionModeOverride { d["sessionModeOverride"] = v }
     if let v = t.includeSourceOverride { d["includeSourceOverride"] = v }
     if let v = t.deliveryOverride { d["deliveryOverride"] = v.rawValue }
-    if let v = t.destinationOverride { d["destinationOverride"] = v.rawValue }
+    if let v = t.destinationOverride { d["destinationOverride"] = v.canonical.rawValue }
     if let v = t.providerOverride { d["providerOverride"] = v.rawValue }
     return d
 }
@@ -159,7 +159,7 @@ func saveCustomActions(_ actions: [CustomAction]) {
          "isAutoSubmit": ca.isAutoSubmit, "sessionMode": ca.sessionMode,
          "includeSource": ca.includeSource, "enabled": ca.enabled,
          "isHandoff": ca.isHandoff, "skill": ca.skill,
-         "delivery": ca.delivery.rawValue, "destination": ca.destination.rawValue,
+         "delivery": ca.delivery.rawValue, "destination": ca.destination.canonical.rawValue,
          "provider": ca.provider.rawValue,
          "triggers": ca.triggers.map(encodeTrigger)]
     }

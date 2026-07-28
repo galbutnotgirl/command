@@ -71,10 +71,24 @@ final class ActionModelsTests: XCTestCase {
     func testDeliveryAndDestinationInheritFromAction() {
         var ca = CustomAction.makeNew(name: "n", prompt: "p", kind: .text)
         ca.delivery = .existingChat
-        ca.destination = .cowork
+        ca.destination = .chat
         let trig = ca.triggers[0]
         XCTAssertEqual(ca.effectiveDelivery(for: trig), .existingChat)
-        XCTAssertEqual(ca.effectiveDestination(for: trig), .cowork)
+        XCTAssertEqual(ca.effectiveDestination(for: trig), .chat)
+    }
+
+    func testLegacyCoworkDestinationsCanonicalizeToCombinedChatSurface() {
+        var trigger = ActionTrigger(kind: .text, destinationOverride: .cowork)
+        XCTAssertEqual(trigger.destinationOverride, .chat)
+        trigger.destinationOverride = .cowork
+
+        let action = CustomAction(
+            id: "legacy", name: "Legacy", prompt: "p", isAutoSubmit: false,
+            sessionMode: "new", includeSource: true, enabled: true,
+            destination: .cowork, triggers: [trigger]
+        )
+        XCTAssertEqual(action.destination, .chat)
+        XCTAssertEqual(action.effectiveDestination(for: trigger), .chat)
     }
 
     func testTriggerDeliveryAndDestinationOverridesWin() {

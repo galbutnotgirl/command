@@ -51,7 +51,7 @@ Current alpha line. Major changes:
 | Screenshot -> New conversation | Command-F7 |
 | Screenshot -> New conversation + auto-submit | Unbound |
 | Clipboard History | F6 |
-| Dictate -> Insert | Fn |
+| Dictate -> Insert | fn |
 | Dictate -> Assistant | Unbound |
 | Dictate -> Assistant 2 | Unbound |
 

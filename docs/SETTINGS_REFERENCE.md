@@ -26,7 +26,7 @@ Use **Shortcut Settings** for prompt-centered commands.
 |---|---|
 | Default assistant | Top-level Claude or ChatGPT fallback. |
 | Default ChatGPT destination | Recent, Chat for general chat, or Codex for workspace coding inside ChatGPT. Applies to New and Go prompts. |
-| Claude destination | Claude-only fallback destination: Recent, Chat, Cowork, or Code. Applies to New and Go prompts. |
+| Claude destination | Claude-only fallback destination: Recent, Chat/Cowork, or Code. Applies to New and Go prompts. |
 | Codex workspace | Workspace used when ChatGPT destination is Codex and for Codex background runs. |
 | Compose | Shared built-in prompt for selected-text and screenshot combinations: existing conversation, new conversation, or new conversation with auto-submit. |
 | Custom Actions | User-defined prompt groups with selected text, screenshot, popup, or voice triggers. |

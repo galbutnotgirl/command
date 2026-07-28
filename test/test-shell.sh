@@ -220,8 +220,8 @@ assert_contains "Claude Recent keeps current selected Claude surface" "$CLAUDE_R
   "route=native-current-session"
 
 CLAUDE_COWORK_DRY_OUTPUT="$(ACTION=comment DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=claude CLAUDE_DESTINATION=cowork zsh "$SEND_SCRIPT" 2>/dev/null)"
-assert_contains "Claude Cowork uses unified Claude surface route" "$CLAUDE_COWORK_DRY_OUTPUT" \
-  "route=claude://claude.ai/new?surface=cowork"
+assert_contains "legacy Claude Cowork destination uses combined Chat/Cowork route" "$CLAUDE_COWORK_DRY_OUTPUT" \
+  "route=claude://claude.ai/new"
 
 CLAUDE_CODE_DRY_OUTPUT="$(ACTION=comment DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=claude CLAUDE_DESTINATION=code zsh "$SEND_SCRIPT" 2>/dev/null)"
 assert_contains "Claude Code uses installed app deep link contract" "$CLAUDE_CODE_DRY_OUTPUT" \
@@ -236,6 +236,7 @@ assert_not_contains "Claude route variable never shadows zsh PATH array" "$(sed 
 
 SEND_SOURCE="$(cat "$SEND_SCRIPT")"
 AGENT_SOURCE="$(cat "${DIR}/agent/main.swift")"
+SETTINGS_SOURCE="$(cat "${DIR}/agent/SettingsWindow.swift")"
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
   'helper_newchat ||'
 assert_contains "Native assistant shortcuts use tested core mapping" "$AGENT_SOURCE" \
@@ -248,6 +249,10 @@ assert_contains "voice event tap waits for Accessibility instead of giving up" "
   'scheduleMediaKeyHookRetry()'
 assert_contains "voice event tap reports missing Accessibility" "$AGENT_SOURCE" \
   'waiting for Accessibility before installing media/voice hook'
+assert_contains "Claude selector exposes combined Chat/Cowork destination" "$SETTINGS_SOURCE" \
+  'Text("Chat/Cowork").tag("chat")'
+assert_not_contains "Claude selector no longer exposes separate Cowork destination" "$SETTINGS_SOURCE" \
+  'Text("Cowork").tag("cowork")'
 assert_contains "paste targets assistant process when Electron window stays backgrounded" "$SEND_SOURCE" \
   'agent_cmd "pasteapp $TARGET_BUNDLE"'
 assert_contains "submit targets assistant process when Electron window stays backgrounded" "$SEND_SOURCE" \

@@ -18,7 +18,7 @@ For permission details and reset commands, see [PERMISSIONS.md](PERMISSIONS.md).
 
 Open **Settings -> Shortcuts** and choose **Default assistant**. Fresh installations default to ChatGPT with **Recent** as the destination. Choose **Claude** for Claude Chat/Cowork/Code, or keep **ChatGPT** and switch between **Recent**, **Chat**, and **Codex** destinations inside the ChatGPT app. Codex workspace delivery still needs Codex CLI/workspace readiness in **Set Up**.
 
-Provider resolution is trigger override, then Custom Action default, then global default. Recent keeps the assistant's current mode. Claude exposes Recent, Chat, Cowork, and Code destinations. ChatGPT exposes Recent, Chat, and Codex destinations. Command never silently sends to another provider when selected provider is unavailable.
+Provider resolution is trigger override, then Custom Action default, then global default. Recent keeps the assistant's current mode. Claude exposes Recent, Chat/Cowork, and Code destinations. ChatGPT exposes Recent, Chat, and Codex destinations. Command never silently sends to another provider when selected provider is unavailable.
 
 Default built-in shortcuts:
 
@@ -31,7 +31,7 @@ Default built-in shortcuts:
 | Screenshot -> New conversation | Command-F7 | Capture screenshot and open new assistant session. |
 | Screenshot -> New conversation + auto-submit | Unbound | Capture screenshot, open new assistant session, submit. |
 | Clipboard History | F6 | Open searchable clipboard picker. |
-| Dictate -> Insert | Fn | Speak and paste transcript at cursor. |
+| Dictate -> Insert | fn | Speak and paste transcript at cursor. |
 | Dictate -> Assistant | Unbound | Speak and send transcript to selected assistant. |
 | Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
@@ -80,14 +80,13 @@ Each prompt chooses delivery:
 | New conversation | Open new conversation in selected assistant and wait. |
 | Background | Run through selected local CLI with no assistant window. |
 
-Destinations apply to New and Go prompts. Existing conversation keeps the current assistant surface. Claude prompts can choose Recent, Chat, Cowork, or Code. ChatGPT prompts can choose Recent, Chat, or Codex:
+Destinations apply to New and Go prompts. Existing conversation keeps the current assistant surface. Claude prompts can choose Recent, Chat/Cowork, or Code. ChatGPT prompts can choose Recent, Chat, or Codex:
 
 | Destination | Result |
 |---|---|
 | Default | Use global destination from Shortcuts. |
 | Recent | Keep the assistant's current mode. |
-| Chat | Open ChatGPT Chat or Claude Chat. |
-| Cowork | Open Claude Cowork. |
+| Chat/Cowork | Open Claude's shared Chat and Cowork conversation surface. |
 | Code / Codex | Open Claude Code, or Codex inside ChatGPT. |
 
 You can set provider defaults at three levels:
@@ -134,7 +133,7 @@ To create one:
 2. Under **Custom Actions**, click **Add**.
 3. Name the action.
 4. Pick delivery: Existing conversation, New conversation, or Background.
-5. Pick destination: Default, Recent, Chat, Cowork, Code, or Codex depending on selected assistant.
+5. Pick destination: Default, Recent, Chat/Cowork, Code, or Codex depending on selected assistant.
 6. Write prompt text.
 7. Save.
 8. Add triggers under the action row.

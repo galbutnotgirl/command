@@ -23,12 +23,14 @@ final class ProviderModelsTests: XCTestCase {
         XCTAssertTrue(ProviderCapabilities(provider: .codex).destinations)
         XCTAssertTrue(ProviderCapabilities(provider: .codex).workspace)
         XCTAssertEqual(AIProvider.codex.label, "ChatGPT")
-        XCTAssertEqual(ClaudeDestination.available(for: .claude), [.default, .recent, .chat, .cowork, .code])
+        XCTAssertEqual(ClaudeDestination.available(for: .claude), [.default, .recent, .chat, .code])
         XCTAssertEqual(ClaudeDestination.available(for: .codex), [.default, .recent, .chat, .code])
         XCTAssertFalse(ClaudeDestination.available(for: .codex).contains(.cowork))
         XCTAssertEqual(ClaudeDestination.chat.label(for: .codex), "Chat")
         XCTAssertEqual(ClaudeDestination.code.label(for: .codex), "Codex")
-        XCTAssertEqual(ClaudeDestination.chat.label(for: .claude), "Chat")
+        XCTAssertEqual(ClaudeDestination.chat.label(for: .claude), "Chat/Cowork")
+        XCTAssertEqual(ClaudeDestination.canonical(rawValue: "cowork"), .chat)
+        XCTAssertEqual(ClaudeDestination.displayLabel(rawValue: "cowork", provider: .claude), "Chat/Cowork")
     }
 
     func testSkillInvocationSyntax() {

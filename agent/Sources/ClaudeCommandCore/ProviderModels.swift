@@ -58,7 +58,7 @@ public enum PrimaryAssistantPreference: String, CaseIterable, Codable, Sendable 
 
     public var detail: String {
         switch self {
-        case .claude: return "Claude Chat, Cowork, or Code."
+        case .claude: return "Claude Chat/Cowork or Code."
         case .chatgpt: return "ChatGPT chats, plus Codex destination for workspace coding."
         case .codex: return "ChatGPT with Codex destination for workspace coding."
         }

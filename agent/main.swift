@@ -225,8 +225,8 @@ func runWorker(_ action: String, source: String, captured: String = "", customPr
         ? (UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent")
         : (UserDefaults.standard.string(forKey: "codexDestination") ?? "recent")
     let requestedDestination = destination ?? providerDefaultDestination
-    let effectiveDestination = effectiveProvider == .codex && requestedDestination == "cowork"
-        ? providerDefaultDestination : requestedDestination
+    let canonicalDestination = requestedDestination == "cowork" ? "chat" : requestedDestination
+    let effectiveDestination = canonicalDestination
     env["CLAUDE_DESTINATION"] = effectiveDestination
     env["OPENAI_DESTINATION"] = effectiveDestination
     env["COMMAND_PROVIDER"] = effectiveProvider.rawValue

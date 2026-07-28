@@ -221,14 +221,21 @@ public enum ActionKind: String, CaseIterable, Codable, Sendable {
 }
 
 public enum ClaudeDestination: String, CaseIterable, Codable, Sendable {
+    // `cowork` remains decodable for older settings and exports. Claude now
+    // exposes Chat and Cowork through one surface, so new writes use `chat`.
     case `default`, recent, chat, cowork, code
+
+    public var canonical: ClaudeDestination { self == .cowork ? .chat : self }
+
+    public static func canonical(rawValue: String) -> ClaudeDestination? {
+        ClaudeDestination(rawValue: rawValue)?.canonical
+    }
 
     public var label: String {
         switch self {
         case .default: return "Default"
         case .recent: return "Recent"
-        case .chat: return "Chat"
-        case .cowork: return "Cowork"
+        case .chat, .cowork: return "Chat/Cowork"
         case .code: return "Code"
         }
     }
@@ -242,16 +249,16 @@ public enum ClaudeDestination: String, CaseIterable, Codable, Sendable {
         case .recent: return "Recent"
         case .chat: return "Chat"
         case .code: return "Codex"
-        case .cowork: return "Unsupported"
+        case .cowork: return "Chat"
         }
     }
 
     public static func displayLabel(rawValue: String, provider: AIProvider) -> String {
-        ClaudeDestination(rawValue: rawValue)?.label(for: provider) ?? rawValue
+        ClaudeDestination.canonical(rawValue: rawValue)?.label(for: provider) ?? rawValue
     }
 
     public static func available(for provider: AIProvider, includeDefault: Bool = true) -> [ClaudeDestination] {
-        let destinations: [ClaudeDestination] = provider == .claude ? [.recent, .chat, .cowork, .code] : [.recent, .chat, .code]
+        let destinations: [ClaudeDestination] = [.recent, .chat, .code]
         return includeDefault ? [.default] + destinations : destinations
     }
 }
@@ -321,7 +328,7 @@ public struct ActionTrigger: Identifiable, Sendable {
         self.sessionModeOverride = sessionModeOverride
         self.includeSourceOverride = includeSourceOverride
         self.deliveryOverride = deliveryOverride
-        self.destinationOverride = destinationOverride
+        self.destinationOverride = destinationOverride?.canonical
         self.providerOverride = providerOverride
     }
 
@@ -334,7 +341,7 @@ public struct ActionTrigger: Identifiable, Sendable {
         self.sessionModeOverride = sessionModeOverride
         self.includeSourceOverride = includeSourceOverride
         self.deliveryOverride = deliveryOverride
-        self.destinationOverride = destinationOverride
+        self.destinationOverride = destinationOverride?.canonical
         self.providerOverride = providerOverride
     }
 }
@@ -379,7 +386,7 @@ public struct CustomAction: Identifiable, Sendable {
         self.isAutoSubmit = isAutoSubmit; self.sessionMode = sessionMode; self.includeSource = includeSource
         self.enabled = enabled; self.isHandoff = isHandoff; self.skill = skill
         self.delivery = delivery ?? ActionDelivery.fromLegacy(isHandoff: isHandoff, sessionMode: sessionMode)
-        self.destination = destination; self.provider = provider; self.triggers = triggers
+        self.destination = destination.canonical; self.provider = provider; self.triggers = triggers
     }
 
     public static func makeNew(name: String, prompt: String, kind: ActionKind, isHandoff: Bool = false, skill: String = "") -> CustomAction {
@@ -400,7 +407,7 @@ public struct CustomAction: Identifiable, Sendable {
     public func effectiveSessionMode(for t: ActionTrigger) -> String { effectiveDelivery(for: t).sessionMode }
     public func shouldIncludeSource(for t: ActionTrigger) -> Bool { t.includeSourceOverride ?? includeSource }
     public func effectiveDestination(for t: ActionTrigger) -> ClaudeDestination {
-        t.destinationOverride ?? destination
+        (t.destinationOverride ?? destination).canonical
     }
     public func effectiveProvider(for t: ActionTrigger, default defaultProvider: AIProvider) -> AIProvider {
         (t.providerOverride ?? provider).resolve(default: defaultProvider)

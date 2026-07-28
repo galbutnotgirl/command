@@ -43,7 +43,7 @@ Command is organized around prompts:
 - Custom actions: one prompt, many triggers.
 - Triggers: selected text, screenshot, popup, voice.
 - Delivery: existing conversation, new conversation, background.
-- Destination: Default, Recent, Chat, Cowork, Code. Destination applies to New and Go prompts; Existing conversation keeps the current assistant surface.
+- Destination: Default, Recent, Chat/Cowork, Code. Destination applies to New and Go prompts; Existing conversation keeps the current assistant surface.
 - History: foreground sends and background runs.
 - Local tools: clipboard history, on-device dictation, import/export, troubleshooting.
 
@@ -58,7 +58,7 @@ Command is organized around prompts:
 | Screenshot -> New conversation | Command-F7 | Capture screenshot and open new conversation. |
 | Screenshot -> New conversation + auto-submit | Unbound | Capture screenshot, open new conversation, submit. |
 | Clipboard History | F6 | Open searchable clipboard picker. |
-| Dictate -> Insert | Fn | Speak and paste transcript at cursor. |
+| Dictate -> Insert | fn | Speak and paste transcript at cursor. |
 | Dictate -> Assistant | Unbound | Speak and send transcript to selected assistant. |
 | Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 

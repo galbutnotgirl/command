@@ -361,8 +361,8 @@ open_new() {  # $1 = q text (may be empty)
       fi
     elif [ "$CLAUDE_DESTINATION" = "recent" ]; then
       route="native-current-session"
-    elif [ "$CLAUDE_DESTINATION" = "cowork" ]; then
-      route="claude://claude.ai/new?surface=cowork"
+    elif [ "$CLAUDE_DESTINATION" = "chat" ] || [ "$CLAUDE_DESTINATION" = "cowork" ]; then
+      route="claude://claude.ai/new"
     elif [ "$CLAUDE_DESTINATION" = "code" ]; then
       route="claude://code/new"
     else
@@ -418,8 +418,7 @@ open_new() {  # $1 = q text (may be empty)
   fi
   local routePath
   case "$CLAUDE_DESTINATION" in
-    chat)   routePath="claude.ai/new" ;;
-    cowork) routePath="claude.ai/new?surface=cowork" ;;
+    chat|cowork) routePath="claude.ai/new" ;;
     *)      routePath="code/new" ;;
   esac
   local separator="?"

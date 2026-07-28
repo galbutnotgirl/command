@@ -1472,7 +1472,7 @@ REQUIRED_TEXT = {
         "Voice / dictation",
         "Command History / background action",
         "Delivery: Existing conversation / New conversation / Background",
-        "Destination: Default / Recent / Claude Chat / Claude Cowork / Claude Code / ChatGPT Chat / ChatGPT Codex",
+        "Destination: Default / Recent / Claude Chat/Cowork / Claude Code / ChatGPT Chat / ChatGPT Codex",
         "Auto-submit:",
         "Current setting or workaround:",
         "Needs Settings UI",

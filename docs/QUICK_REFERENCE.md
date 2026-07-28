@@ -11,7 +11,7 @@
 | Screenshot -> New conversation | Command-F7 | Capture screenshot and open new conversation. |
 | Screenshot -> New conversation + auto-submit | Unbound | Capture screenshot, open new conversation, submit. |
 | Clipboard History | F6 | Open searchable clipboard picker. |
-| Dictate -> Insert | Fn | Speak and paste transcript at cursor. |
+| Dictate -> Insert | fn | Speak and paste transcript at cursor. |
 | Dictate -> Assistant | Unbound | Speak and send transcript to selected assistant. |
 | Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
@@ -47,7 +47,7 @@ Unbound combinations, disabled triggers, and auto-submit combinations with no sh
 | Action | A named prompt setup, with defaults and one or more triggers. |
 | Trigger | The way content is captured: selected text, screenshot, popup, or voice. |
 | Delivery | Where the rendered prompt goes: existing conversation, new conversation, or background. |
-| Destination | Claude: Default, Recent, Chat, Cowork, or Code. ChatGPT: Default, Recent, Chat, or Codex. |
+| Destination | Claude: Default, Recent, Chat/Cowork, or Code. ChatGPT: Default, Recent, Chat, or Codex. |
 | Auto-submit | Whether Command presses Return after filling a new conversation. |
 | Background | A local `claude -p` run with no Claude window. |
 
@@ -57,7 +57,7 @@ Unbound combinations, disabled triggers, and auto-submit combinations with no sh
 |---|---|
 | Trigger | Selected text, Screenshot, Popup, Voice |
 | Delivery | Existing conversation, New conversation, Background |
-| Destination | Claude: Default, Recent, Chat, Cowork, Code. ChatGPT: Default, Recent, Chat, Codex. |
+| Destination | Claude: Default, Recent, Chat/Cowork, Code. ChatGPT: Default, Recent, Chat, Codex. |
 
 `—` means inherit from prompt/action.
 
