@@ -38,11 +38,15 @@ mkdir -p "$INSTALL_DIR"
 if [ -d "$APP" ]; then
     old_req="$(codesign -dr - "$APP" 2>&1 | sed -n 's/^.*designated => //p')"
     new_req="$(codesign -dr - "$SRC_APP" 2>&1 | sed -n 's/^.*designated => //p')"
-    if [[ -n "$old_req" && -n "$new_req" && "$old_req" != "$new_req" && "${COMMAND_ALLOW_TCC_IDENTITY_CHANGE:-0}" != "1" ]]; then
+    identity_override=false
+    if [[ "${COMMAND_CLEAN_INSTALL:-0}" == "1" && "${COMMAND_ALLOW_TCC_IDENTITY_CHANGE:-0}" == "1" ]]; then
+        identity_override=true
+    fi
+    if [[ -n "$old_req" && -n "$new_req" && "$old_req" != "$new_req" && "$identity_override" != true ]]; then
         print -- "[agent] ERROR signing identity changed; install stopped to preserve macOS permissions"
         print -- "[agent] old requirement: $old_req"
         print -- "[agent] new requirement: $new_req"
-        print -- "[agent] Fix by signing with the same Command certificate, or set COMMAND_ALLOW_TCC_IDENTITY_CHANGE=1 to accept re-granting permissions."
+        print -- "[agent] Fix by signing with the same Command certificate. Identity changes require an explicit clean install."
         exit 1
     fi
 fi

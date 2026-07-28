@@ -100,6 +100,7 @@ run_install() {
   COMMAND_TEST_RSYNC_STATE="$RSYNC_STATE" \
   COMMAND_STOP_WAIT_ATTEMPTS=0 \
   COMMAND_ALLOW_TCC_IDENTITY_CHANGE="${4:-0}" \
+  COMMAND_CLEAN_INSTALL="${5:-0}" \
   COMMAND_TEST_DEFAULTS_EXIST="${1:-0}" \
   zsh "$INSTALLER" 2>&1
 }
@@ -157,7 +158,7 @@ assert_not_contains "stuck process prevents bundle sync" "rsync " "$(cat "$LIFEC
 codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/null 2>&1
 : > "$LIFECYCLE_LOG"
 rm -f "$RSYNC_STATE"
-COPY_FAILURE_OUTPUT="$(run_install 1 0 1 1)"
+COPY_FAILURE_OUTPUT="$(run_install 1 0 1 1 1)"
 COPY_FAILURE_STATUS=$?
 assert_true "incremental install reports partial copy failure" test "$COPY_FAILURE_STATUS" -ne 0
 assert_contains "partial copy failure restores previous app" "previous app restored" "$COPY_FAILURE_OUTPUT"
@@ -172,6 +173,16 @@ MISMATCH_STATUS=$?
 assert_true "incremental install rejects signing identity change" test "$MISMATCH_STATUS" -ne 0
 assert_contains "identity rejection explains permission protection" "install stopped to preserve macOS permissions" "$MISMATCH_OUTPUT"
 assert_not_contains "identity rejection leaves running app untouched" "launchctl bootout" "$(cat "$LIFECYCLE_LOG")"
+
+: > "$LIFECYCLE_LOG"
+OVERRIDE_ONLY_OUTPUT="$(run_install 1 0 0 1)"
+OVERRIDE_ONLY_STATUS=$?
+assert_true "identity override alone cannot bypass permission protection" test "$OVERRIDE_ONLY_STATUS" -ne 0
+assert_not_contains "rejected identity override leaves running app untouched" "launchctl bootout" "$(cat "$LIFECYCLE_LOG")"
+
+: > "$LIFECYCLE_LOG"
+EXPLICIT_CLEAN_OUTPUT="$(run_install 1 0 0 1 1)"
+assert_contains "explicit clean install may accept identity change" "updated in-place" "$EXPLICIT_CLEAN_OUTPUT"
 
 print -- ""
 print -- "install state tests: ${PASS} passed, ${FAIL} failed"
