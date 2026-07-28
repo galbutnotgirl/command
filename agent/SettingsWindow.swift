@@ -800,10 +800,6 @@ struct SetupView: View {
                     model.refresh()
                 }
             }
-        case "Right-click actions":
-            return CheckAction(label: "Learn") {
-                openHelpDoc(named: "install", fragment: "source")
-            }
         default:
             return nil
         }
@@ -2767,6 +2763,13 @@ struct ShortcutAliasEditor: View {
     let isCustomTrigger: Bool
     @ObservedObject var model: SettingsModel
 
+    private var isAddingShortcut: Bool {
+        model.recordingAction == ownerID
+            && model.recordingShortcutIndex == shortcuts.count
+            && !shortcuts.isEmpty
+            && shortcuts.count < 2
+    }
+
     var body: some View {
         HStack(spacing: 6) {
             if shortcuts.isEmpty {
@@ -2778,13 +2781,17 @@ struct ShortcutAliasEditor: View {
                                          isCustomTrigger: isCustomTrigger, model: model)
                 }
             }
-            if shortcuts.count < 2 {
+            if isAddingShortcut {
+                ShortcutCaptureField(ownerID: ownerID, shortcutIndex: shortcuts.count, shortcut: nil,
+                                     isCustomTrigger: isCustomTrigger, model: model)
+            } else if shortcuts.count < 2 {
                 Button {
                     model.startRecording(ownerID, shortcutIndex: shortcuts.count)
                 } label: {
                     Image(systemName: "plus.circle")
                 }
                 .buttonStyle(.plain)
+                .frame(width: 20, height: 30)
                 .help("Add alternate shortcut")
                 .accessibilityLabel("Add alternate shortcut")
             }
@@ -2805,45 +2812,50 @@ struct ShortcutCaptureField: View {
 
     var body: some View {
         HStack(spacing: 3) {
-        ZStack {
-            RoundedRectangle(cornerRadius: 7)
-                .fill(isRecording
-                    ? appPurple.opacity(0.12)
-                    : Color(nsColor: .controlBackgroundColor))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7)
-                        .stroke(isRecording ? appPurple : Color.gray.opacity(0.35), lineWidth: 1)
-                )
-            Text(isRecording ? "Press keys…" : (shortcut?.human ?? "—"))
-                .font(.system(.body, design: .rounded).bold())
-                .foregroundColor(isRecording ? appPurple : (shortcut == nil ? .secondary : .primary))
-                .lineLimit(1)
-                .padding(.horizontal, 7)
-        }
-        .frame(width: 92, height: 30)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if isRecording { model.cancelRecording() }
-            else { model.startRecording(ownerID, shortcutIndex: shortcutIndex) }
-        }
-        .help(isRecording ? "Press a key combo · Delete to clear · Esc to cancel" : "Click to set shortcut")
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(isRecording ? "Press keys" : (shortcut?.spoken ?? "Unassigned shortcut"))
-            if shortcut != nil {
-                Button {
-                    if isCustomTrigger {
-                        model.clearTriggerBinding(triggerID: ownerID, shortcutIndex: shortcutIndex)
-                    } else {
-                        model.clearBinding(ownerID, shortcutIndex: shortcutIndex)
-                    }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Remove shortcut")
-                .accessibilityLabel("Remove shortcut")
+            ZStack {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(isRecording
+                        ? appPurple.opacity(0.12)
+                        : Color(nsColor: .controlBackgroundColor))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7)
+                            .stroke(isRecording ? appPurple : Color.gray.opacity(0.35), lineWidth: 1)
+                    )
+                Text(isRecording ? "Press keys…" : (shortcut?.human ?? "—"))
+                    .font(.system(.body, design: .rounded).bold())
+                    .foregroundColor(isRecording ? appPurple : (shortcut == nil ? .secondary : .primary))
+                    .lineLimit(1)
+                    .padding(.horizontal, 7)
             }
+            .frame(width: 92, height: 30)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if isRecording { model.cancelRecording() }
+                else { model.startRecording(ownerID, shortcutIndex: shortcutIndex) }
+            }
+            .help(isRecording ? "Press a key combo · Delete to clear · Esc cancels" : "Click to set shortcut")
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(isRecording ? "Press keys" : (shortcut?.spoken ?? "Unassigned shortcut"))
+            Group {
+                if shortcut != nil {
+                    Button {
+                        if isCustomTrigger {
+                            model.clearTriggerBinding(triggerID: ownerID, shortcutIndex: shortcutIndex)
+                        } else {
+                            model.clearBinding(ownerID, shortcutIndex: shortcutIndex)
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Remove shortcut")
+                    .accessibilityLabel("Remove shortcut")
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(width: 20, height: 30)
         }
     }
 }
@@ -2944,15 +2956,6 @@ struct TroubleshootingView: View {
                 title: "Hotkeys configured",
                 ok: loadBindings().contains { $0.keycode > 0 },
                 fix: "No hotkeys bound. Open Shortcuts tab and assign at least one key.",
-                action: nil,
-                actionLabel: ""
-            ),
-            DiagItem(
-                title: "Quick Actions optional",
-                ok: true,
-                fix: fileExists(home("Library/Services/Claude - Add.workflow"))
-                    ? "Optional right-click Services are installed."
-                    : "Optional right-click Services are not installed. Global shortcuts do not need them; source installs can run ./install-quick-action.sh.",
                 action: nil,
                 actionLabel: ""
             ),

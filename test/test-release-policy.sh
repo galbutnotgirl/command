@@ -5,6 +5,12 @@ set -uo pipefail
 
 DIR="${0:A:h:h}"
 RELEASE="${DIR}/release.sh"
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+cp "$RELEASE" "$TMP_DIR/release.sh"
+chmod +x "$TMP_DIR/release.sh"
+print -r -- "1.2.0-alpha.999" > "$TMP_DIR/VERSION"
+ALPHA_RELEASE="$TMP_DIR/release.sh"
 PASS=0
 FAIL=0
 
@@ -39,6 +45,8 @@ expect_ok "local package config does not require notarization" \
 expect_fail_with "publish requires notarization" "--publish requires --notarize" \
   "$RELEASE" --publish --validate-config
 expect_ok "alpha publish allows explicit unnotarized override" \
+  "$ALPHA_RELEASE" --publish --allow-unnotarized --validate-config
+expect_fail_with "beta publish rejects explicit unnotarized override" "restricted to alpha versions" \
   "$RELEASE" --publish --allow-unnotarized --validate-config
 expect_fail_with "notarization requires keychain profile" "--notarize needs COMMAND_NOTARY_PROFILE" \
   env -u COMMAND_NOTARY_PROFILE "$RELEASE" --notarize --validate-config

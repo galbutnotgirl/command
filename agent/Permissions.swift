@@ -285,11 +285,6 @@ func componentChecks() -> [StatusCheck] {
         StatusCheck(title: "Codex workspace",
                     detail: UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory(),
                     state: FileManager.default.fileExists(atPath: UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory()) ? .ok : .missing),
-        StatusCheck(title: "Right-click actions",
-                    detail: fileExists(home("Library/Services/Claude - Add.workflow"))
-                        ? "Optional Quick Actions installed in ~/Library/Services."
-                        : "Optional source-install Services are not installed. Global shortcuts do not need them.",
-                    state: fileExists(home("Library/Services/Claude - Add.workflow")) ? .ok : .unknown),
         StatusCheck(title: "Clipboard History",
                     detail: UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
                         ? "Clipboard History running (bundled, starts with Command)."

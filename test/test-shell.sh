@@ -237,6 +237,7 @@ assert_not_contains "Claude route variable never shadows zsh PATH array" "$(sed 
 SEND_SOURCE="$(cat "$SEND_SCRIPT")"
 AGENT_SOURCE="$(cat "${DIR}/agent/main.swift")"
 SETTINGS_SOURCE="$(cat "${DIR}/agent/SettingsWindow.swift")"
+PERMISSIONS_SOURCE="$(cat "${DIR}/agent/Permissions.swift")"
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
   'helper_newchat ||'
 assert_contains "Native assistant shortcuts use tested core mapping" "$AGENT_SOURCE" \
@@ -253,6 +254,12 @@ assert_contains "Claude selector exposes combined Chat/Cowork destination" "$SET
   'Text("Chat/Cowork").tag("chat")'
 assert_not_contains "Claude selector no longer exposes separate Cowork destination" "$SETTINGS_SOURCE" \
   'Text("Cowork").tag("cowork")'
+assert_contains "alternate shortcut add shows a visible recording slot" "$SETTINGS_SOURCE" \
+  'shortcutIndex: shortcuts.count, shortcut: nil'
+assert_contains "shortcut action controls use fixed alignment tracks" "$SETTINGS_SOURCE" \
+  '.frame(width: 20, height: 30)'
+assert_not_contains "Set Up omits legacy right-click action status" "$PERMISSIONS_SOURCE" \
+  'StatusCheck(title: "Right-click actions"'
 assert_contains "paste targets assistant process when Electron window stays backgrounded" "$SEND_SOURCE" \
   'agent_cmd "pasteapp $TARGET_BUNDLE"'
 assert_contains "submit targets assistant process when Electron window stays backgrounded" "$SEND_SOURCE" \

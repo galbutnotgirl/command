@@ -34,16 +34,16 @@ if [ -d "$CHATGPT_APP" ]; then
     fail "ChatGPT Quick Chat contract is Command-Option-N"
   fi
   if [ -f "$ASAR" ] && node "$ASAR_CONTRACT" "$ASAR" \
-      'New Task' 'CmdOrCtrl\+N' >/dev/null 2>&1; then
-    pass "ChatGPT New Task resource contract is Command-N"
+      'codex\.commandMenuTitle\.newThread' 'CmdOrCtrl\+N' >/dev/null 2>&1; then
+    pass "ChatGPT New Chat resource contract is Command-N"
   else
-    fail "ChatGPT New Task resource contract is Command-N"
+    fail "ChatGPT New Chat resource contract is Command-N"
   fi
   if [ -f "$ASAR" ] && node "$ASAR_CONTRACT" "$ASAR" \
-      'New Projectless Task' 'CmdOrCtrl\+Alt\+O' >/dev/null 2>&1; then
-    pass "ChatGPT New Projectless Task resource contract is Command-Option-O"
+      'codex\.commandMenuTitle\.newProjectlessTask' 'CmdOrCtrl\+Alt\+O' >/dev/null 2>&1; then
+    pass "ChatGPT New standalone chat resource contract is Command-Option-O"
   else
-    fail "ChatGPT New Projectless Task resource contract is Command-Option-O"
+    fail "ChatGPT New standalone chat resource contract is Command-Option-O"
   fi
 else
   fail "ChatGPT app installed at /Applications/ChatGPT.app"
