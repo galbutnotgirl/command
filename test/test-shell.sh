@@ -389,6 +389,14 @@ assert_not_contains "build never deletes final app during assembly" "$BUILD_AGEN
 assert_contains "build exits after termination signal before rollback" "$BUILD_AGENT_SOURCE" \
   "trap 'exit 130' HUP INT TERM"
 
+AGENT_SOURCE="$(<"${DIR}/agent/main.swift")"
+assert_contains "modifier chords bypass Carbon for every action" "$AGENT_SOURCE" \
+  'eventTapOwnsShortcut(keycode: hk.keycode, isVoice: isBuiltInVoiceAction(hk.action))'
+assert_contains "modifier chords exclude their primary modifier bit" "$AGENT_SOURCE" \
+  'chordModifiers(activeModifiers: activeMods, primaryKeycode: kc)'
+assert_contains "modifier chords route through normal action dispatch" "$AGENT_SOURCE" \
+  'fireMediaAction(kc, mods: cm)'
+
 RELEASE_SOURCE="$(<"${DIR}/release.sh")"
 assert_contains "release builds package in a same-volume staging directory" "$RELEASE_SOURCE" \
   'PACKAGE_ROOT="$(mktemp -d "${DIST}/.command-release.XXXXXX")"'

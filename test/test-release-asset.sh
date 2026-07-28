@@ -111,6 +111,7 @@ fi
 for required_resource in \
   send-to-claude.sh \
   send-to-claude-lib.sh \
+  uninstall-command.sh \
   match-enrich-rule.py \
   CommandClipboardWatcher \
   update-swap.sh \

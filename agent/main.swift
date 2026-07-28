@@ -1317,9 +1317,9 @@ func registerFromConfig() {
     let sig = OSType(0x434D4447) // 'CMDG'
     for (i, hk) in loadHotkeys().enumerated() {
         guard hk.keycode != 0 else { continue }  // keycode 0 = 'A' key; 0 means unbound
-        // HID tap owns modifier-only/Fn/media voice keys. Carbon owns ordinary keys
+        // HID tap owns every modifier chord plus media voice keys. Carbon owns ordinary keys
         // like external-keyboard Home, which is more reliable for Kinesis keyboards.
-        if isBuiltInVoiceAction(hk.action), eventTapOwnsVoiceHotkey(keycode: hk.keycode) { continue }
+        if eventTapOwnsShortcut(keycode: hk.keycode, isVoice: isBuiltInVoiceAction(hk.action)) { continue }
         let hkID = UInt32(i + 1)
         let id = EventHotKeyID(signature: sig, id: hkID)
         hotkeyActions[hkID] = hk.action
@@ -1343,7 +1343,7 @@ func registerFromConfig() {
     for ca in loadCustomActions() where ca.enabled {
         for trig in ca.triggers where trig.enabled {
             for shortcut in trig.shortcuts {
-                if trig.kind == .voice, eventTapOwnsVoiceHotkey(keycode: shortcut.keycode) { continue }
+                if eventTapOwnsShortcut(keycode: shortcut.keycode, isVoice: trig.kind == .voice) { continue }
                 let hkID = UInt32(100 + triggerSlot)
                 triggerSlot += 1
                 let id = EventHotKeyID(signature: sig, id: hkID)
@@ -1649,15 +1649,11 @@ func startMediaKeyHook() {
                 appendLog("[eventTap] NX keyCode=\(keyCode) carbon=\(carbon) mods=\(cm)")
                 if settingsModel.recordingAction != nil {
                     DispatchQueue.main.async {
-                        if carbon == 63 {
-                            settingsModel.recordModifierOnlyHotkey(keycode: carbon)
-                        } else {
-                            settingsModel.recordHardwareHotkey(keycode: carbon, mods: cm)
-                        }
+                        settingsModel.recordHardwareHotkey(keycode: carbon, mods: cm)
                     }
                     return nil
                 }
-                if carbon == 63, let voiceTarget = voiceHotkeyTarget(keycode: carbon, mods: 0) {
+                if carbon == 63, let voiceTarget = voiceHotkeyTarget(keycode: carbon, mods: cm) {
                     if _voiceHeldKeycodes.contains(carbon) { return nil }
                     appendLog("[eventTap] NX voice down kc=\(carbon)")
                     _voiceHeldKeycodes.insert(carbon)
@@ -1674,19 +1670,31 @@ func startMediaKeyHook() {
                 return nil
             }
 
-            // --- bare modifier voice hotkeys (Command/Option/etc.) ---
+            // --- modifier and modifier-chord hotkeys (Command/Fn/etc.) ---
             if type == .flagsChanged {
                 let kc = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
                 guard MODIFIER_ONLY_KEYCODES.contains(kc) else { return passthrough }
+                // Local Settings monitor records modifier chords. Keep runtime
+                // dispatch paused until recorder commits or cancels.
+                if settingsModel.recordingAction != nil { return passthrough }
                 let isDown = isModifierKeyDown(keycode: kc, flags: event.flags)
+                let activeMods = physicalModifierMask(cgFlags: event.flags)
+                let cm = chordModifiers(activeModifiers: activeMods, primaryKeycode: kc)
                 if isDown {
-                    guard let voiceTarget = voiceHotkeyTarget(keycode: kc, mods: 0) else { return passthrough }
-                    if _voiceHeldKeycodes.contains(kc) { return nil }
-                    appendLog("[eventTap] modifier voice down kc=\(kc)")
-                    _voiceHeldKeycodes.insert(kc)
-                    DispatchQueue.main.async {
-                        Task { @MainActor in triggerVoiceHotkey(voiceTarget, keycode: CGKeyCode(kc)) }
+                    if let voiceTarget = voiceHotkeyTarget(keycode: kc, mods: cm) {
+                        if _voiceHeldKeycodes.contains(kc) { return nil }
+                        appendLog("[eventTap] modifier voice down kc=\(kc) mods=\(cm)")
+                        _voiceHeldKeycodes.insert(kc)
+                        DispatchQueue.main.async {
+                            Task { @MainActor in triggerVoiceHotkey(voiceTarget, keycode: CGKeyCode(kc)) }
+                        }
+                        return nil
                     }
+                    let bound = loadHotkeys().contains { $0.keycode == kc && $0.mods == cm }
+                        || triggerMatching(keycode: kc, mods: cm) != nil
+                    guard bound else { return passthrough }
+                    appendLog("[eventTap] modifier action down kc=\(kc) mods=\(cm)")
+                    DispatchQueue.main.async { fireMediaAction(kc, mods: cm) }
                     return nil
                 }
                 if _voiceHeldKeycodes.contains(kc) {

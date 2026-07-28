@@ -120,6 +120,8 @@ final class SettingsModel: ObservableObject {
     @Published var recordingAction: String? = nil
     @Published var recordingShortcutIndex: Int = 0
     @Published var bindingConflict: String? = nil
+    private var recordingModifierKeycodes: [UInt32] = []
+    private var recordingModifierPeak: [UInt32] = []
     @Published var claudeDestination: String
     @Published var codexDestination: String = UserDefaults.standard.string(forKey: "codexDestination") ?? "recent"
     @Published var defaultProvider: String = UserDefaults.standard.string(forKey: "defaultProvider") ?? "codex"
@@ -184,21 +186,12 @@ final class SettingsModel: ObservableObject {
         recordingAction = action
         recordingShortcutIndex = shortcutIndex
         bindingConflict = nil
+        resetRecordingModifiers()
         unregisterAllHotkeys()
     }
     func cancelRecording() {
         recordingAction = nil
-        reregisterHotkeys()
-    }
-
-    func recordModifierOnlyHotkey(keycode: UInt32) {
-        guard let action = recordingAction else { return }
-        let index = recordingShortcutIndex
-        let isCustomTrigger = customActions.contains { $0.triggers.contains { $0.id == action } }
-        guard canRecordModifierOnly(action: action, isCustomTrigger: isCustomTrigger) else { return }
-        recordingAction = nil
-        commitRecordedShortcut(action: action, shortcutIndex: index,
-                               isCustomTrigger: isCustomTrigger, keycode: keycode, mods: 0)
+        resetRecordingModifiers()
         reregisterHotkeys()
     }
 
@@ -206,7 +199,12 @@ final class SettingsModel: ObservableObject {
         guard let action = recordingAction else { return }
         let index = recordingShortcutIndex
         let isCustomTrigger = customActions.contains { $0.triggers.contains { $0.id == action } }
+        if MODIFIER_ONLY_KEYCODES.contains(keycode), mods == 0,
+           !canRecordModifierOnly(action: action, isCustomTrigger: isCustomTrigger) {
+            return
+        }
         recordingAction = nil
+        resetRecordingModifiers()
         commitRecordedShortcut(action: action, shortcutIndex: index,
                                isCustomTrigger: isCustomTrigger, keycode: keycode, mods: mods)
         reregisterHotkeys()
@@ -221,11 +219,29 @@ final class SettingsModel: ObservableObject {
         let index = recordingShortcutIndex
         let isCustomTrigger = customActions.contains { $0.triggers.contains { $0.id == action } }
         if ev.type == .flagsChanged {
-            guard canRecordModifierOnly(action: action, isCustomTrigger: isCustomTrigger),
-                  let key = activeModifierOnlyKeycode(from: ev) else { return true }
+            let key = UInt32(ev.keyCode)
+            guard MODIFIER_ONLY_KEYCODES.contains(key) else { return true }
+            if activeModifierOnlyKeycode(from: ev) != nil {
+                if !recordingModifierKeycodes.contains(key) { recordingModifierKeycodes.append(key) }
+                if recordingModifierKeycodes.count > recordingModifierPeak.count {
+                    recordingModifierPeak = recordingModifierKeycodes
+                }
+                return true
+            }
+
+            guard recordingModifierKeycodes.contains(key) else { return true }
+            let pressed = recordingModifierPeak
+            resetRecordingModifiers()
+            guard let primary = preferredModifierChordPrimary(pressedKeycodes: pressed),
+                  let chord = modifierChord(primaryKeycode: primary, pressedKeycodes: pressed) else { return true }
+            if pressed.count == 1,
+               !canRecordModifierOnly(action: action, isCustomTrigger: isCustomTrigger) {
+                return true
+            }
             recordingAction = nil
             commitRecordedShortcut(action: action, shortcutIndex: index,
-                                   isCustomTrigger: isCustomTrigger, keycode: key, mods: 0)
+                                   isCustomTrigger: isCustomTrigger,
+                                   keycode: chord.keycode, mods: chord.mods)
             reregisterHotkeys()
             return true
         }
@@ -248,6 +264,7 @@ final class SettingsModel: ObservableObject {
         guard KEYCODE_NAMES[key] != nil else { return true }                // ignore keys we can't name
         let carbonM = carbonMods(from: ev.modifierFlags)
         recordingAction = nil
+        resetRecordingModifiers()
         commitRecordedShortcut(action: action, shortcutIndex: index,
                                isCustomTrigger: isCustomTrigger, keycode: key, mods: carbonM)
         reregisterHotkeys()
@@ -273,6 +290,11 @@ final class SettingsModel: ObservableObject {
         case 63: return ev.modifierFlags.contains(.function) ? key : nil
         default: return nil
         }
+    }
+
+    private func resetRecordingModifiers() {
+        recordingModifierKeycodes.removeAll()
+        recordingModifierPeak.removeAll()
     }
 
     private func fnArrowNavigationKeycode(from ev: NSEvent) -> UInt32? {
@@ -3769,6 +3791,7 @@ struct AboutView: View {
     @State private var importBundle: GlobalImportBundle? = nil
     @State private var transferErrorTitle = ""
     @State private var transferError: String?
+    @State private var showingUninstallConfirmation = false
 
     private var version: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
@@ -3914,6 +3937,20 @@ struct AboutView: View {
                     }
                     if diagCopied { Text("Diagnostic info copied").font(.caption).foregroundColor(.secondary) }
                 }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Uninstall").font(.headline)
+                    Text("Remove Command, background services, and macOS approvals. Choose whether local settings and history stay available for a future reinstall.")
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(role: .destructive) {
+                        showingUninstallConfirmation = true
+                    } label: {
+                        Label("Uninstall Command…", systemImage: "trash")
+                    }
+                }
             }
             .padding(24)
         }
@@ -3931,6 +3968,17 @@ struct AboutView: View {
         } message: {
             Text(transferError ?? "Command could not complete this settings transfer.")
         }
+        .confirmationDialog("Uninstall Command?", isPresented: $showingUninstallConfirmation) {
+            Button("Uninstall and Keep My Data", role: .destructive) {
+                runUninstaller(removeData: false)
+            }
+            Button("Uninstall and Remove Everything", role: .destructive) {
+                runUninstaller(removeData: true)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Both options remove Command and reset Accessibility, Screen Recording, and Microphone approvals.")
+        }
     }
 
     private func runCheck() {
@@ -3942,6 +3990,30 @@ struct AboutView: View {
             case .available(let info): available = info; updateStatus = info.notes.isEmpty ? "" : info.notes
             case .failed(let msg):    updateStatus = msg
             }
+        }
+    }
+
+    private func runUninstaller(removeData: Bool) {
+        guard let bundled = Bundle.main.url(forResource: "uninstall-command", withExtension: "sh") else {
+            transferErrorTitle = "Uninstall Failed"
+            transferError = "Bundled uninstaller is missing."
+            return
+        }
+        do {
+            let temporary = FileManager.default.temporaryDirectory
+                .appendingPathComponent("command-uninstall-\(UUID().uuidString).sh")
+            try FileManager.default.copyItem(at: bundled, to: temporary)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: temporary.path)
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = [temporary.path,
+                                 removeData ? "--remove-data" : "--keep-data",
+                                 "--app-path", Bundle.main.bundlePath]
+            try process.run()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { NSApp.terminate(nil) }
+        } catch {
+            transferErrorTitle = "Uninstall Failed"
+            transferError = error.localizedDescription
         }
     }
 

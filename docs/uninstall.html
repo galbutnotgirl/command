@@ -38,7 +38,8 @@
       <a href="security.html">Security Policy</a>
       <a href="#standard">Standard Uninstall</a>
       <a href="#legacy">Legacy Clipboard Watcher</a>
-      <a href="#data">Optional Data Removal</a>
+      <a href="#data">Local Data</a>
+      <a href="#permissions">Permission Reset</a>
       <a href="#verify">Verify Removal</a>
       <a href="#reinstall">Reinstall Later</a>
       <a href="UNINSTALL.md">Markdown source</a>
@@ -51,7 +52,17 @@
 
       <section id="standard">
         <h2>Standard Uninstall</h2>
-        <p>For a downloaded app install:</p>
+        <p>In Command, open <strong>About</strong>, select <strong>Uninstall Command…</strong>, then choose whether to keep local data or remove everything.</p>
+        <ul>
+          <li><strong>Uninstall and Keep My Data</strong> removes the app, background services, Quick Actions, and approvals. Settings and history remain for a later reinstall.</li>
+          <li><strong>Uninstall and Remove Everything</strong> also removes Command settings, Clipboard History, Command History, dictation history, vocabulary, logs, and old clean-install backups. Unrelated Claude files remain untouched.</li>
+        </ul>
+        <p>Both options reset Accessibility, Screen Recording, and Microphone approvals. Command can revoke those approvals, but macOS never allows an app to grant them automatically.</p>
+        <p>For a source checkout or Terminal-based uninstall:</p>
+        <pre><code>./uninstall-command.sh --keep-data
+# or
+./uninstall-command.sh --remove-data</code></pre>
+        <p>For an older downloaded build without the bundled uninstaller:</p>
         <pre><code>launchctl bootout "gui/$(id -u)/com.claudecommand" 2&gt;/dev/null || true
 pkill -x Command 2&gt;/dev/null || true
 rm -f ~/Library/LaunchAgents/com.claudecommand.plist
@@ -69,18 +80,28 @@ rm -f ~/Library/LaunchAgents/com.claudecommand.clipwatch.plist</code></pre>
       </section>
 
       <section id="data">
-        <h2>Optional Data Removal</h2>
-        <p>Settings, histories, and logs are local. Remove only if you do not want to keep them for reinstall or debugging.</p>
+        <h2>Local Data</h2>
+        <p>Settings, histories, and logs stay local. Full removal targets only Command-owned files inside these locations.</p>
         <table>
           <thead><tr><th>Data</th><th>Path</th></tr></thead>
           <tbody>
-            <tr><td>Shortcuts, prompts, context, preferences</td><td><code>~/.claude/state/</code></td></tr>
+            <tr><td>Shortcuts, prompts, context, preferences</td><td>Named Command JSON files in <code>~/.claude/state/</code></td></tr>
             <tr><td>Clipboard History</td><td><code>~/.claude/state/cliphistory/</code></td></tr>
             <tr><td>Dictation History / vocabulary</td><td><code>~/Library/Application Support/DictationLab/</code></td></tr>
             <tr><td>Command History / background logs</td><td><code>~/Library/Application Support/claude-command/</code></td></tr>
             <tr><td>App logs</td><td><code>~/Library/Logs/claude-command.log</code> and <code>~/.claude/logs/</code></td></tr>
           </tbody>
         </table>
+        <p>Full uninstall does not remove the whole <code>~/.claude/state/</code> or <code>~/.claude/logs/</code> directory.</p>
+      </section>
+
+      <section id="permissions">
+        <h2>Permission Reset</h2>
+        <p>To reset approvals without uninstalling:</p>
+        <pre><code>tccutil reset Accessibility com.claudecommand
+tccutil reset ScreenCapture com.claudecommand
+tccutil reset Microphone com.claudecommand</code></pre>
+        <p>System Settings may need to be closed and reopened before stale rows disappear.</p>
       </section>
 
       <section id="verify">

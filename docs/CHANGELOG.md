@@ -8,6 +8,8 @@
 - Improved dictation tail retention, event-tap recovery after permission grants, and compact keyboard modifier glyphs.
 - Preserved settings, Clipboard History, and macOS permission identity across incremental installs.
 - Removed optional right-click actions from Set Up status and diagnostics.
+- Added modifier-only shortcut chords such as Command-Fn across built-in and custom actions.
+- Added an in-app uninstaller with keep-data and full-removal choices, scoped local cleanup, and macOS permission reset.
 
 - Fixed new projectless Codex sessions in current ChatGPT builds by matching the app's `Command-Option-O` shortcut instead of stale `Shift-Command-O` routing.
 - Warmed dictation cue audio with separate silent playback so first Purr cue starts at same volume as stop cue after cold launch.

@@ -27,6 +27,7 @@ cd ../.. && ./test/test-shell.sh
 ./test/test-build-transaction.sh
 ./test/test-release-transaction.sh
 ./test/test-install-state.sh
+./test/test-uninstall.sh
 ./test/test-updater-swap.sh
 ./test/test-restart-app.sh
 ./test/test-release-policy.sh
@@ -99,7 +100,7 @@ For custom notes, append them to same release command:
 
 Publishing without notarization is blocked by default. `--allow-unnotarized` exists only as an explicit emergency override for alpha versions and leaves users with Gatekeeper warning. Never use override for beta or stable release.
 
-Normal release runs also execute `swift test`, `node --test`, `./test/test-shell.sh`, `./test/test-build-transaction.sh`, `./test/test-release-transaction.sh`, `./test/test-install-state.sh`, `./test/test-updater-swap.sh`, `./test/test-restart-app.sh`, `./test/test-release-policy.sh`, `./test/test-static-analysis.sh`, `python3 ./test/test-docs.py`, `python3 ./test/test-pages.py`, and `python3 ./test/test_string_review.py` before packaging. App/core failures, transactional build or package regressions, background runner failures, fresh/incremental install-state regressions, updater copy/signature/rollback failures, restart handoff failures, signing/notarization policy regressions, syntax errors, broken docs, or stale bundled assets stop release. GitHub test workflow runs same suite plus `./release.sh --skip-checks` and `./test/test-release-asset.sh` as packaging smoke test on macOS. `--skip-checks` is only for local one-off packaging and CI packaging smoke tests.
+Normal release runs also execute `swift test`, `node --test`, `./test/test-shell.sh`, `./test/test-build-transaction.sh`, `./test/test-release-transaction.sh`, `./test/test-install-state.sh`, `./test/test-uninstall.sh`, `./test/test-updater-swap.sh`, `./test/test-restart-app.sh`, `./test/test-release-policy.sh`, `./test/test-static-analysis.sh`, `python3 ./test/test-docs.py`, `python3 ./test/test-pages.py`, and `python3 ./test/test_string_review.py` before packaging. App/core failures, transactional build or package regressions, background runner failures, fresh/incremental install-state regressions, scoped uninstall regressions, updater copy/signature/rollback failures, restart handoff failures, signing/notarization policy regressions, syntax errors, broken docs, or stale bundled assets stop release. GitHub test workflow runs same suite plus `./release.sh --skip-checks` and `./test/test-release-asset.sh` as packaging smoke test on macOS. `--skip-checks` is only for local one-off packaging and CI packaging smoke tests.
 
 ## After Publish
 

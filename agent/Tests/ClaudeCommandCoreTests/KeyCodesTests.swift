@@ -69,4 +69,34 @@ final class KeyCodesTests: XCTestCase {
         XCTAssertFalse(eventTapOwnsVoiceHotkey(keycode: 115))
         XCTAssertFalse(eventTapOwnsVoiceHotkey(keycode: 123))
     }
+
+    func testCommandFnChordKeepsFnAsPrimaryKey() {
+        let pressed: [UInt32] = [55, 63]
+        XCTAssertEqual(preferredModifierChordPrimary(pressedKeycodes: pressed), 63)
+        let chord = modifierChord(primaryKeycode: 63, pressedKeycodes: pressed)
+        XCTAssertEqual(chord?.keycode, 63)
+        XCTAssertEqual(chord?.mods, 256)
+        XCTAssertEqual(humanShortcut(keycode: chord!.keycode, mods: chord!.mods), "⌘fn")
+    }
+
+    func testModifierChordUsesLastPressedKeyWithoutFn() {
+        let pressed: [UInt32] = [55, 58]
+        XCTAssertEqual(preferredModifierChordPrimary(pressedKeycodes: pressed), 58)
+        let chord = modifierChord(primaryKeycode: 58, pressedKeycodes: pressed)
+        XCTAssertEqual(chord?.mods, 256)
+        XCTAssertEqual(humanShortcut(keycode: chord!.keycode, mods: chord!.mods), "⌘⌥")
+    }
+
+    func testChordModifiersExcludePrimaryModifierFamily() {
+        XCTAssertEqual(chordModifiers(activeModifiers: 256 | 2048, primaryKeycode: 58), 256)
+        XCTAssertEqual(chordModifiers(activeModifiers: 256, primaryKeycode: 63), 256)
+        XCTAssertEqual(chordModifiers(activeModifiers: 256, primaryKeycode: 55), 0)
+    }
+
+    func testEventTapOwnsModifierChordsForEveryAction() {
+        XCTAssertTrue(eventTapOwnsShortcut(keycode: 63, isVoice: false))
+        XCTAssertTrue(eventTapOwnsShortcut(keycode: 55, isVoice: false))
+        XCTAssertTrue(eventTapOwnsShortcut(keycode: 100, isVoice: true))
+        XCTAssertFalse(eventTapOwnsShortcut(keycode: 100, isVoice: false))
+    }
 }

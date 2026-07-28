@@ -15,7 +15,7 @@
 | Dictate -> Assistant | Unbound | Speak and send transcript to selected assistant. |
 | Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
-Every built-in action and custom trigger supports up to two shortcuts. Change prompt/action shortcuts in **Settings -> Shortcuts**, Clipboard History shortcut in **Clipboard History**, and dictation shortcuts in **Dictation Settings**. Click a key field and press a combo. Delete clears. Esc cancels.
+Every built-in action and custom trigger supports up to two shortcuts. Change prompt/action shortcuts in **Settings -> Shortcuts**, Clipboard History shortcut in **Clipboard History**, and dictation shortcuts in **Dictation Settings**. Click a key field and press a combo. Modifier-only chords such as Command-Fn are supported; hold Command, press Fn, then release. Delete clears. Esc cancels.
 
 The menu-bar menu only shows prompt/action shortcuts that are enabled and bound to a key. Unbound combinations such as Go stay editable in Settings but do not appear in the menu.
 
@@ -25,6 +25,7 @@ The menu-bar menu only shows prompt/action shortcuts that are enabled and bound 
 |---|---|
 | Home, End, PgUp, PgDn | Good choices for press-and-hold dictation because they avoid F-key media behavior on many keyboards. rebind dictation shortcuts in Dictation Settings. |
 | F6/F7/F8 and Fn | Default alpha choices. F6/F7/F8 can still conflict with app shortcuts, and Fn may depend on keyboard settings. |
+| Command-Fn and other modifier chords | Hold first modifier, press final modifier, then release. |
 | Press-and-hold voice | Hold to record, release after the last word. The stop sound confirms release; the active menu-bar chip can stay visible while tail capture, transcription, cleanup, and dispatch finish. |
 | Double-tap voice | Double-tap to lock recording on when holding is awkward; stop from the menu or dictation control. |
 

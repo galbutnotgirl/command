@@ -106,6 +106,14 @@ if [ -f "$RESTART_HELPER" ]; then
 else
   print -- "[agent] ERROR missing restart-app.sh"; exit 1
 fi
+UNINSTALLER="${DIR}/uninstall-command.sh"
+if [ -f "$UNINSTALLER" ]; then
+  cp "$UNINSTALLER" "${APP}/Contents/Resources/uninstall-command.sh"
+  chmod +x "${APP}/Contents/Resources/uninstall-command.sh"
+  print -- "[agent] bundled uninstall-command.sh"
+else
+  print -- "[agent] ERROR missing uninstall-command.sh"; exit 1
+fi
 
 # Bundle end-user docs so About's docs buttons work before a release is pushed
 # and when the user is offline.

@@ -32,6 +32,8 @@ Use **Shortcut Settings** for prompt-centered commands.
 | Custom Actions | User-defined prompt groups with selected text, screenshot, popup, or voice triggers. |
 | Trigger rows | Per-trigger key binding plus optional delivery, destination, and auto-submit override. |
 
+Every key-binding field supports up to two shortcuts, including modifier-only chords such as Command-Fn. Hold Command, press Fn, then release to record that chord.
+
 Inheritance rule: `—` means no override. Trigger settings win over action defaults. Action defaults win over global destination. Destination applies to New and Go prompts; Existing conversation keeps the current assistant surface.
 
 ## Context

@@ -9,6 +9,18 @@ Repo: `galbutnotgirl/command`. Current version: **1.2.0-alpha.8**
 (`git checkout checkpoint-before-trigger-refactor` rolls back to just before the biggest
 recent change if something in there needs undoing).
 
+## Modifier chords and uninstaller (2026-07-28)
+
+- Shortcut capture now waits through modifier press/release sequences and records chords such
+  as Command-Fn instead of committing first modifier immediately. Fn remains primary key because
+  Carbon has no Fn modifier bit; event-tap runtime dispatch uses exact remaining modifier mask.
+- Modifier chords route built-in and custom actions through same dispatcher. Bare modifier keys
+  remain limited to dictation/voice actions to avoid stealing ordinary Command/Option use.
+- About now includes Uninstall Command with keep-data and full-removal choices. Both reset
+  Accessibility, Screen Recording, and Microphone approvals. Full removal targets only named
+  Command state and log files; unrelated Claude data remains untouched.
+- Rollback checkpoint: `checkpoint/2026-07-28-1515-modifier-chords-uninstaller`.
+
 ## Latest release hardening (2026-07-22)
 
 - GitHub test workflow now runs same Pages validator as local release preflight, enforces

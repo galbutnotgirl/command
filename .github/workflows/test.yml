@@ -52,6 +52,9 @@ jobs:
       - name: Fresh and incremental install state tests
         run: ./test/test-install-state.sh
 
+      - name: Uninstall ownership and permission-reset tests
+        run: ./test/test-uninstall.sh
+
       - name: Updater install and rollback tests
         run: ./test/test-updater-swap.sh
 

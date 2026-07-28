@@ -32,8 +32,42 @@ public let KEYCODE_NAMES: [UInt32: String] = [
 public let MODIFIER_ONLY_KEYCODES: Set<UInt32> = [54, 55, 56, 58, 59, 60, 61, 62, 63]
 public let MEDIA_KEYCODES: Set<UInt32> = [96, 97, 98, 99, 100, 101]
 
+public func carbonModifierMask(for keycode: UInt32) -> UInt32 {
+    switch keycode {
+    case 54, 55: return 256
+    case 56, 60: return 512
+    case 58, 61: return 2048
+    case 59, 62: return 4096
+    default: return 0 // Fn has no Carbon modifier bit; it remains the primary key.
+    }
+}
+
+public func chordModifiers(activeModifiers: UInt32, primaryKeycode: UInt32) -> UInt32 {
+    activeModifiers & ~carbonModifierMask(for: primaryKeycode)
+}
+
+public func modifierChord(primaryKeycode: UInt32, pressedKeycodes: [UInt32]) -> (keycode: UInt32, mods: UInt32)? {
+    guard MODIFIER_ONLY_KEYCODES.contains(primaryKeycode),
+          pressedKeycodes.contains(primaryKeycode) else { return nil }
+    let mods = pressedKeycodes
+        .filter { $0 != primaryKeycode }
+        .reduce(UInt32(0)) { $0 | carbonModifierMask(for: $1) }
+    return (primaryKeycode, mods)
+}
+
+public func preferredModifierChordPrimary(pressedKeycodes: [UInt32]) -> UInt32? {
+    guard !pressedKeycodes.isEmpty else { return nil }
+    // Fn cannot be represented as a Carbon modifier bit, so it must be the
+    // primary key whenever present. Otherwise use the last key pressed.
+    return pressedKeycodes.contains(63) ? 63 : pressedKeycodes.last
+}
+
 public func eventTapOwnsVoiceHotkey(keycode: UInt32) -> Bool {
     MODIFIER_ONLY_KEYCODES.contains(keycode) || MEDIA_KEYCODES.contains(keycode)
+}
+
+public func eventTapOwnsShortcut(keycode: UInt32, isVoice: Bool) -> Bool {
+    MODIFIER_ONLY_KEYCODES.contains(keycode) || (isVoice && MEDIA_KEYCODES.contains(keycode))
 }
 
 public func fnNavigationKeycode(sourceKeycode: UInt16, functionPressed: Bool) -> UInt32? {

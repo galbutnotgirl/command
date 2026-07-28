@@ -35,13 +35,14 @@ Default built-in shortcuts:
 | Dictate -> Assistant | Unbound | Speak and send transcript to selected assistant. |
 | Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
-You can assign up to two key commands to every prompt, custom trigger, Clipboard History action, or dictation action. Use the second slot for an external-keyboard key such as Home and a laptop-friendly alternative. Open the relevant editor, click a key field, press a combo, press Delete to clear, or Esc to cancel. Dictation shortcuts live in **Settings -> Dictation Settings**.
+You can assign up to two key commands to every prompt, custom trigger, Clipboard History action, or dictation action. Use the second slot for an external-keyboard key such as Home and a laptop-friendly alternative. Modifier chords such as Command-Fn work without a letter or function-row key: hold Command, press Fn, then release. Open the relevant editor, click a key field, press a combo, press Delete to clear, or Esc to cancel. Dictation shortcuts live in **Settings -> Dictation Settings**.
 
 Shortcut capture notes:
 
 | Case | Guidance |
 |---|---|
 | F6/F7/F8 and Fn | Default alpha bindings. F6/F7/F8 can still conflict with app shortcuts, and Fn may depend on keyboard settings. |
+| Command-Fn and other modifier chords | Hold first modifier, press final modifier, then release. Fn becomes trigger key when included. |
 | Home, End, PgUp, PgDn | Useful alternatives for press-and-hold dictation on keyboards where F-keys conflict. rebind dictation shortcuts in Dictation Settings. |
 | Press-and-hold dictation | Hold to record, release after the last word. The stop sound confirms release; the active menu-bar chip may stay visible while tail capture, transcription, cleanup, and dispatch finish. |
 | Locked dictation | Double-tap to lock recording on when holding is awkward; stop from the menu or dictation control. |
