@@ -1673,6 +1673,9 @@ REQUIRED_TEXT = {
         "bundled README.md missing latest release badge",
         "bundled README.md missing MIT license badge",
     ],
+    "test/test-build-transaction.sh": [
+        "uninstall-command.sh",
+    ],
     "docs/site.css": [
         ".skip-link",
         ".media-frame",

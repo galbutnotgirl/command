@@ -28,7 +28,7 @@ cp -R "$ROOT/docs/." "$FIXTURE/docs/"
 cp "$ROOT/vendor/claude-command-capture/src/"*.js "$FIXTURE/vendor/claude-command-capture/src/"
 cp "$ROOT/vendor/claude-command-capture/bin/"*.js "$FIXTURE/vendor/claude-command-capture/bin/"
 for resource in send-to-claude.sh send-to-claude-lib.sh match-enrich-rule.py \
-  update-swap.sh restart-app.sh capture-handoff.sh README.md VERSION; do
+  update-swap.sh restart-app.sh uninstall-command.sh capture-handoff.sh README.md VERSION; do
   cp "$ROOT/$resource" "$FIXTURE/$resource"
 done
 print -r -- '// fixture' > "$FIXTURE/agent/main.swift"
