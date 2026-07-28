@@ -114,4 +114,3 @@ for app_path in "${APP_PATHS[@]}"; do
 done
 
 log "complete"
-/usr/bin/osascript -e 'display notification "Command was removed." with title "Command Uninstaller"' >/dev/null 2>&1 || true
