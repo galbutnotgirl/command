@@ -99,6 +99,22 @@ final class TemplatesTests: XCTestCase {
         XCTAssertTrue(docs.url.contains("/document/"), "expected /document/ in \(docs.url)")
     }
 
+    func testSlackDefaultRequestsThreadAndNearbyMessages() {
+        let slack = DEFAULT_ENRICH_RULES.first { $0.displayName == "Slack" }
+        XCTAssertTrue(slack?.text.contains("surrounding thread") == true)
+        XCTAssertTrue(slack?.text.contains("surrounding messages") == true)
+    }
+
+    func testGoogleDefaultsEndAtURL() {
+        let googleRules = DEFAULT_ENRICH_RULES.filter {
+            $0.pattern == "docs.google.com" || $0.pattern == "drive.google.com"
+        }
+        XCTAssertFalse(googleRules.isEmpty)
+        for rule in googleRules {
+            XCTAssertTrue(rule.text.hasSuffix("({url})"), "unexpected Google rule: \(rule.text)")
+        }
+    }
+
     func testComposePreviewWithoutSourceContext() {
         let source = PreviewSource(label: "Generic", appName: "Chrome", url: "", enrich: "", displayName: "")
         let out = composePreview(action: "add", template: "{selection}", source: source, selection: "hi", includeContext: false)

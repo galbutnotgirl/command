@@ -102,7 +102,7 @@ public struct EnrichRule: Identifiable, Sendable {
 // App-name matching (not bundle ID) throughout — Slack and Granola should be found
 // and edited the same way, and app names are what you'd actually recognize/type.
 public let DEFAULT_ENRICH_RULES: [EnrichRule] = [
-    EnrichRule(match: .app, pattern: "Slack", text: "From Slack. Use the Slack MCP to find this exact message (search by the text), then pull the channel, thread permalink, author and surrounding thread.",
+    EnrichRule(match: .app, pattern: "Slack", text: "From Slack. Use the Slack MCP to find this exact message (search by the text), then pull the channel, thread permalink, author, surrounding thread, and surrounding messages.",
                displayName: "Slack"),
     EnrichRule(match: .host, pattern: "mail.google.com", text: "From Gmail — use the Gmail MCP to find the source thread for full context.",
                displayName: "Gmail"),
@@ -111,19 +111,19 @@ public let DEFAULT_ENRICH_RULES: [EnrichRule] = [
     // Docs, Sheets, and Slides all live under docs.google.com, split only by URL
     // *path* (/document/, /spreadsheets/, /presentation/) — pathPrefix tells them
     // apart now that the matcher supports it (host alone can't).
-    EnrichRule(match: .host, pattern: "docs.google.com", text: "From a Google Doc ({url}) — read it via gws if useful, obey the editable-doc rule before any write.",
+    EnrichRule(match: .host, pattern: "docs.google.com", text: "From a Google Doc ({url})",
                displayName: "Google Docs", pathPrefix: "/document/"),
-    EnrichRule(match: .host, pattern: "docs.google.com", text: "From a Google Sheet ({url}) — read it via gws if useful, obey the editable-doc rule before any write.",
+    EnrichRule(match: .host, pattern: "docs.google.com", text: "From a Google Sheet ({url})",
                displayName: "Google Sheets", pathPrefix: "/spreadsheets/"),
-    EnrichRule(match: .host, pattern: "docs.google.com", text: "From a Google Slides deck ({url}) — read it via gws if useful, obey the editable-doc rule before any write.",
+    EnrichRule(match: .host, pattern: "docs.google.com", text: "From a Google Slides deck ({url})",
                displayName: "Google Slides", pathPrefix: "/presentation/"),
     // Fallback for anything else under docs.google.com (rare — most traffic hits
     // one of the three paths above) or drive.google.com itself, where a file's
     // Docs/Sheets/Slides-ness isn't in the URL at all.
     EnrichRule(match: .host, pattern: "docs.google.com",
-               text: "From a Google Drive file ({url}) — Docs, Sheets, or Slides; read it via gws if useful, obey the editable-doc rule before any write.",
+               text: "From a Google Drive file ({url})",
                displayName: "Google Drive"),
-    EnrichRule(match: .host, pattern: "drive.google.com", text: "From Google Drive ({url}) — use gws drive to inspect or download the file before acting.",
+    EnrichRule(match: .host, pattern: "drive.google.com", text: "From Google Drive ({url})",
                displayName: "Google Drive"),
     EnrichRule(match: .host, pattern: "app.gong.io", text: "From Gong — use the Gong MCP to pull the related call/transcript.",
                displayName: "Gong"),

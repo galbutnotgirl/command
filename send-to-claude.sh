@@ -278,7 +278,7 @@ else
   # App-name matching throughout (not bundle ID) — same as the Swift defaults, so
   # editing "Slack" in Templates and seeing this fallback behave identically.
   case "$APP_NAME" in
-    Slack) ENRICH="From Slack. Use the Slack MCP to find this exact message (search by the text), then pull the channel, thread permalink, author and surrounding thread." DISPLAY_NAME="Slack" ;;
+    Slack) ENRICH="From Slack. Use the Slack MCP to find this exact message (search by the text), then pull the channel, thread permalink, author, surrounding thread, and surrounding messages." DISPLAY_NAME="Slack" ;;
     Granola) ENRICH="From Granola — treat the meeting transcript as context via the Granola MCP." DISPLAY_NAME="Granola" ;;
   esac
   case "$BUNDLE_ID" in
@@ -291,13 +291,13 @@ else
     # Docs/Sheets/Slides all live under docs.google.com, split by URL path.
     docs.google.com)
       case "$URL_PATH" in
-        /document/*)     ENRICH="From a Google Doc (${URL}) — read it via gws if useful, obey the editable-doc rule before any write." DISPLAY_NAME="Google Docs" ;;
-        /spreadsheets/*) ENRICH="From a Google Sheet (${URL}) — read it via gws if useful, obey the editable-doc rule before any write." DISPLAY_NAME="Google Sheets" ;;
-        /presentation/*) ENRICH="From a Google Slides deck (${URL}) — read it via gws if useful, obey the editable-doc rule before any write." DISPLAY_NAME="Google Slides" ;;
-        *) ENRICH="From a Google Drive file (${URL}) — Docs, Sheets, or Slides; read it via gws if useful, obey the editable-doc rule before any write." DISPLAY_NAME="Google Drive" ;;
+        /document/*)     ENRICH="From a Google Doc (${URL})" DISPLAY_NAME="Google Docs" ;;
+        /spreadsheets/*) ENRICH="From a Google Sheet (${URL})" DISPLAY_NAME="Google Sheets" ;;
+        /presentation/*) ENRICH="From a Google Slides deck (${URL})" DISPLAY_NAME="Google Slides" ;;
+        *) ENRICH="From a Google Drive file (${URL})" DISPLAY_NAME="Google Drive" ;;
       esac
       ;;
-    drive.google.com) ENRICH="From Google Drive (${URL}) — use gws drive to inspect or download the file before acting." DISPLAY_NAME="Google Drive" ;;
+    drive.google.com) ENRICH="From Google Drive (${URL})" DISPLAY_NAME="Google Drive" ;;
     app.gong.io)     ENRICH="From Gong — use the Gong MCP to pull the related call/transcript." DISPLAY_NAME="Gong" ;;
     *.lightning.force.com|*.salesforce.com) ENRICH="From Salesforce — use the Salesforce MCP to pull the related record." DISPLAY_NAME="Salesforce" ;;
   esac
@@ -362,7 +362,7 @@ open_new() {  # $1 = q text (may be empty)
     elif [ "$CLAUDE_DESTINATION" = "recent" ]; then
       route="native-current-session"
     elif [ "$CLAUDE_DESTINATION" = "cowork" ]; then
-      route="claude://cowork/new"
+      route="claude://claude.ai/new?surface=cowork"
     elif [ "$CLAUDE_DESTINATION" = "code" ]; then
       route="claude://code/new"
     else
@@ -419,13 +419,27 @@ open_new() {  # $1 = q text (may be empty)
   local routePath
   case "$CLAUDE_DESTINATION" in
     chat)   routePath="claude.ai/new" ;;
-    cowork) routePath="cowork/new" ;;
+    cowork) routePath="claude.ai/new?surface=cowork" ;;
     *)      routePath="code/new" ;;
   esac
-  local link="claude://${routePath}?q=$(urlencode "$q")"
+  local separator="?"
+  [[ "$routePath" == *\?* ]] && separator="&"
+  local link="claude://${routePath}"
+  # Latest Claude combines Chat and Cowork in one window. Navigate first, then
+  # paste text into that surface. Screenshot delivery keeps q in the URL because
+  # replacing the clipboard here would discard the captured image.
+  if [ "${IMG:-0}" = "1" ] || [ "$CLAUDE_DESTINATION" = "code" ]; then
+    link="${link}${separator}q=$(urlencode "$q")"
+  fi
   log "open new session dest=$CLAUDE_DESTINATION chars=${#link}"
   /usr/bin/open -b "$TARGET_BUNDLE" "$link" 2>/dev/null || return 1
   sleep 0.45
+  if [ "${IMG:-0}" != "1" ] && [ "$CLAUDE_DESTINATION" != "code" ] && [ -n "$q" ]; then
+    wait_for_assistant || { notify "Claude did not open the requested $CLAUDE_DESTINATION surface."; return 1; }
+    wait_for_editor || { notify "Claude $CLAUDE_DESTINATION input is not ready. Open a conversation and try again."; return 1; }
+    copy_for_send "$q" "$COPY_SOURCE"
+    helper_paste || return 1
+  fi
 }
 
 paste_codex_pending() {

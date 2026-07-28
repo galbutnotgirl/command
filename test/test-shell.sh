@@ -220,12 +220,17 @@ assert_contains "Claude Recent keeps current selected Claude surface" "$CLAUDE_R
   "route=native-current-session"
 
 CLAUDE_COWORK_DRY_OUTPUT="$(ACTION=comment DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=claude CLAUDE_DESTINATION=cowork zsh "$SEND_SCRIPT" 2>/dev/null)"
-assert_contains "Claude Cowork uses installed app deep link contract" "$CLAUDE_COWORK_DRY_OUTPUT" \
-  "route=claude://cowork/new"
+assert_contains "Claude Cowork uses unified Claude surface route" "$CLAUDE_COWORK_DRY_OUTPUT" \
+  "route=claude://claude.ai/new?surface=cowork"
 
 CLAUDE_CODE_DRY_OUTPUT="$(ACTION=comment DRY_RUN=1 CAPTURED_TEXT=x COMMAND_PROVIDER=claude CLAUDE_DESTINATION=code zsh "$SEND_SCRIPT" 2>/dev/null)"
 assert_contains "Claude Code uses installed app deep link contract" "$CLAUDE_CODE_DRY_OUTPUT" \
   "route=claude://code/new"
+CLAUDE_OPEN_NEW_SOURCE="$(sed -n '/open_new()/,/paste_codex_pending()/p' "$SEND_SCRIPT")"
+assert_contains "Claude Chat and Cowork wait for requested composer" "$CLAUDE_OPEN_NEW_SOURCE" \
+  'wait_for_editor ||'
+assert_contains "Claude Chat and Cowork paste after navigation" "$CLAUDE_OPEN_NEW_SOURCE" \
+  'copy_for_send "$q" "$COPY_SOURCE"'
 assert_not_contains "Claude route variable never shadows zsh PATH array" "$(sed -n '/open_new()/,/paste_codex_pending()/p' "$SEND_SCRIPT")" \
   'local path'
 

@@ -76,6 +76,13 @@ if [ -d "$CLAUDE_APP" ]; then
     fail "Claude Cowork deep link accepts /new with q"
   fi
   if node "$ASAR_CONTRACT" "$CLAUDE_ASAR" \
+      'surface:[A-Za-z_$][A-Za-z0-9_$]*\.searchParams\.get\("surface"\)' \
+      '="surface",[A-Za-z_$][A-Za-z0-9_$]*="cowork"' >/dev/null 2>&1; then
+    pass "Claude unified New route accepts Cowork surface"
+  else
+    fail "Claude unified New route accepts Cowork surface"
+  fi
+  if node "$ASAR_CONTRACT" "$CLAUDE_ASAR" \
       'pathname!=="/new".{0,200}claudeURLHandler: unrecognized code path' \
       'searchParams\.get\("q"\)\?\?.{0,100}searchParams\.get\("prompt"\)' \
       'desktop_code_deeplink_received' >/dev/null 2>&1; then
