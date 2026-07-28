@@ -1144,6 +1144,7 @@ struct BuiltInComposeSummaryRow: View {
             Text(binding.human)
                 .font(.system(.body, design: .rounded).bold())
                 .frame(width: ShortcutRowLayout.shortcut, alignment: .trailing)
+                .accessibilityLabel(binding.spoken)
         }
         .frame(maxWidth: .infinity)
     }
@@ -1427,6 +1428,7 @@ struct TriggerSummaryRow: View {
             Text(trigger.human)
                 .font(.system(.body, design: .rounded).bold())
                 .frame(width: ShortcutRowLayout.shortcut, alignment: .trailing)
+                .accessibilityLabel(trigger.spoken)
         }
         .frame(maxWidth: .infinity)
         .padding(.leading, ShortcutRowLayout.nestedLeading)
@@ -2823,6 +2825,8 @@ struct ShortcutCaptureField: View {
             else { model.startRecording(ownerID, shortcutIndex: shortcutIndex) }
         }
         .help(isRecording ? "Press a key combo · Delete to clear · Esc to cancel" : "Click to set shortcut")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(isRecording ? "Press keys" : (shortcut?.spoken ?? "Unassigned shortcut"))
             if shortcut != nil {
                 Button {
                     if isCustomTrigger {

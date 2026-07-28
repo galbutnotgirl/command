@@ -46,6 +46,7 @@ public struct HotkeyShortcut: Hashable, Sendable {
     }
 
     public var human: String { humanShortcut(keycode: keycode, mods: mods) }
+    public var spoken: String { spokenShortcut(keycode: keycode, mods: mods) }
 }
 
 public func normalizedShortcuts(_ values: [HotkeyShortcut]) -> [HotkeyShortcut] {
@@ -122,6 +123,7 @@ public struct HotkeyBinding: Identifiable {
         }
     }
     public var human: String { shortcuts.isEmpty ? "—" : shortcuts.map(\.human).joined(separator: " / ") }
+    public var spoken: String { shortcuts.isEmpty ? "Unassigned" : shortcuts.map(\.spoken).joined(separator: " or ") }
     public var name: String { actionName(action) }
     public var detail: String { actionDetail(action) }
     public var isVisibleInMenu: Bool { enabled && !shortcuts.isEmpty }
@@ -306,6 +308,7 @@ public struct ActionTrigger: Identifiable, Sendable {
         }
     }
     public var human: String { shortcuts.isEmpty ? "—" : shortcuts.map(\.human).joined(separator: " / ") }
+    public var spoken: String { shortcuts.isEmpty ? "Unassigned" : shortcuts.map(\.spoken).joined(separator: " or ") }
 
     public init(id: String = UUID().uuidString, kind: ActionKind, keycode: UInt32 = 0, mods: UInt32 = 0,
                 enabled: Bool = true, isAutoSubmitOverride: Bool? = nil, sessionModeOverride: String? = nil,

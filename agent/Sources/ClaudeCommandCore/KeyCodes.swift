@@ -22,8 +22,8 @@ public let KEYCODE_NAMES: [UInt32: String] = [
     37:"L",46:"M",45:"N",31:"O",35:"P",12:"Q",15:"R",1:"S",17:"T",32:"U",
     9:"V",13:"W",7:"X",16:"Y",6:"Z",18:"1",19:"2",20:"3",21:"4",23:"5",
     22:"6",26:"7",28:"8",25:"9",29:"0",49:"Space",
-    63:"Fn",55:"Command",54:"Right Command",58:"Option",61:"Right Option",
-    59:"Control",62:"Right Control",56:"Shift",60:"Right Shift",
+    63:"fn",55:"⌘",54:"R⌘",58:"⌥",61:"R⌥",
+    59:"⌃",62:"R⌃",56:"⇧",60:"R⇧",
     122:"F1",120:"F2",99:"F3",118:"F4",96:"F5",97:"F6",98:"F7",100:"F8",
     101:"F9",109:"F10",103:"F11",111:"F12",
     115:"Home",119:"End",116:"PgUp",121:"PgDn",117:"⌦",
@@ -52,6 +52,29 @@ public func humanShortcut(keycode: UInt32, mods: UInt32) -> String {
     for mod in CARBON_MODS where (mods & mod.mask) != 0 { s += mod.symbol }
     s += KEYCODE_NAMES[keycode] ?? "?"
     return s
+}
+
+public func spokenShortcut(keycode: UInt32, mods: UInt32) -> String {
+    var parts: [String] = []
+    for (name, mask) in [("Control", UInt32(4096)), ("Option", 2048), ("Shift", 512), ("Command", 256)]
+        where (mods & mask) != 0 {
+        parts.append(name)
+    }
+    let keyName: String
+    switch keycode {
+    case 54: keyName = "Right Command"
+    case 55: keyName = "Command"
+    case 56: keyName = "Shift"
+    case 58: keyName = "Option"
+    case 59: keyName = "Control"
+    case 60: keyName = "Right Shift"
+    case 61: keyName = "Right Option"
+    case 62: keyName = "Right Control"
+    case 63: keyName = "Function"
+    default: keyName = KEYCODE_NAMES[keycode] ?? "Unknown key"
+    }
+    parts.append(keyName)
+    return parts.joined(separator: " ")
 }
 
 #if canImport(AppKit)

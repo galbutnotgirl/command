@@ -244,6 +244,10 @@ assert_not_contains "Codex projectless task no longer uses stale Shift-Command-O
   'shift: isProjectless,'
 assert_contains "Native session commands target assistant process directly" "$AGENT_SOURCE" \
   'd.postToPid(app.processIdentifier)'
+assert_contains "voice event tap waits for Accessibility instead of giving up" "$AGENT_SOURCE" \
+  'scheduleMediaKeyHookRetry()'
+assert_contains "voice event tap reports missing Accessibility" "$AGENT_SOURCE" \
+  'waiting for Accessibility before installing media/voice hook'
 assert_contains "paste targets assistant process when Electron window stays backgrounded" "$SEND_SOURCE" \
   'agent_cmd "pasteapp $TARGET_BUNDLE"'
 assert_contains "submit targets assistant process when Electron window stays backgrounded" "$SEND_SOURCE" \

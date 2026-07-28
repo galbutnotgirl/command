@@ -59,7 +59,7 @@ final class VoiceSettingsTests: XCTestCase {
         XCTAssertEqual(byAction["dictateadd"]?.mods, 0)
         XCTAssertEqual(byAction["dictateadd2"]?.keycode, 0)
         XCTAssertEqual(byAction["dictateadd2"]?.mods, 0)
-        XCTAssertEqual(HotkeyBinding(action: "dictate", keycode: 63, mods: 0, enabled: true).human, "Fn")
+        XCTAssertEqual(HotkeyBinding(action: "dictate", keycode: 63, mods: 0, enabled: true).human, "fn")
         XCTAssertEqual(HotkeyBinding(action: "dictateadd", keycode: 0, mods: 0, enabled: true).human, "—")
         XCTAssertEqual(HotkeyBinding(action: "dictateadd2", keycode: 0, mods: 0, enabled: true).human, "—")
     }

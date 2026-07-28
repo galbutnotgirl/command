@@ -25,13 +25,21 @@ final class KeyCodesTests: XCTestCase {
         XCTAssertEqual(humanShortcut(keycode: 98, mods: 2048), "⌥F7")
     }
 
-    func testModifierOnlyKeysDisplayByName() {
-        XCTAssertEqual(humanShortcut(keycode: 55, mods: 0), "Command")
-        XCTAssertEqual(humanShortcut(keycode: 58, mods: 0), "Option")
-        XCTAssertEqual(humanShortcut(keycode: 63, mods: 0), "Fn")
+    func testModifierOnlyKeysDisplayAsCompactKeyboardGlyphs() {
+        XCTAssertEqual(humanShortcut(keycode: 55, mods: 0), "⌘")
+        XCTAssertEqual(humanShortcut(keycode: 58, mods: 0), "⌥")
+        XCTAssertEqual(humanShortcut(keycode: 56, mods: 0), "⇧")
+        XCTAssertEqual(humanShortcut(keycode: 59, mods: 0), "⌃")
+        XCTAssertEqual(humanShortcut(keycode: 63, mods: 0), "fn")
         XCTAssertTrue(MODIFIER_ONLY_KEYCODES.contains(55))
         XCTAssertTrue(MODIFIER_ONLY_KEYCODES.contains(58))
         XCTAssertTrue(MODIFIER_ONLY_KEYCODES.contains(63))
+    }
+
+    func testShortcutAccessibilityNamesRemainReadable() {
+        XCTAssertEqual(spokenShortcut(keycode: 55, mods: 0), "Command")
+        XCTAssertEqual(spokenShortcut(keycode: 63, mods: 0), "Function")
+        XCTAssertEqual(spokenShortcut(keycode: 98, mods: 256 | 512), "Shift Command F7")
     }
 
     func testCarbonModsFromCocoaFlagsRoundTrips() {

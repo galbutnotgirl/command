@@ -1392,6 +1392,8 @@ let MEDIA_TO_CARBON: [Int: UInt32] = [
 ]
 
 private var _mediaEventTap: CFMachPort?
+private var _mediaHookRetryScheduled = false
+private var _mediaHookWaitingForAccessibility = false
 // NX_SYSDEFINED events fire repeating isDown=true while held (no autorepeat flag).
 // Track held state per keyCode to swallow repeats without breaking double-tap detection.
 private var _nxHeld: [Int: Bool] = [:]
@@ -1604,7 +1606,16 @@ func triggerMatching(keycode: UInt32, mods: UInt32) -> (CustomAction, ActionTrig
 }
 
 func startMediaKeyHook() {
-    guard AXIsProcessTrusted() else { return }
+    guard _mediaEventTap == nil else { return }
+    guard AXIsProcessTrusted() else {
+        if !_mediaHookWaitingForAccessibility {
+            appendLog("[eventTap] waiting for Accessibility before installing media/voice hook")
+            _mediaHookWaitingForAccessibility = true
+        }
+        scheduleMediaKeyHookRetry()
+        return
+    }
+    _mediaHookWaitingForAccessibility = false
     // Intercept NX_SYSDEFINED (media-key mode) plus keyDown/keyUp. Voice hotkeys
     // use keyUp to end push-to-talk without depending on Carbon release events.
     let eventMask = CGEventMask((1 << 14) |
@@ -1747,13 +1758,28 @@ func startMediaKeyHook() {
 
             return passthrough
         }, userInfo: nil)
-    else { return }
+    else {
+        appendLog("[eventTap] could not create media/voice hook; retrying")
+        scheduleMediaKeyHookRetry()
+        return
+    }
     let src = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
     CFRunLoopAddSource(CFRunLoopGetMain(), src, .commonModes)
     CGEvent.tapEnable(tap: tap, enable: true)
     _mediaEventTap = tap
+    appendLog("[eventTap] media/voice hook installed")
     // macOS auto-disables event taps that block. Re-enable every 5s so hotkeys survive.
     DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 5) { tapWatchdog() }
+}
+
+func scheduleMediaKeyHookRetry() {
+    guard !_mediaHookRetryScheduled else { return }
+    _mediaHookRetryScheduled = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+        _mediaHookRetryScheduled = false
+        guard _mediaEventTap == nil else { return }
+        startMediaKeyHook()
+    }
 }
 
 func tapWatchdog() {
@@ -1762,6 +1788,7 @@ func tapWatchdog() {
         CGEvent.tapEnable(tap: tap, enable: false)
         _mediaEventTap = nil
         appendLog("[tapWatchdog] disabled media event tap because Accessibility is no longer trusted")
+        scheduleMediaKeyHookRetry()
         return
     }
     if !CGEvent.tapIsEnabled(tap: tap) {
