@@ -2,12 +2,12 @@
 
 Use this for first-time installs. For updating an existing install, see [UPDATES.md](UPDATES.md).
 
-## Download Beta
+## Download Current Release
 
 Command requires macOS 14 or later.
 
 1. Open the [latest GitHub Release](https://github.com/galbutnotgirl/command/releases/latest).
-2. Download [`Command-1.2.0-beta.1.zip`](https://github.com/galbutnotgirl/command/releases/download/v1.2.0-beta.1/Command-1.2.0-beta.1.zip).
+2. Download newest `Command-*.zip` asset attached to that release.
 3. Unzip it.
 4. Move `Command.app` to `~/Applications`.
 5. Open `Command.app`.
@@ -24,7 +24,7 @@ Terminal fallback:
 xattr -dr com.apple.quarantine ~/Applications/Command.app
 ```
 
-Published beta builds are signed and notarized. Never bypass a verification warning for an app from an untrusted source.
+Published builds identify their signing status in release notes. Never bypass a verification warning for an app from an untrusted source.
 
 Binary installs do not require Terminal scripts. Global shortcuts, screenshots, clipboard history, and dictation run from the app.
 

@@ -11,7 +11,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
-BETA_ASSET = "Command-1.2.0-beta.1.zip"
+LATEST_RELEASE = "https://github.com/galbutnotgirl/command/releases/latest"
 
 
 class Links(HTMLParser):
@@ -64,12 +64,12 @@ def main() -> int:
     required_home = [
         "Anything in. Anywhere out.",
         "ChatGPT · New conversation",
-        BETA_ASSET,
+        LATEST_RELEASE,
         "install.html",
         "guide.html",
     ]
     required_install = [
-        BETA_ASSET,
+        LATEST_RELEASE,
         "Control-click",
         "Open Anyway",
         "Privacy &amp; Security",
@@ -85,7 +85,7 @@ def main() -> int:
     if failures:
         print("\n".join(f"FAIL: {failure}" for failure in failures))
         return 1
-    print(f"pages ok: {len(pages)} HTML files, beta asset and install recovery verified")
+    print(f"pages ok: {len(pages)} HTML files, current release link and install recovery verified")
     return 0
 
 

@@ -210,7 +210,7 @@ BUILT_IN_DOC_LABELS = {
 }
 HTML_MARKDOWN_PARITY = {
     ("docs/INSTALL.md", "docs/install.html"): [
-        "Download Beta",
+        "Download Current Release",
         "First Run",
         "Verify Install",
         "Help After Install",
@@ -873,7 +873,7 @@ REQUIRED_TEXT = {
     "docs/INSTALL.md": [
         "https://github.com/galbutnotgirl/command/releases/latest",
         "latest GitHub Release",
-        "Command-1.2.0-beta.1.zip",
+        "Download newest `Command-*.zip` asset",
         "Existing Installs",
         "Command was previously named ClaudeCommand",
         "local support paths stay compatible",
@@ -917,7 +917,7 @@ REQUIRED_TEXT = {
         "<title>Command Install Guide</title>",
         "https://github.com/galbutnotgirl/command/releases/latest",
         "latest GitHub Release",
-        "Command-1.2.0-beta.1.zip",
+        "Download newest <code>Command-*.zip</code> asset",
         "System Settings -> Privacy &amp; Security",
         "Open Anyway",
         "xattr -dr com.apple.quarantine ~/Applications/Command.app",

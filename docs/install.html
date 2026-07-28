@@ -36,7 +36,7 @@
       <a href="troubleshooting.html">Troubleshooting</a>
       <a href="support.html">Support</a>
       <a href="security.html">Security Policy</a>
-      <a href="#download">Download Beta</a>
+      <a href="#download">Download Current Release</a>
       <a href="#existing-alpha">Existing Installs</a>
       <a href="#first-run">First Run</a>
       <a href="#verify">Verify Install</a>
@@ -52,18 +52,18 @@
       </header>
 
       <section id="download">
-        <h2>Download Beta</h2>
+        <h2>Download Current Release</h2>
         <p>Command requires macOS 14 or later.</p>
         <ol>
           <li>Open the <a href="https://github.com/galbutnotgirl/command/releases/latest">latest GitHub Release</a>.</li>
-          <li>Download <a href="https://github.com/galbutnotgirl/command/releases/download/v1.2.0-beta.1/Command-1.2.0-beta.1.zip"><code>Command-1.2.0-beta.1.zip</code></a>.</li>
+          <li>Download newest <code>Command-*.zip</code> asset attached to that release.</li>
           <li>Unzip it.</li>
           <li>Move <code>Command.app</code> to <code>~/Applications</code>.</li>
           <li>Control-click <code>Command.app</code> in Finder, choose <strong>Open</strong>, then choose <strong>Open</strong> again.</li>
         </ol>
         <p>If macOS only shows <strong>Move to Trash</strong>, open <strong>System Settings -> Privacy &amp; Security</strong>, scroll down, click <strong>Open Anyway</strong>, authenticate, then reopen Command.</p>
         <pre><code>xattr -dr com.apple.quarantine ~/Applications/Command.app</code></pre>
-        <p>Published beta builds are signed and notarized. Never bypass a verification warning for an app from an untrusted source.</p>
+        <p>Published builds identify their signing status in release notes. Never bypass a verification warning for an app from an untrusted source.</p>
         <p>Binary installs do not require Terminal scripts. Global shortcuts, screenshots, clipboard history, and dictation run from the app.</p>
       </section>
 
