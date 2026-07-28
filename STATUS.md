@@ -1321,8 +1321,12 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   → `swift test` → `./build-agent.sh` → `./install-agent.sh` → confirm a fresh PID
   (`pgrep -x Command` before/after) → for anything touching the vendor core, a live
   `node vendor/claude-command-capture/bin/submit-cli.js --retry-prompt` smoke test.
-- **`gh auth switch --user galbutnotgirl` before every push** — the active `gh` account
-  silently reverts to a different one (`gal-cstk`, no push access) between sessions.
+- **Don't `gh auth switch` before pushing** — this clone is already pinned to
+  `galbutnotgirl` via a repo-local credential helper, so git works regardless of which
+  account is globally active. Switching mutates global state shared with other sessions and
+  hourly scheduled tasks, breaking *their* access. For `gh` CLI calls that need a specific
+  account, scope the token instead: `GH_TOKEN=$(gh auth token --user galbutnotgirl) gh ...`.
+  Pattern documented in `nexus/brain/git-auth-setup.md`.
 - **Bump `VERSION` and run `./release.sh --publish`** after any user-facing change worth
   shipping — this session cut alpha.1 through alpha.6 incrementally rather than batching.
 - **Real functional tests over synthetic ones where possible.** A synthetic
