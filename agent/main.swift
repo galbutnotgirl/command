@@ -1114,7 +1114,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
             pb.setString(clipboardPasteText(text), forType: .string)
         }
         // Stamp AFTER writing, with the exact resulting changeCount — an exact match,
-        // not a timing guess, so clipwatch (25ms poll) reliably attributes this re-paste
+        // not a timing guess, so Clipboard History reliably attributes this re-paste
         // to com.claudecommand (in BLOCK_BUNDLES) and never re-records it as a new clip.
         if let d = try? JSONSerialization.data(withJSONObject:
             ["bundle": "com.claudecommand", "ts": Date().timeIntervalSince1970, "cc": pb.changeCount]) {
@@ -1647,9 +1647,13 @@ func startMediaKeyHook() {
                 _nxHeld[keyCode] = true
                 guard let carbon = MEDIA_TO_CARBON[keyCode] else { return passthrough }
                 appendLog("[eventTap] NX keyCode=\(keyCode) carbon=\(carbon) mods=\(cm)")
-                if carbon == 63, settingsModel.recordingAction != nil {
+                if settingsModel.recordingAction != nil {
                     DispatchQueue.main.async {
-                        settingsModel.recordModifierOnlyHotkey(keycode: carbon)
+                        if carbon == 63 {
+                            settingsModel.recordModifierOnlyHotkey(keycode: carbon)
+                        } else {
+                            settingsModel.recordHardwareHotkey(keycode: carbon, mods: cm)
+                        }
                     }
                     return nil
                 }
@@ -1698,7 +1702,7 @@ func startMediaKeyHook() {
                 let f  = event.flags
 
                 // Capture copy/cut source at keypress time — fires BEFORE app writes to
-                // clipboard, so clipwatch's 25ms poll always sees the correct bundle.
+                // clipboard, so Clipboard History sees the correct bundle.
                 // NSEvent.addGlobalMonitorForEvents fires AFTER the write (too late).
                 // Skip our own bundle so paste-ops don't overwrite a real copy source.
                 if f.contains(.maskCommand) && (kc == 8 || kc == 7) {  // Cmd+C or Cmd+X
@@ -1718,6 +1722,12 @@ func startMediaKeyHook() {
                 }
 
                 let cm = physicalModifierMask(cgFlags: f)
+                if type == .keyDown, MEDIA_KEYCODES.contains(kc), settingsModel.recordingAction != nil {
+                    DispatchQueue.main.async {
+                        settingsModel.recordHardwareHotkey(keycode: kc, mods: cm)
+                    }
+                    return nil
+                }
                 if type == .keyUp, _voiceHeldKeycodes.contains(kc) {
                     appendLog("[eventTap] voice up kc=\(kc) mods=\(cm)")
                     releaseVoiceHotkey(keycode: kc)
@@ -1880,7 +1890,10 @@ func handle(_ line: String) -> String {
 func startServer() {
     unlink(SOCK)
     let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-    if fd < 0 { return }
+    if fd < 0 {
+        appendLog("[socket] create failed errno=\(errno) \(String(cString: strerror(errno)))")
+        return
+    }
     var addr = sockaddr_un(); addr.sun_family = sa_family_t(AF_UNIX)
     let pathBytes = Array(SOCK.utf8)
     withUnsafeMutableBytes(of: &addr.sun_path) { raw in
@@ -1894,13 +1907,22 @@ func startServer() {
     let bound = withUnsafePointer(to: &a) {
         $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, size) }
     }
-    if bound != 0 { return }
+    if bound != 0 {
+        appendLog("[socket] bind failed path=\(SOCK) errno=\(errno) \(String(cString: strerror(errno)))")
+        close(fd)
+        return
+    }
     // Owner-only: this socket accepts keystroke-synthesis + clipboard commands
     // backed by the app's Accessibility grant. Any local process that could
     // reach it could drive synthetic keystrokes into the focused app, so lock
     // it to the current user.
     chmod(SOCK, 0o600)
-    listen(fd, 8)
+    guard listen(fd, 8) == 0 else {
+        appendLog("[socket] listen failed errno=\(errno) \(String(cString: strerror(errno)))")
+        close(fd)
+        return
+    }
+    appendLog("[socket] listening path=\(SOCK)")
     DispatchQueue.global().async {
         while true {
             let c = accept(fd, nil, nil)
@@ -2081,7 +2103,7 @@ func restartApp() {
 func validateInstall() {
     let checks: [(String, String)] = [
         (WORKER, "send-to-claude.sh missing — reinstall"),
-        (bundledResource("clipwatch.py"), "clipwatch.py missing — reinstall"),
+        (bundledResource("CommandClipboardWatcher"), "Clipboard History helper missing — reinstall"),
     ]
     for (path, msg) in checks where !path.isEmpty && !FileManager.default.fileExists(atPath: path) {
         appendLog("[startup] \(msg): \(path)")
@@ -2177,8 +2199,10 @@ func offerMoveToApplicationsIfNeeded() -> Bool {
 }
 
 func stopClipwatch() {
-    _ = runShell("/usr/bin/pkill", ["-f", "clipwatch.py"])
+    _ = runShell("/usr/bin/pkill", ["-x", "CommandClipboardWatcher"])
 }
+
+private var clipwatchRestartAttempts = 0
 
 // Start the bundled clipboard watcher as a child process.
 // Restarts automatically if it exits — runs as long as ClaudeCommand is running.
@@ -2196,11 +2220,15 @@ func startClipwatch() {
     let enabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
     dbg("startClipwatch: enabled=\(enabled)")
     guard enabled else { dbg("returning: disabled"); return }
-    let script = bundledResource("clipwatch.py")
-    dbg("script=\(script)")
-    guard FileManager.default.fileExists(atPath: script) else { dbg("returning: no script at \(script)"); return }
-    // Kill any stale clipwatch from a prior install before launching fresh.
-    let pgrep = runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"])
+    let helper = bundledResource("CommandClipboardWatcher")
+    dbg("helper=\(helper)")
+    guard FileManager.default.isExecutableFile(atPath: helper) else {
+        dbg("returning: helper missing/not executable at \(helper)")
+        appendLog("[clipboard] helper missing/not executable path=\(helper)")
+        return
+    }
+    // Keep one native Clipboard History helper per user session.
+    let pgrep = runShell("/usr/bin/pgrep", ["-x", "CommandClipboardWatcher"])
     dbg("pgrep code=\(pgrep.code)")
     if pgrep.code == 0 {
         let out = pgrep.out.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2213,19 +2241,34 @@ func startClipwatch() {
         FileManager.default.createFile(atPath: errPath, contents: nil)
     }
     let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-    p.arguments = [script]
+    p.executableURL = URL(fileURLWithPath: helper)
     var env = ProcessInfo.processInfo.environment; env["HOME"] = HOME
     p.environment = env
-    p.standardError = FileHandle(forWritingAtPath: errPath)
+    if let errorHandle = FileHandle(forWritingAtPath: errPath) {
+        _ = try? errorHandle.seekToEnd()
+        p.standardError = errorHandle
+    }
     p.terminationHandler = { proc in
         let code = proc.terminationStatus
-        dbg("clipwatch exited code=\(code) — restarting in 2s")
-        appendLog("[clipwatch] exited code=\(code) — restarting")
-        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { startClipwatch() }
+        DispatchQueue.main.async {
+            clipwatchRestartAttempts += 1
+            dbg("clipboard helper exited code=\(code) attempt=\(clipwatchRestartAttempts)")
+            appendLog("[clipboard] helper exited code=\(code) attempt=\(clipwatchRestartAttempts)")
+            guard clipwatchRestartAttempts <= 3 else {
+                appendLog("[clipboard] restart limit reached; open Set Up and copy diagnostics")
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { startClipwatch() }
+        }
     }
-    do { try p.run(); dbg("started pid=\(p.processIdentifier)") }
-    catch { dbg("run failed: \(error)") }
+    do {
+        try p.run()
+        dbg("started pid=\(p.processIdentifier)")
+        appendLog("[clipboard] started native helper pid=\(p.processIdentifier) path=\(helper)")
+    } catch {
+        dbg("run failed: \(error)")
+        appendLog("[clipboard] launch failed path=\(helper) error=\(error.localizedDescription)")
+    }
 }
 
 // Standard Edit menu (Cut/Copy/Paste/Select All/Undo/Redo) with the usual key
@@ -2348,10 +2391,14 @@ UserDefaults.standard.register(defaults: [
 applyDockPolicy()                 // menu-bar only unless the user enabled "Show in Dock"
 preloadUISounds()
 if MainActor.assumeIsolated({ offerMoveToApplicationsIfNeeded() }) { exit(0) }
+guard ensureRuntimeDirectories() else {
+    notify("Command setup failed", "Could not create local state directories. Copy Diagnostic Info and report this issue.")
+    exit(1)
+}
 validateInstall()
 installHotkeys()
 startMediaKeyHook()
-stopClipwatch()   // kill any stale clipwatch from prior install before launching fresh
+stopClipwatch()   // replace stale helper from a prior app process
 startClipwatch()
 startServer()
 DispatchQueue.global(qos: .utility).async { pruneHandoffSubmissions() }
@@ -2393,9 +2440,9 @@ NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { ev in
 }
 
 // Cmd+C/X source capture is now handled inside the CGEventTap (startMediaKeyHook)
-// at .cghidEventTap level — fires BEFORE the app writes to clipboard, so clipwatch
+// at .cghidEventTap level — fires BEFORE the app writes to clipboard, so Clipboard History
 // always sees the correct bundle. The old NSEvent.addGlobalMonitorForEvents fired
-// AFTER the write (too late for clipwatch's 25ms poll).
+// AFTER the write (too late for deterministic source attribution).
 let COPY_SOURCE_PATH = "\(HOME)/.claude/state/last_copy.json"
 
 app.run()

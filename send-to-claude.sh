@@ -16,7 +16,7 @@
 # Selection: $@ args (testing) › stdin (Service) › auto-⌘C via the signed helper.
 #   - Fresh selection (clipboard changed on ⌘C) is always used.
 #   - If nothing was selected, the existing clipboard is used ONLY if it's fresh
-#     (<CLIP_TTL, per the clipwatch daemon) AND not from a blocked/secret app.
+#     (<CLIP_TTL, per Clipboard History watcher) AND not from a blocked/secret app.
 #   - Images ride the clipboard and are PASTED into the new session (no temp file).
 #
 # Config: ACTION, CLIP_TTL=60, INCLUDE_CONTEXT=1, DRY_RUN=1.
@@ -64,7 +64,7 @@ fi
 # TCC-protected folder (Desktop/Documents/iCloud) → "Operation not permitted".
 cd / 2>/dev/null || true
 
-# Apps whose copies must never be captured (mirror clipwatch.py).
+# Apps whose copies must never be captured (mirror CommandClipboardWatcher).
 BLOCK_BUNDLES=(com.apple.keychainaccess com.apple.SecurityAgent com.1password.1password com.agilebits.onepassword7 com.apple.wallet com.apple.Passwords)
 
 mkdir -p "$(dirname "$DO_LOG")" 2>/dev/null
@@ -130,7 +130,7 @@ ensure_provider_app() {
 }
 
 # Write $1 to the clipboard and, in the SAME process, stamp last_copy.json with the
-# exact resulting changeCount (not just a timestamp) — clipwatch matches on that value,
+# exact resulting changeCount (not just a timestamp) — Clipboard History matches on that value,
 # not a timing guess, so it deterministically tags this as our own "send" write instead
 # of racing to attribute it to whichever app happens to be frontmost a moment later.
 # Tagged com.claudecommand.send (not the plain-blocked com.claudecommand) so it shows

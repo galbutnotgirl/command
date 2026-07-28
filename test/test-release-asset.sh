@@ -112,7 +112,7 @@ for required_resource in \
   send-to-claude.sh \
   send-to-claude-lib.sh \
   match-enrich-rule.py \
-  clipwatch.py \
+  CommandClipboardWatcher \
   update-swap.sh \
   restart-app.sh \
   capture-handoff.sh \
@@ -135,7 +135,9 @@ EXTRACT_DIR="$(mktemp -d)"
 if ditto -xk "$ZIP" "$EXTRACT_DIR" 2>/dev/null; then
   APP_PATH="${EXTRACT_DIR}/Command.app"
   EXE_PATH="${APP_PATH}/Contents/MacOS/Command"
+  CLIPBOARD_HELPER_PATH="${APP_PATH}/Contents/Resources/CommandClipboardWatcher"
   [ -x "$EXE_PATH" ] || fail "packaged app executable missing or not executable"
+  [ -x "$CLIPBOARD_HELPER_PATH" ] || fail "packaged Clipboard History helper missing or not executable"
   SIGN_INFO="$(codesign -dv "$APP_PATH" 2>&1 || true)"
   print -r -- "$SIGN_INFO" | grep -q "Identifier=com.claudecommand" \
     || fail "packaged app codesign identifier missing or wrong"

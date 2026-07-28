@@ -27,7 +27,7 @@ cp "$ROOT/build-agent.sh" "$FIXTURE/build-agent.sh"
 cp -R "$ROOT/docs/." "$FIXTURE/docs/"
 cp "$ROOT/vendor/claude-command-capture/src/"*.js "$FIXTURE/vendor/claude-command-capture/src/"
 cp "$ROOT/vendor/claude-command-capture/bin/"*.js "$FIXTURE/vendor/claude-command-capture/bin/"
-for resource in send-to-claude.sh send-to-claude-lib.sh match-enrich-rule.py clipwatch.py \
+for resource in send-to-claude.sh send-to-claude-lib.sh match-enrich-rule.py \
   update-swap.sh restart-app.sh capture-handoff.sh README.md VERSION; do
   cp "$ROOT/$resource" "$FIXTURE/$resource"
 done
@@ -38,6 +38,8 @@ cat > "$FAKE_BIN/swift" <<'SWIFT'
 mkdir -p .build/release
 print -r -- "${FAKE_BUILD_MARKER:-new-build}" > .build/release/ClaudeCommand
 chmod +x .build/release/ClaudeCommand
+print -r -- "${FAKE_BUILD_MARKER:-new-build}" > .build/release/CommandClipboardWatcher
+chmod +x .build/release/CommandClipboardWatcher
 SWIFT
 chmod +x "$FAKE_BIN/swift"
 

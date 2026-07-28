@@ -5,7 +5,7 @@
 dist/
 outputs/
 
-# Python bytecode (from local syntax checks of clipwatch.py)
+# Python bytecode from local helper checks
 __pycache__/
 *.pyc
 

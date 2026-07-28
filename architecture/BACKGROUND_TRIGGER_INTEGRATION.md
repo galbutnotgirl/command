@@ -24,7 +24,7 @@ Command.
 - `send-to-claude.sh` — zsh worker dispatched per hotkey with `ACTION=<id>`; owns selection
   capture (auto-⌘C via SendHelper/agent socket), clipboard-freshness fallback, screenshot
   pre-step (`screencapture`), and source-app context enrichment.
-- `clipwatch.py`, `SendHelper.app` — clipboard subprocess and optional keystroke fallback.
+- `CommandClipboardWatcher`, `SendHelper.app` — native clipboard subprocess and optional keystroke fallback.
 
 The imported app is an Electron tray app, **but** its core pipeline
 (`src/settings.js`, `src/prompt.js`, `src/runner.js`, `src/submit.js`, `src/submissions.js`,

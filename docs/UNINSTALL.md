@@ -47,10 +47,10 @@ Settings, histories, and logs are local. Remove only if you do not want to keep 
 ```bash
 launchctl print gui/$(id -u)/com.claudecommand
 pgrep -fl Command
-pgrep -fl clipwatch.py
+pgrep -x CommandClipboardWatcher
 ```
 
-`launchctl` should report no service. `pgrep` should return no Command or bundled `clipwatch.py` process.
+`launchctl` should report no service. `pgrep` should return no Command or bundled Clipboard History helper process.
 
 ## Reinstall Later
 

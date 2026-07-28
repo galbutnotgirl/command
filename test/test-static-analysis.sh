@@ -18,6 +18,7 @@ bad() {
 
 while IFS= read -r file; do
   [ -n "$file" ] || continue
+  [ -f "$file" ] || continue
   shebang="$(head -n 1 "$file" 2>/dev/null || true)"
   case "$shebang" in
     *zsh*) interpreter=/bin/zsh ;;
@@ -29,6 +30,7 @@ done < <(git ls-files '*.sh')
 
 while IFS= read -r file; do
   [ -n "$file" ] || continue
+  [ -f "$file" ] || continue
   if python3 -c 'import pathlib, sys; compile(pathlib.Path(sys.argv[1]).read_bytes(), sys.argv[1], "exec")' "$file"; then
     ok
   else
@@ -38,11 +40,13 @@ done < <(git ls-files '*.py')
 
 while IFS= read -r file; do
   [ -n "$file" ] || continue
+  [ -f "$file" ] || continue
   if node --check "$file" >/dev/null; then ok; else bad "JavaScript syntax: $file"; fi
 done < <(git ls-files '*.js')
 
 while IFS= read -r file; do
   [ -n "$file" ] || continue
+  [ -f "$file" ] || continue
   if python3 -c 'import json, sys; json.load(open(sys.argv[1], encoding="utf-8"))' "$file"; then
     ok
   else
@@ -52,12 +56,14 @@ done < <(git ls-files '*.json')
 
 while IFS= read -r file; do
   [ -n "$file" ] || continue
+  [ -f "$file" ] || continue
   if plutil -lint "$file" >/dev/null; then ok; else bad "property list syntax: $file"; fi
 done < <(git ls-files '*.plist')
 
 if command -v ruby >/dev/null 2>&1; then
   while IFS= read -r file; do
     [ -n "$file" ] || continue
+    [ -f "$file" ] || continue
     if ruby -rpsych -e 'Psych.parse_file(ARGV.fetch(0))' "$file"; then ok; else bad "YAML syntax: $file"; fi
   done < <(git ls-files '*.yml' '*.yaml')
 else

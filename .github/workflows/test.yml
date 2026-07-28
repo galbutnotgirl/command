@@ -27,6 +27,11 @@ jobs:
         working-directory: agent
         run: swift test
 
+      - name: Native Clipboard History helper smoke test
+        run: |
+          swift build --package-path agent --product CommandClipboardWatcher
+          ./test/test-clipboard-watcher.sh
+
       - uses: actions/setup-node@v7
         with:
           node-version: "24"

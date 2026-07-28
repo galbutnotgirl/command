@@ -52,6 +52,9 @@ if ! ( cd "${SRC_DIR}" && swift build -c release --product ClaudeCommand 2>&1 );
   print -- "[agent] ERROR swift build failed"; exit 1
 fi
 cp "${SRC_DIR}/.build/release/ClaudeCommand" "${BIN_DIR}/Command"
+if ! ( cd "${SRC_DIR}" && swift build -c release --product CommandClipboardWatcher 2>&1 ); then
+  print -- "[agent] ERROR clipboard watcher build failed"; exit 1
+fi
 
 cat > "${APP}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -73,7 +76,7 @@ cat > "${APP}/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Bundle send-to-claude.sh + clipwatch.py into Resources.
+# Bundle runtime helpers into Resources.
 mkdir -p "${APP}/Contents/Resources"
 SEND="${DIR}/send-to-claude.sh"
 if [ -f "$SEND" ]; then
@@ -84,11 +87,9 @@ if [ -f "$SEND" ]; then
   chmod +x "${APP}/Contents/Resources/match-enrich-rule.py"
   print -- "[agent] bundled send-to-claude.sh + lib + match-enrich-rule.py"
 fi
-CLIPWATCH="${DIR}/clipwatch.py"
-if [ -f "$CLIPWATCH" ]; then
-  cp "$CLIPWATCH" "${APP}/Contents/Resources/clipwatch.py"
-  print -- "[agent] bundled clipwatch.py"
-fi
+cp "${SRC_DIR}/.build/release/CommandClipboardWatcher" "${APP}/Contents/Resources/CommandClipboardWatcher"
+chmod +x "${APP}/Contents/Resources/CommandClipboardWatcher"
+print -- "[agent] bundled native Clipboard History helper"
 UPDATE_SWAPPER="${DIR}/update-swap.sh"
 if [ -f "$UPDATE_SWAPPER" ]; then
   cp "$UPDATE_SWAPPER" "${APP}/Contents/Resources/update-swap.sh"

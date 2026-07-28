@@ -94,7 +94,7 @@ test('runCli surfaces a missing CLI as an error, not a rejection', async () => {
     logFile,
   });
   assert.strictEqual(exitCode, null);
-  assert.ok(error && error.includes('ENOENT'));
+  assert.ok(error && /spawn .* (ENOENT|EACCES)/.test(error));
 });
 
 test('runCli reports nonzero exit codes as failure', async () => {

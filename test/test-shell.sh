@@ -256,6 +256,14 @@ assert_not_contains "Claude selector no longer exposes separate Cowork destinati
   'Text("Cowork").tag("cowork")'
 assert_contains "alternate shortcut add shows a visible recording slot" "$SETTINGS_SOURCE" \
   'shortcutIndex: shortcuts.count, shortcut: nil'
+assert_contains "media function keys record into active shortcut slot" "$AGENT_SOURCE" \
+  'settingsModel.recordHardwareHotkey(keycode: carbon, mods: cm)'
+assert_contains "standard function keys record before existing bindings fire" "$AGENT_SOURCE" \
+  'MEDIA_KEYCODES.contains(kc), settingsModel.recordingAction != nil'
+assert_contains "fresh installs create runtime state directories" "$PERMISSIONS_SOURCE" \
+  'func ensureRuntimeDirectories() -> Bool'
+assert_contains "native clipboard helper replaces PyObjC watcher" "$AGENT_SOURCE" \
+  'bundledResource("CommandClipboardWatcher")'
 assert_contains "shortcut action controls use fixed alignment tracks" "$SETTINGS_SOURCE" \
   '.frame(width: 20, height: 30)'
 assert_not_contains "Set Up omits legacy right-click action status" "$PERMISSIONS_SOURCE" \

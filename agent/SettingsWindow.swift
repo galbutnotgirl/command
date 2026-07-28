@@ -202,6 +202,16 @@ final class SettingsModel: ObservableObject {
         reregisterHotkeys()
     }
 
+    func recordHardwareHotkey(keycode: UInt32, mods: UInt32) {
+        guard let action = recordingAction else { return }
+        let index = recordingShortcutIndex
+        let isCustomTrigger = customActions.contains { $0.triggers.contains { $0.id == action } }
+        recordingAction = nil
+        commitRecordedShortcut(action: action, shortcutIndex: index,
+                               isCustomTrigger: isCustomTrigger, keycode: keycode, mods: mods)
+        reregisterHotkeys()
+    }
+
     // Called from the global key monitor. Returns true if it consumed the event.
     // `recordingAction` holds a plain action string for fixed bindings, or a
     // trigger's own id for a custom action's trigger (an action's triggers
@@ -2929,7 +2939,7 @@ struct TroubleshootingView: View {
 
     private func reload() {
         let clipboardHistoryEnabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
-        let clipboardHistoryRunning = runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"]).code == 0
+        let clipboardHistoryRunning = runShell("/usr/bin/pgrep", ["-x", "CommandClipboardWatcher"]).code == 0
         items = [
             DiagItem(
                 title: "Accessibility",
@@ -3672,16 +3682,17 @@ func copyCommandDiagnosticInfo(
 
     out += "--- Set Up status ---\n"
     for check in permissionChecks() {
-        out += "\(check.title): \(stateLabel(check.state))\n"
+        out += "\(check.title): \(stateLabel(check.state)) — \(check.detail)\n"
     }
     for check in componentChecks() {
-        out += "\(check.title): \(stateLabel(check.state))\n"
+        out += "\(check.title): \(stateLabel(check.state)) — \(check.detail)\n"
     }
     out += "Dictation model: \(modelStatusLabel(recorder.modelStatus))\n\n"
 
     let logs = [
         "\(HOME)/Library/Logs/claude-command.log",
         "\(HOME)/.claude/logs/command-agent.err",
+        "\(HOME)/.claude/logs/clipwatch-start.log",
         "\(HOME)/.claude/logs/clipwatch.err",
         "\(HOME)/.claude/logs/attribution.log",
     ]
@@ -4026,16 +4037,17 @@ struct AboutView: View {
 
         out += "--- Set Up status ---\n"
         for check in permissionChecks() {
-            out += "\(check.title): \(stateLabel(check.state))\n"
+            out += "\(check.title): \(stateLabel(check.state)) — \(check.detail)\n"
         }
         for check in componentChecks() {
-            out += "\(check.title): \(stateLabel(check.state))\n"
+            out += "\(check.title): \(stateLabel(check.state)) — \(check.detail)\n"
         }
         out += "Dictation model: \(modelStatusLabel(recorder.modelStatus))\n\n"
 
         let logs = [
             "\(HOME)/Library/Logs/claude-command.log",
             "\(HOME)/.claude/logs/command-agent.err",
+            "\(HOME)/.claude/logs/clipwatch-start.log",
             "\(HOME)/.claude/logs/clipwatch.err",
             "\(HOME)/.claude/logs/attribution.log",
         ]

@@ -87,8 +87,8 @@ rm -f ~/Library/LaunchAgents/com.claudecommand.clipwatch.plist</code></pre>
         <h2>Verify Removal</h2>
         <pre><code>launchctl print gui/$(id -u)/com.claudecommand
 pgrep -fl Command
-pgrep -fl clipwatch.py</code></pre>
-        <p><code>launchctl</code> should report no service. <code>pgrep</code> should return no Command or bundled <code>clipwatch.py</code> process.</p>
+pgrep -x CommandClipboardWatcher</code></pre>
+        <p><code>launchctl</code> should report no service. <code>pgrep</code> should return no Command or bundled Clipboard History helper process.</p>
       </section>
 
       <section id="reinstall">

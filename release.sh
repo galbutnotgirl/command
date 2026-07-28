@@ -192,7 +192,7 @@ for required_resource in \
   send-to-claude.sh \
   send-to-claude-lib.sh \
   match-enrich-rule.py \
-  clipwatch.py \
+  CommandClipboardWatcher \
   update-swap.sh \
   restart-app.sh \
   capture-handoff.sh \

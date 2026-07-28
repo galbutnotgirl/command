@@ -59,8 +59,28 @@ let AGENT_LABEL = "com.claudecommand"
 func fileExists(_ p: String) -> Bool { FileManager.default.fileExists(atPath: p) }
 func home(_ rel: String) -> String { (NSHomeDirectory() as NSString).appendingPathComponent(rel) }
 
+@discardableResult
+func ensureRuntimeDirectories() -> Bool {
+    let manager = FileManager.default
+    let directories = [
+        home(".claude/logs"),
+        home(".claude/state"),
+        home(".claude/state/cliphistory"),
+    ]
+    do {
+        for directory in directories {
+            try manager.createDirectory(atPath: directory, withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o700])
+        }
+        return true
+    } catch {
+        fputs("Command runtime directory setup failed: \(error)\n", stderr)
+        return false
+    }
+}
+
 // ---- shared config (command-config.json) ------------------------------------
-// Written by the menu-bar UI, read by clipwatch.py and the clipboard picker.
+// Written by the menu-bar UI, read by CommandClipboardWatcher and the clipboard picker.
 let COMMAND_CONFIG = home(".claude/state/command-config.json")
 let DEFAULT_RETENTION_DAYS = 7
 
@@ -86,7 +106,7 @@ func writeRetentionDays(_ days: Int) {
 
 // ---- clipboard history clearing ---------------------------------------------
 // History lives in ~/.claude/state/cliphistory/ (index.json + per-item files),
-// written by clipwatch.py. "Clear last N minutes" removes the most-recent clips
+// written by CommandClipboardWatcher. "Clear last N minutes" removes the most-recent clips
 // (the ones likeliest to hold something sensitive you just copied); withinSeconds
 // <= 0 clears everything.
 let CLIP_HIST_DIR = home(".claude/state/cliphistory")
@@ -268,8 +288,10 @@ func componentChecks() -> [StatusCheck] {
                     detail: "Local app dispatch socket is up at ~/.claude/state/command-agent.sock.",
                     state: fileExists(home(".claude/state/command-agent.sock")) ? .ok : .missing),
         StatusCheck(title: "Hotkeys configured",
-                    detail: "command-hotkeys.json present. Edit bindings in the Shortcuts tab.",
-                    state: fileExists(home(".claude/state/command-hotkeys.json")) ? .ok : .missing),
+                    detail: fileExists(home(".claude/state/command-hotkeys.json"))
+                        ? "Custom shortcut file loaded."
+                        : "Built-in shortcuts active. Customize them in Shortcut Settings.",
+                    state: loadBindings().contains { $0.enabled && !$0.shortcuts.isEmpty } ? .ok : .missing),
         StatusCheck(title: "Claude app",
                     detail: "Foreground Claude delivery via installed desktop app.",
                     state: providerAppInstalled(.claude) ? .ok : .unknown),
@@ -290,6 +312,6 @@ func componentChecks() -> [StatusCheck] {
                         ? "Clipboard History running (bundled, starts with Command)."
                         : "Clipboard history is off — enable it in the Clipboard History tab.",
                     state: !UserDefaults.standard.bool(forKey: "cliphistoryEnabled") ? .unknown
-                         : runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"]).code == 0 ? .ok : .missing),
+                         : runShell("/usr/bin/pgrep", ["-x", "CommandClipboardWatcher"]).code == 0 ? .ok : .missing),
     ]
 }

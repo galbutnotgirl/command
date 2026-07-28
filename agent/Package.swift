@@ -38,6 +38,10 @@ let package = Package(
             ],
             path: "Tools/DictationModelProbe"
         ),
+        .executableTarget(
+            name: "CommandClipboardWatcher",
+            path: "Tools/ClipboardWatcher"
+        ),
         .testTarget(
             name: "ClaudeCommandCoreTests",
             dependencies: ["ClaudeCommandCore"],

@@ -68,7 +68,7 @@ A native macOS menu-bar agent (`agent/*.swift`, SwiftUI/AppKit, not Electron) th
   hotkey and either pastes a rendered prompt into the Claude desktop app, or runs it as a
   background `claude -p` handoff (no window) via a vendored Electron-free Node core
   (`vendor/claude-command-capture/`).
-- Also does clipboard history (`clipwatch.py` bundled subprocess) and on-device dictation (Parakeet
+- Also does clipboard history (`CommandClipboardWatcher` bundled native subprocess) and on-device dictation (Parakeet
   TDT via FluidAudio).
 
 See `docs/BACKGROUND_TRIGGER_INTEGRATION.md` for the background-handoff architecture in
