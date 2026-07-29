@@ -2036,37 +2036,39 @@ HTML_TAG_TOKEN = re.compile(r"</?([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^>]*)?>")
 CORE_DOC_NAV_LINKS = [
     "index.html",
     "install.html",
-    "uninstall.html",
     "guide.html",
-    "settings.html",
     "quick-reference.html",
     "examples.html",
-    "faq.html",
-    "changelog.html",
-    "limitations.html",
-    "updates.html",
-    "permissions.html",
-    "privacy.html",
+    "settings.html",
+    "background.html",
     "troubleshooting.html",
+    "faq.html",
     "support.html",
-    "security.html",
+    "uninstall.html",
+    "updates.html",
+    "privacy.html",
 ]
 CORE_DOC_NAV_LABELS = {
-    "index.html": "Overview",
+    "index.html": "Main Site ↗",
     "install.html": "Install Guide",
-    "uninstall.html": "Uninstall",
     "guide.html": "User Guide",
-    "settings.html": "Settings Reference",
     "quick-reference.html": "Quick Reference",
     "examples.html": "Examples",
+    "settings.html": "Settings Reference",
+    "background.html": "Background Actions",
+    "troubleshooting.html": "Troubleshooting",
     "faq.html": "FAQ",
+    "support.html": "Support",
+    "uninstall.html": "Uninstall",
+    "updates.html": "Updates",
+    "privacy.html": "Privacy",
+}
+CORE_DOC_PAGE_TITLES = {
+    **CORE_DOC_NAV_LABELS,
+    "index.html": "Overview",
     "changelog.html": "Changelog",
     "limitations.html": "Alpha Limitations",
-    "updates.html": "Updates",
     "permissions.html": "Permissions",
-    "privacy.html": "Privacy",
-    "troubleshooting.html": "Troubleshooting",
-    "support.html": "Support",
     "security.html": "Security Policy",
 }
 CORE_DOC_MARKDOWN_SOURCES = {
@@ -2226,16 +2228,16 @@ def validate_html_structure(path: Path, text: str, failures: list[str]) -> None:
             failures.append(f"{rel}: og:title should match title")
         if HTML_TWITTER_TITLE.findall(text) != titles:
             failures.append(f"{rel}: twitter:title should match title")
-        if path.name in CORE_DOC_NAV_LABELS and path.name != "index.html":
-            expected_title = f"Command {CORE_DOC_NAV_LABELS[path.name]}"
+        if path.name in CORE_DOC_PAGE_TITLES and path.name != "index.html":
+            expected_title = f"Command {CORE_DOC_PAGE_TITLES[path.name]}"
             if titles[0] != expected_title:
                 failures.append(f"{rel}: title should match shared docs label {expected_title}")
-    if path.name in CORE_DOC_NAV_LABELS and path.name != "index.html":
+    if path.name in CORE_DOC_PAGE_TITLES and path.name != "index.html":
         h1_values = [
             re.sub(r"<[^>]+>", "", body).strip()
             for body in re.findall(r"<h1[^>]*>(.*?)</h1>", text, flags=re.IGNORECASE | re.DOTALL)
         ]
-        expected_h1 = CORE_DOC_NAV_LABELS[path.name]
+        expected_h1 = CORE_DOC_PAGE_TITLES[path.name]
         if h1_values != [expected_h1]:
             failures.append(f"{rel}: h1 should match shared docs label {expected_h1}")
     if len(descriptions) == 1:
@@ -2285,12 +2287,12 @@ def validate_html_structure(path: Path, text: str, failures: list[str]) -> None:
             failures.append(f"{rel}: toc nav missing aria-label")
         if 'class="toc-title"' not in text:
             failures.append(f"{rel}: toc nav missing toc-title")
-        elif path.name in CORE_DOC_NAV_LABELS:
+        elif path.name in CORE_DOC_PAGE_TITLES:
             toc_title = re.findall(r'<div class="toc-title">([^<]+)</div>', text)
-            if toc_title != [CORE_DOC_NAV_LABELS[path.name]]:
-                failures.append(f"{rel}: toc-title should match shared docs label {CORE_DOC_NAV_LABELS[path.name]}")
+            if toc_title != [CORE_DOC_PAGE_TITLES[path.name]]:
+                failures.append(f"{rel}: toc-title should match shared docs label {CORE_DOC_PAGE_TITLES[path.name]}")
         nav = text.split('<nav class="toc"', 1)[1].split("</nav>", 1)[0]
-        nav_links = re.findall(r'<a href="([^"]+)">(.*?)</a>', nav, flags=re.IGNORECASE | re.DOTALL)
+        nav_links = re.findall(r'<a\b[^>]*href="([^"]+)"[^>]*>(.*?)</a>', nav, flags=re.IGNORECASE | re.DOTALL)
         nav_hrefs = [href for href, _ in nav_links]
         nav_docs = [href for href in nav_hrefs if href in CORE_DOC_NAV_LINKS]
         if nav_docs != CORE_DOC_NAV_LINKS:
@@ -2306,6 +2308,11 @@ def validate_html_structure(path: Path, text: str, failures: list[str]) -> None:
         for target in CORE_DOC_NAV_LINKS:
             if f'href="{target}"' not in text:
                 failures.append(f"{rel}: toc nav should link to {target}")
+        if 'class="toc-main-site"' not in nav or 'target="_blank"' not in nav:
+            failures.append(f"{rel}: Main Site link should be visually distinct and open separately")
+        for group in ["Get Started", "Learn", "Help", "About", "On This Page"]:
+            if f'<div class="toc-group-title">{group}</div>' not in nav:
+                failures.append(f"{rel}: toc nav missing {group} group")
         section_headings = re.findall(
             r'<section(?:\s+id="([^"]+)")?[^>]*>\s*<h2>(.*?)</h2>',
             text,
@@ -2316,7 +2323,7 @@ def validate_html_structure(path: Path, text: str, failures: list[str]) -> None:
             heading_text = re.sub(r"<[^>]+>", "", heading_html).strip()
             if not section_id:
                 failures.append(f"{rel}: h2 section missing id: {heading_text}")
-            elif section_id not in nav_hashes:
+            elif section_id not in nav_hashes and not (path.name == "guide.html" and section_id == "uninstall"):
                 failures.append(f"{rel}: toc nav missing section link #{section_id} ({heading_text})")
     for href, label in HTML_MD_LINK.findall(text):
         clean_label = re.sub(r"<[^>]+>", "", label).strip()
@@ -2382,7 +2389,7 @@ def validate_markdown_h1_label_parity(failures: list[str]) -> None:
             for match in MD_HEADING.finditer(text)
             if len(match.group(1)) == 1
         ]
-        expected = f"Command {CORE_DOC_NAV_LABELS[html]}"
+        expected = f"Command {CORE_DOC_PAGE_TITLES[html]}"
         if h1s != [expected]:
             failures.append(f"{md_rel}: Markdown H1 should match shared docs label {expected}")
 
@@ -2406,7 +2413,7 @@ def validate_sitemap(failures: list[str]) -> None:
         return
     urls = set(SITEMAP_LOC.findall(sitemap.read_text(encoding="utf-8")))
     expected = {PAGES_BASE_URL}
-    for html in [*CORE_DOC_NAV_LINKS, *SUPPLEMENTAL_PUBLIC_PAGES]:
+    for html in [*CORE_DOC_PAGE_TITLES.keys(), *SUPPLEMENTAL_PUBLIC_PAGES]:
         if html == "index.html":
             continue
         expected.add(f"{PAGES_BASE_URL}{html}")
@@ -2428,7 +2435,7 @@ def validate_release_checklist_coverage(failures: list[str]) -> None:
 
 
 def validate_release_checklist_doc_label_parity(failures: list[str]) -> None:
-    labels = list(CORE_DOC_NAV_LABELS.values()) + ["404 fallback"]
+    labels = list(CORE_DOC_PAGE_TITLES.values()) + ["404 fallback"]
     rel = "RELEASE_CHECKLIST.md"
     text = plain_topic((ROOT / rel).read_text(encoding="utf-8"))
     for label in labels:
@@ -2468,7 +2475,7 @@ def validate_rendered_docs_grid_label_parity(failures: list[str]) -> None:
                 continue
             section = match.group(1)
             for href, actual in card_pattern.findall(section):
-                label = CORE_DOC_NAV_LABELS.get(href)
+                label = CORE_DOC_PAGE_TITLES.get(href)
                 if label is None:
                     continue
                 actual = re.sub(r"<[^>]+>", "", actual).strip()
@@ -2759,7 +2766,7 @@ def validate_readme_docs_table_label_parity(failures: list[str]) -> None:
     for html, rel in CORE_DOC_MARKDOWN_SOURCES.items():
         if html in {"support.html", "security.html", "updates.html"}:
             continue
-        label = CORE_DOC_NAV_LABELS[html]
+        label = CORE_DOC_PAGE_TITLES[html]
         row = f"| {label} | [{rel}]({rel}) |"
         if row not in readme:
             failures.append(f"README.md docs table label missing or mismatched: {label} -> {rel}")
