@@ -138,6 +138,10 @@ assert_contains "incremental install preserves vocabulary" "vocabulary-sentinel"
 assert_contains "incremental install preserves background settings" "background-settings-sentinel" "$(cat "$FAKE_HOME/Library/Application Support/claude-command/settings.json")"
 assert_contains "incremental install preserves command history" "command-history-sentinel" "$(cat "$FAKE_HOME/Library/Application Support/claude-command/command-history/item.json")"
 assert_contains "incremental install preserves Clipboard History data" "clipboard-history-sentinel" "$(cat "$FAKE_HOME/.claude/state/cliphistory/index.json")"
+assert_contains "incremental install stops legacy Command clipwatch" \
+  "pkill -f /Command\\.app/Contents/Resources/clipwatch\\.py$" "$INCREMENTAL_LIFECYCLE"
+assert_contains "incremental install stops legacy ClaudeCommand clipwatch" \
+  "pkill -f /ClaudeCommand\\.app/Contents/Resources/clipwatch\\.py$" "$INCREMENTAL_LIFECYCLE"
 LIFECYCLE_ORDER="$(print -r -- "$INCREMENTAL_LIFECYCLE" | awk '
   /^launchctl bootout / && !bootout { bootout=NR }
   /^pkill -x Command$/ && !pkill { pkill=NR }

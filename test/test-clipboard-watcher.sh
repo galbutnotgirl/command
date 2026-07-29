@@ -8,6 +8,7 @@ BIN="${1:-${ROOT}/agent/.build/debug/CommandClipboardWatcher}"
 TMP_HOME="$(mktemp -d "${TMPDIR:-/tmp}/command-clipboard-watcher.XXXXXX")"
 ERR="${TMP_HOME}/stderr.log"
 PID=""
+SECOND_ERR="${TMP_HOME}/second-stderr.log"
 
 cleanup() {
   if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
@@ -37,6 +38,15 @@ done
 [ -f "$metadata" ] || { print -u2 -- "FAIL: helper did not write clipboard metadata"; exit 1; }
 [ -d "$TMP_HOME/.claude/state/cliphistory" ] || { print -u2 -- "FAIL: helper did not create history directory"; exit 1; }
 [ -f "$TMP_HOME/.claude/logs/attribution.log" ] || { print -u2 -- "FAIL: helper did not write startup log"; exit 1; }
+
+# A second helper must yield ownership without touching shared state or entering
+# its watch loop. This protects updates and accidental duplicate launches.
+HOME="$TMP_HOME" "$BIN" 2>"$SECOND_ERR"
+SECOND_STATUS=$?
+[ "$SECOND_STATUS" -eq 0 ] || { print -u2 -- "FAIL: duplicate helper exited $SECOND_STATUS"; exit 1; }
+kill -0 "$PID" 2>/dev/null || { print -u2 -- "FAIL: first helper lost singleton ownership"; exit 1; }
+grep -q "another native watcher holds singleton lock" "$TMP_HOME/.claude/logs/attribution.log" \
+  || { print -u2 -- "FAIL: duplicate helper did not report singleton lock"; exit 1; }
 
 python3 - "$metadata" <<'PY'
 import json

@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 
 private let home = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
@@ -10,6 +11,7 @@ private let configPath = "\(stateDirectory)/command-config.json"
 private let copySourcePath = "\(stateDirectory)/last_copy.json"
 private let attributionLogPath = "\(home)/.claude/logs/attribution.log"
 private let maxItems = 1_000
+private var singletonLockDescriptor: Int32 = -1
 
 private let blockedBundles: Set<String> = [
     "com.apple.keychainaccess", "com.apple.SecurityAgent",
@@ -34,6 +36,18 @@ private func createRuntimeDirectories() throws {
     try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: historyDirectory)
 }
 
+private func acquireSingletonLock() -> Bool {
+    let path = "\(stateDirectory)/clipwatch.lock"
+    let descriptor = Darwin.open(path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+    guard descriptor >= 0 else { return false }
+    guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+        Darwin.close(descriptor)
+        return false
+    }
+    singletonLockDescriptor = descriptor
+    return true
+}
+
 private func appendLog(_ message: String) {
     let line = "\(Date().formatted(.iso8601)) [clipboard] \(message)\n"
     guard let data = line.data(using: .utf8) else { return }
@@ -48,15 +62,8 @@ private func appendLog(_ message: String) {
 
 private func replaceJSON(_ value: Any, at path: String) throws {
     let data = try JSONSerialization.data(withJSONObject: value)
-    let temporary = path + ".tmp"
-    try data.write(to: URL(fileURLWithPath: temporary), options: .atomic)
-    try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary)
-    if FileManager.default.fileExists(atPath: path) {
-        _ = try FileManager.default.replaceItemAt(URL(fileURLWithPath: path),
-                                                   withItemAt: URL(fileURLWithPath: temporary))
-    } else {
-        try FileManager.default.moveItem(atPath: temporary, toPath: path)
-    }
+    try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+    try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
 }
 
 private func readJSONArray(at path: String) -> [[String: Any]] {
@@ -171,6 +178,10 @@ private func saveHistory(changeCount: Int, pasteboard: NSPasteboard, bundle: Str
 
 do {
     try createRuntimeDirectories()
+    guard acquireSingletonLock() else {
+        appendLog("another native watcher holds singleton lock; exiting")
+        exit(0)
+    }
     let pasteboard = NSPasteboard.general
     var lastChangeCount = pasteboard.changeCount
     var lastPrune = 0.0

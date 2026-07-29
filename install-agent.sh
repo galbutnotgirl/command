@@ -57,6 +57,10 @@ fi
 launchctl bootout "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
 pkill -x Command 2>/dev/null || true
 pkill -x ClaudeCommand 2>/dev/null || true
+# Remove orphaned Python Clipboard History helpers from pre-native builds. Match
+# exact legacy resource suffixes so unrelated Python processes remain untouched.
+pkill -f '/Command\.app/Contents/Resources/clipwatch\.py$' 2>/dev/null || true
+pkill -f '/ClaudeCommand\.app/Contents/Resources/clipwatch\.py$' 2>/dev/null || true
 STOP_WAIT_ATTEMPTS="${COMMAND_STOP_WAIT_ATTEMPTS:-30}"
 for (( _i = 0; _i < STOP_WAIT_ATTEMPTS; _i++ )); do
     if ! pgrep -x Command >/dev/null 2>&1 && ! pgrep -x ClaudeCommand >/dev/null 2>&1; then
@@ -124,7 +128,7 @@ fi
 
 mkdir -p "${HOME}/.claude/logs" "${HOME}/.claude/state"
 
-# Remove stale clipwatch LaunchAgent (now a subprocess, not a separate agent).
+# Remove stale clipwatch LaunchAgent (now a native subprocess).
 if [ -f "$OLD_CLIPWATCH" ]; then
     print -- "[agent] removing old clipwatch LaunchAgent (now bundled subprocess)"
     launchctl bootout "gui/${UID_NUM}/com.claudecommand.clipwatch" 2>/dev/null || true

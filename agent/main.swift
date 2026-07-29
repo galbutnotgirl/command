@@ -2208,6 +2208,14 @@ func offerMoveToApplicationsIfNeeded() -> Bool {
 
 func stopClipwatch() {
     _ = runShell("/usr/bin/pkill", ["-x", "CommandClipboardWatcher"])
+    // Builds before native Clipboard History used a Python child. That orphan can
+    // survive an incremental update after its script and LaunchAgent are removed.
+    for legacyPattern in [
+        "/Command\\.app/Contents/Resources/clipwatch\\.py$",
+        "/ClaudeCommand\\.app/Contents/Resources/clipwatch\\.py$",
+    ] {
+        _ = runShell("/usr/bin/pkill", ["-f", legacyPattern])
+    }
 }
 
 private var clipwatchRestartAttempts = 0
@@ -2259,6 +2267,10 @@ func startClipwatch() {
     p.terminationHandler = { proc in
         let code = proc.terminationStatus
         DispatchQueue.main.async {
+            guard code != 0 else {
+                dbg("clipboard helper exited normally")
+                return
+            }
             clipwatchRestartAttempts += 1
             dbg("clipboard helper exited code=\(code) attempt=\(clipwatchRestartAttempts)")
             appendLog("[clipboard] helper exited code=\(code) attempt=\(clipwatchRestartAttempts)")
