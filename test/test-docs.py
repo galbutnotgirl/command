@@ -1291,6 +1291,16 @@ REQUIRED_TEXT = {
     ],
     "agent/Recorder.swift": [
         "Open Settings -> Dictation Settings and click Download",
+        "audio device:",
+        "copyFailures=",
+        "updates=",
+        "peakRMS=",
+    ],
+    "test/test-dictation-model.sh": [
+        "bright yellow lantern",
+        "cobalt compass",
+        "silver shoreline",
+        '"0.18"',
     ],
     "agent/main.swift": [
         "Command — the one persistent app process",

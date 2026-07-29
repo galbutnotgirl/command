@@ -18,13 +18,18 @@ private func normalized(_ text: String) -> String {
 @main
 enum DictationModelProbe {
     static func main() async {
-        guard CommandLine.arguments.count == 3 else {
-            FileHandle.standardError.write(Data("usage: DictationModelProbe AUDIO_FILE EXPECTED_FINAL_WORDS\n".utf8))
+        guard CommandLine.arguments.count == 3 || CommandLine.arguments.count == 4 else {
+            FileHandle.standardError.write(Data("usage: DictationModelProbe AUDIO_FILE EXPECTED_FINAL_WORDS [GAIN]\n".utf8))
             exit(64)
         }
 
         let audioURL = URL(fileURLWithPath: CommandLine.arguments[1])
         let expected = normalized(CommandLine.arguments[2])
+        let gain = CommandLine.arguments.count == 4 ? Float(CommandLine.arguments[3]) ?? 1 : 1
+        guard gain > 0, gain <= 1 else {
+            FileHandle.standardError.write(Data("GAIN must be greater than 0 and no more than 1\n".utf8))
+            exit(64)
+        }
         let modelDirectory = AsrModels.defaultCacheDirectory(for: .v3)
 
         do {
@@ -59,6 +64,13 @@ enum DictationModelProbe {
                     )
                 }
                 try file.read(into: buffer, frameCount: capacity)
+                if gain < 1, let channels = buffer.floatChannelData {
+                    for channel in 0..<Int(buffer.format.channelCount) {
+                        for frame in 0..<Int(buffer.frameLength) {
+                            channels[channel][frame] *= gain
+                        }
+                    }
+                }
                 await manager.streamAudio(buffer)
             }
 
@@ -69,6 +81,7 @@ enum DictationModelProbe {
             print("final=\(final)")
             print("lastPartial=\(partial)")
             print("preferred=\(best)")
+            print("gain=\(gain)")
 
             guard normalized(best).contains(expected) else {
                 FileHandle.standardError.write(Data("missing expected final words: \(expected)\n".utf8))

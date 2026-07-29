@@ -87,6 +87,11 @@ final class Recorder: ObservableObject {
     private var activeSpeechSeconds: Double = 0
     private var secondsSinceStopTailActivity: Double = .infinity
     private var noiseFloorRMS: Float = 0.003
+    private var capturedBufferCount = 0
+    private var bufferCopyFailureCount = 0
+    private var transcriptionUpdateCount = 0
+    private var peakRMS: Float = 0
+    private var inputDeviceName = "unknown"
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
 
@@ -179,6 +184,8 @@ final class Recorder: ObservableObject {
         lastTranscript = ""; liveTranscript = ""
         totalAudioSeconds = 0; activeSpeechSeconds = 0
         secondsSinceStopTailActivity = .infinity; noiseFloorRMS = 0.003
+        capturedBufferCount = 0; bufferCopyFailureCount = 0; transcriptionUpdateCount = 0
+        peakRMS = 0; inputDeviceName = "unknown"
         state = .starting
         log("▶ session \(mySession) start mode=\(mode)")
 
@@ -200,7 +207,8 @@ final class Recorder: ObservableObject {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let hwFormat = inputNode.outputFormat(forBus: 0)
-        log("audio format: \(hwFormat.sampleRate)Hz ch=\(hwFormat.channelCount)")
+        inputDeviceName = AVCaptureDevice.default(for: .audio)?.localizedName ?? "unknown"
+        log("audio device: \(inputDeviceName); format: \(hwFormat.sampleRate)Hz ch=\(hwFormat.channelCount)")
 
         streamTask = Task {
             let mgr = SlidingWindowAsrManager(config: .default)
@@ -231,7 +239,10 @@ final class Recorder: ObservableObject {
                 if let ownedBuffer = copyAudioBuffer(buf) {
                     bufContinuation.yield(ownedBuffer)
                 } else {
-                    Task { @MainActor in self?.log("audio buffer copy failed") }
+                    Task { @MainActor in
+                        self?.bufferCopyFailureCount += 1
+                        self?.log("audio buffer copy failed")
+                    }
                 }
             }
 
@@ -259,6 +270,7 @@ final class Recorder: ObservableObject {
 
                 for await update in await mgr.transcriptionUpdates {
                     guard self.sessionID == session, !Task.isCancelled else { break }
+                    self.transcriptionUpdateCount += 1
                     self.liveTranscript = update.text
                     self.lastTranscript = update.text
                     self.onPartial?(update.text)
@@ -346,6 +358,7 @@ final class Recorder: ObservableObject {
                 if self.shouldDispatchDictation(best) {
                     self.onFinal?(best, mode)
                 } else {
+                    self.appendEmptyDiagnostics(session: finishingSession, mode: mode)
                     self.log("⚠ dictation suppressed — textChars=\(best.count) activeSpeech=\(String(format: "%.3f", self.activeSpeechSeconds))s totalAudio=\(String(format: "%.3f", self.totalAudioSeconds))s min=\(String(format: "%.1f", self.minimumDictationDuration()))s")
                     self.onFinishedWithoutText?(mode)
                 }
@@ -358,6 +371,7 @@ final class Recorder: ObservableObject {
                 if self.shouldDispatchDictation(self.lastTranscript) {
                     self.onFinal?(self.lastTranscript, mode)
                 } else {
+                    self.appendEmptyDiagnostics(session: finishingSession, mode: mode)
                     self.onFinishedWithoutText?(mode)
                 }
             }
@@ -398,6 +412,8 @@ final class Recorder: ObservableObject {
     private func cancelSilenceTimer() { silenceTimer?.cancel(); silenceTimer = nil }
 
     private func observeAudioFrame(rms: Float, seconds: Double) {
+        capturedBufferCount += 1
+        peakRMS = max(peakRMS, rms)
         totalAudioSeconds += seconds
         let gate = DictationActivityGate(minimumDuration: minimumDictationDuration())
         let threshold = gate.threshold(noiseFloor: noiseFloorRMS)
@@ -424,6 +440,10 @@ final class Recorder: ObservableObject {
     private func shouldDispatchDictation(_ text: String) -> Bool {
         let gate = DictationActivityGate(minimumDuration: minimumDictationDuration())
         return gate.shouldDispatch(text: text, recordedSeconds: totalAudioSeconds)
+    }
+
+    private func appendEmptyDiagnostics(session: Int, mode: DictMode) {
+        appendLog("[dictation] empty session=\(session) mode=\(mode) buffers=\(capturedBufferCount) copyFailures=\(bufferCopyFailureCount) updates=\(transcriptionUpdateCount) peakRMS=\(String(format: "%.5f", peakRMS)) device=\(inputDeviceName.debugDescription)")
     }
 
     private func fail(_ msg: String) {
