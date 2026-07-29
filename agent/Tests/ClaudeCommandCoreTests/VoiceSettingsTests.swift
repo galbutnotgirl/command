@@ -91,6 +91,26 @@ final class VoiceSettingsTests: XCTestCase {
         )
     }
 
+    func testDictationStopTailProtectsSoftFinalWordsAfterPause() {
+        let policy = DEFAULT_DICTATION_STOP_TAIL_POLICY
+        XCTAssertEqual(
+            policy.tailNanoseconds(
+                for: 0.026,
+                secondsSinceActiveSpeech: 1.3,
+                capturedSpeechSeconds: 0.8
+            ),
+            850_000_000
+        )
+        XCTAssertEqual(
+            policy.tailNanoseconds(
+                for: 0.0,
+                secondsSinceActiveSpeech: .infinity,
+                capturedSpeechSeconds: 0
+            ),
+            250_000_000
+        )
+    }
+
     func testDictationCapturePhaseBlocksRestartWhileFinishing() {
         XCTAssertTrue(DictationCapturePhase.idle.canStart)
         XCTAssertTrue(DictationCapturePhase.error.canStart)

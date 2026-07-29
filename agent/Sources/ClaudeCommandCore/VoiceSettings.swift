@@ -88,10 +88,20 @@ public struct DictationStopTailPolicy: Equatable, Sendable {
         self.activeTailNanoseconds = activeTailNanoseconds
     }
 
-    public func tailNanoseconds(for audioLevel: Float, secondsSinceActiveSpeech: Double = .infinity) -> UInt64 {
+    public func tailNanoseconds(
+        for audioLevel: Float,
+        secondsSinceActiveSpeech: Double = .infinity,
+        capturedSpeechSeconds: Double = 0
+    ) -> UInt64 {
         let speechIsCurrent = audioLevel > activeAudioLevelThreshold
         let speechWasRecent = secondsSinceActiveSpeech <= recentSpeechWindowSeconds
-        return speechIsCurrent || speechWasRecent ? activeTailNanoseconds : quietTailNanoseconds
+        // Parakeet needs trailing context to commit soft final words even when the
+        // speaker paused before releasing the key. Reserve the short path for taps
+        // where no speech was captured at all.
+        let recordingContainsSpeech = capturedSpeechSeconds > 0
+        return speechIsCurrent || speechWasRecent || recordingContainsSpeech
+            ? activeTailNanoseconds
+            : quietTailNanoseconds
     }
 }
 

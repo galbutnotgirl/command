@@ -296,7 +296,8 @@ final class Recorder: ObservableObject {
         streamTask = nil
         let stopTailNanoseconds = stopTailPolicy.tailNanoseconds(
             for: audioLevel,
-            secondsSinceActiveSpeech: secondsSinceStopTailActivity
+            secondsSinceActiveSpeech: secondsSinceStopTailActivity,
+            capturedSpeechSeconds: activeSpeechSeconds
         )
         let stopLevel = String(format: "%.3f", audioLevel)
         let recentSpeech = String(format: "%.3f", secondsSinceStopTailActivity)
