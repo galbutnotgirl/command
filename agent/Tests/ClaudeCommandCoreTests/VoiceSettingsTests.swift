@@ -128,6 +128,36 @@ final class VoiceSettingsTests: XCTestCase {
         XCTAssertFalse(DictationCapturePhase.finishing.canStop)
     }
 
+    func testDictationTriggerHealthResetsDriftAndBlocksFinishing() {
+        XCTAssertEqual(
+            dictationTriggerHealthAction(triggerIsIdle: false, overlayVisible: false, capturePhase: .idle),
+            .resetStaleTrigger
+        )
+        XCTAssertEqual(
+            dictationTriggerHealthAction(triggerIsIdle: true, overlayVisible: true, capturePhase: .idle),
+            .resetStaleOverlay
+        )
+        XCTAssertEqual(
+            dictationTriggerHealthAction(triggerIsIdle: true, overlayVisible: false, capturePhase: .finishing),
+            .waitForFinishing
+        )
+        XCTAssertEqual(
+            dictationTriggerHealthAction(triggerIsIdle: false, overlayVisible: true, capturePhase: .listening),
+            .proceed
+        )
+    }
+
+    func testDictationCaptureWatchdogOnlyFlagsActiveCaptureWithoutBuffers() {
+        let policy = DictationCaptureWatchdogPolicy()
+        XCTAssertEqual(policy.warningDelayNanoseconds, 1_500_000_000)
+        XCTAssertEqual(policy.recoveryDelayNanoseconds, 6_000_000_000)
+        XCTAssertTrue(policy.shouldWarn(phase: .starting, capturedBufferCount: 0))
+        XCTAssertTrue(policy.shouldRecover(phase: .listening, capturedBufferCount: 0))
+        XCTAssertFalse(policy.shouldWarn(phase: .listening, capturedBufferCount: 1))
+        XCTAssertFalse(policy.shouldRecover(phase: .finishing, capturedBufferCount: 0))
+        XCTAssertFalse(policy.shouldWarn(phase: .idle, capturedBufferCount: 0))
+    }
+
     func testPreferredTranscriptKeepsLongerTail() {
         XCTAssertEqual(
             preferredDictationTranscript(final: "finish this", lastPartial: "finish this sentence"),

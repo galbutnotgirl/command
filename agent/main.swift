@@ -1243,6 +1243,7 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             let isVoice = isBuiltInVoiceAction(action) || resolveTrigger(action)?.1.kind == .voice
             if isVoice {
                 Task { @MainActor in
+                    appendLog("[hotkeys] voice release action=\(action) id=\(hkID.id) triggerMode=\(_dictTrigMode) overlay=\(DictationOverlay.shared.isVisible) phase=\(recorder.state.rawValue)")
                     if _dictTrigMode == .pushToTalk {
                         _dictPTTimer?.invalidate(); _dictPTTimer = nil
                         _dictTrigMode = .idle
@@ -1266,7 +1267,10 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             if _carbonDictHeld.contains(hkID.id) { return noErr }
             _carbonDictHeld.insert(hkID.id)
             let m: DictMode = dictMode(forBuiltInVoiceAction: action)
-            Task { @MainActor in triggerDictation(mode: m, keycode: nil, pollForRelease: false) }
+            Task { @MainActor in
+                appendLog("[hotkeys] voice press action=\(action) id=\(hkID.id) triggerMode=\(_dictTrigMode) overlay=\(DictationOverlay.shared.isVisible) phase=\(recorder.state.rawValue)")
+                triggerDictation(mode: m, keycode: nil, pollForRelease: false)
+            }
         } else if let (ca, trig) = resolveTrigger(action) {
             if trig.kind == .voice {
                 // Same press/hold/double-tap trigger as the built-in Dictate actions,
@@ -1438,6 +1442,7 @@ private func voiceHotkeyTarget(keycode: UInt32, mods: UInt32) -> VoiceHotkeyTarg
 
 @MainActor
 private func triggerVoiceHotkey(_ target: VoiceHotkeyTarget, keycode: CGKeyCode) {
+    appendLog("[dictation] trigger request target=\(String(describing: target)) keycode=\(keycode) triggerMode=\(_dictTrigMode) overlay=\(DictationOverlay.shared.isVisible) phase=\(recorder.state.rawValue)")
     switch target {
     case .builtIn(let mode):
         triggerDictation(mode: mode, keycode: keycode, pollForRelease: false)
@@ -1489,6 +1494,7 @@ private func releaseVoiceHotkey(keycode: UInt32) {
     appendLog("[eventTap] voice up kc=\(keycode)")
     DispatchQueue.main.async {
         Task { @MainActor in
+            appendLog("[dictation] release request keycode=\(keycode) triggerMode=\(_dictTrigMode) overlay=\(DictationOverlay.shared.isVisible) phase=\(recorder.state.rawValue)")
             if _dictTrigMode == .pushToTalk {
                 _dictPTTimer?.invalidate(); _dictPTTimer = nil
                 _dictTrigMode = .idle
@@ -1518,6 +1524,29 @@ func resetDictTrigMode() {
 
 @MainActor
 func triggerDictation(mode: DictMode, keycode: CGKeyCode?, pollForRelease: Bool = true) {
+    let healthAction = dictationTriggerHealthAction(
+        triggerIsIdle: _dictTrigMode == .idle,
+        overlayVisible: DictationOverlay.shared.isVisible,
+        capturePhase: recorder.state
+    )
+    switch healthAction {
+    case .proceed:
+        break
+    case .resetStaleTrigger:
+        appendLog("[dictation] reconciled stale trigger mode=\(_dictTrigMode) phase=\(recorder.state.rawValue)")
+        resetDictTrigMode()
+    case .resetStaleOverlay:
+        appendLog("[dictation] reconciled stale overlay phase=\(recorder.state.rawValue)")
+        DictationOverlay.shared.hide()
+    case .waitForFinishing:
+        appendLog("[dictation] trigger blocked while previous session finishes")
+        DictationOverlay.shared.showUnavailable(
+            title: "Previous dictation is finishing",
+            detail: "Stop speaking until your transcript appears, then hold the shortcut again."
+        )
+        return
+    }
+
     switch _dictTrigMode {
     case .lock:
         resetDictTrigMode()
@@ -1533,7 +1562,10 @@ func triggerDictation(mode: DictMode, keycode: CGKeyCode?, pollForRelease: Bool 
         _dictLastPress = now
 
         if !DictationOverlay.shared.isVisible {
-            DictationOverlay.shared.show(mode: mode)
+            guard DictationOverlay.shared.show(mode: mode) else {
+                resetDictTrigMode()
+                return
+            }
         }
 
         if isDouble {

@@ -1,6 +1,101 @@
 // DictationOverlay.swift — recording session controller.
 
 import Cocoa
+import ClaudeCommandCore
+
+@MainActor
+private final class DictationCaptureWarningPanel {
+    static let shared = DictationCaptureWarningPanel()
+
+    private let panel: NSPanel
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let detailLabel = NSTextField(wrappingLabelWithString: "")
+    private var dismissTask: Task<Void, Never>?
+
+    private init() {
+        panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 540, height: 190),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.ignoresMouseEvents = true
+
+        let background = NSVisualEffectView()
+        background.material = .hudWindow
+        background.blendingMode = .behindWindow
+        background.state = .active
+        background.wantsLayer = true
+        background.layer?.cornerRadius = 18
+        background.layer?.cornerCurve = .continuous
+        panel.contentView = background
+
+        let icon = NSImageView(image: NSImage(systemSymbolName: "mic.slash.fill", accessibilityDescription: "Microphone warning") ?? NSImage())
+        icon.contentTintColor = .systemOrange
+        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 46, weight: .semibold)
+        icon.translatesAutoresizingMaskIntoConstraints = false
+
+        titleLabel.font = .systemFont(ofSize: 24, weight: .bold)
+        titleLabel.textColor = .labelColor
+        titleLabel.maximumNumberOfLines = 1
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        detailLabel.font = .systemFont(ofSize: 16, weight: .medium)
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.maximumNumberOfLines = 3
+        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        background.addSubview(icon)
+        background.addSubview(titleLabel)
+        background.addSubview(detailLabel)
+        NSLayoutConstraint.activate([
+            icon.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 30),
+            icon.centerYAnchor.constraint(equalTo: background.centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 56),
+            icon.heightAnchor.constraint(equalToConstant: 56),
+            titleLabel.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 24),
+            titleLabel.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -30),
+            titleLabel.topAnchor.constraint(equalTo: background.topAnchor, constant: 40),
+            detailLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            detailLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            detailLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
+            detailLabel.bottomAnchor.constraint(lessThanOrEqualTo: background.bottomAnchor, constant: -30),
+        ])
+    }
+
+    func show(title: String, detail: String, autoDismissAfter: TimeInterval? = nil) {
+        dismissTask?.cancel()
+        titleLabel.stringValue = title
+        detailLabel.stringValue = detail
+        let screen = NSScreen.main ?? NSScreen.screens.first
+        if let frame = screen?.visibleFrame {
+            panel.setFrameOrigin(NSPoint(
+                x: frame.midX - panel.frame.width / 2,
+                y: frame.midY - panel.frame.height / 2
+            ))
+        } else {
+            panel.center()
+        }
+        panel.orderFrontRegardless()
+        guard let delay = autoDismissAfter else { return }
+        dismissTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.hide()
+        }
+    }
+
+    func hide() {
+        dismissTask?.cancel()
+        dismissTask = nil
+        panel.orderOut(nil)
+    }
+}
 
 // MARK: - Overlay controller
 
@@ -11,7 +106,10 @@ final class DictationOverlay: NSObject {
     private(set) var isVisible: Bool = false  // true = recording in progress
     var prevBundle: String = ""
     private var levelTask: Task<Void, Never>?
+    private var captureWatchdogTask: Task<Void, Never>?
+    private var captureWarningVisible = false
     private var isFinishing: Bool = false
+    private let watchdogPolicy = DEFAULT_DICTATION_CAPTURE_WATCHDOG_POLICY
 
     private override init() {
         super.init()
@@ -20,22 +118,31 @@ final class DictationOverlay: NSObject {
 
     // MARK: - Public API
 
-    func show(mode: DictMode) {
+    @discardableResult
+    func show(mode: DictMode) -> Bool {
         prevBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        guard recorder.start(mode: mode) else {
+            appendLog("[dictation] overlay start rejected mode=\(mode) phase=\(recorder.state.rawValue)")
+            showUnavailable(
+                title: "Dictation didn't start",
+                detail: "Release your shortcut and try again. Command reset any stale recording state."
+            )
+            return false
+        }
         isVisible = true
         isFinishing = false
         menuBar.setRecording(true)
-        recorder.start(mode: mode)
-        if case .error = recorder.state {
-            hide()
-            return
-        }
         playUISound(settingsModel.startSound, role: .start)
         startLevelUpdates()
+        startCaptureWatchdog()
+        return true
     }
 
     func hide() {
         levelTask?.cancel(); levelTask = nil
+        captureWatchdogTask?.cancel(); captureWatchdogTask = nil
+        captureWarningVisible = false
+        DictationCaptureWarningPanel.shared.hide()
         menuBar.setRecording(false)
         isVisible = false
         isFinishing = false
@@ -57,9 +164,59 @@ final class DictationOverlay: NSObject {
         levelTask = Task { @MainActor [weak self] in
             while let s = self, s.isVisible, !Task.isCancelled {
                 menuBar.updateAudioLevel(recorder.audioLevel)
+                if s.captureWarningVisible && recorder.capturedBufferCount > 0 {
+                    s.captureWarningVisible = false
+                    DictationCaptureWarningPanel.shared.hide()
+                    appendLog("[dictation] capture recovered after warning buffers=\(recorder.capturedBufferCount)")
+                }
                 try? await Task.sleep(nanoseconds: 66_000_000)   // ~15 fps
             }
         }
+    }
+
+    private func startCaptureWatchdog() {
+        captureWatchdogTask?.cancel()
+        captureWatchdogTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while self.isVisible, !self.isFinishing, !recorder.captureStartupBegan, !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            guard !Task.isCancelled, self.isVisible, !self.isFinishing else { return }
+            try? await Task.sleep(nanoseconds: watchdogPolicy.warningDelayNanoseconds)
+            guard !Task.isCancelled, self.isVisible, !self.isFinishing,
+                  watchdogPolicy.shouldWarn(
+                    phase: recorder.state,
+                    capturedBufferCount: recorder.capturedBufferCount
+                  ) else { return }
+
+            self.captureWarningVisible = true
+            appendLog("[dictation] capture warning phase=\(recorder.state.rawValue) buffers=\(recorder.capturedBufferCount)")
+            DictationCaptureWarningPanel.shared.show(
+                title: "Microphone isn't recording",
+                detail: "Stop speaking. Command has not received audio yet and is trying to recover."
+            )
+
+            let remaining = watchdogPolicy.recoveryDelayNanoseconds - watchdogPolicy.warningDelayNanoseconds
+            try? await Task.sleep(nanoseconds: remaining)
+            guard !Task.isCancelled, self.isVisible, !self.isFinishing,
+                  watchdogPolicy.shouldRecover(
+                    phase: recorder.state,
+                    capturedBufferCount: recorder.capturedBufferCount
+                  ) else { return }
+
+            appendLog("[dictation] capture watchdog recovering phase=\(recorder.state.rawValue) buffers=\(recorder.capturedBufferCount)")
+            recorder.cancel()
+            self.hide()
+            DictationCaptureWarningPanel.shared.show(
+                title: "Dictation stopped",
+                detail: "No audio was captured. Release your shortcut and try again; Command reset the microphone.",
+                autoDismissAfter: 8
+            )
+        }
+    }
+
+    func showUnavailable(title: String, detail: String) {
+        DictationCaptureWarningPanel.shared.show(title: title, detail: detail, autoDismissAfter: 6)
     }
 
     // MARK: - Recorder wiring
@@ -95,6 +252,11 @@ final class DictationOverlay: NSObject {
             Task { @MainActor in
                 appendLog("[dictation] failed mode=\(String(describing: mode)) error=\(message)")
                 self?.hide()
+                DictationCaptureWarningPanel.shared.show(
+                    title: "Dictation failed",
+                    detail: "No audio is being captured. Command reset dictation; release your shortcut and try again.",
+                    autoDismissAfter: 8
+                )
             }
         }
     }

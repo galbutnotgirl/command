@@ -87,7 +87,8 @@ final class Recorder: ObservableObject {
     private var activeSpeechSeconds: Double = 0
     private var secondsSinceStopTailActivity: Double = .infinity
     private var noiseFloorRMS: Float = 0.003
-    private var capturedBufferCount = 0
+    private(set) var capturedBufferCount = 0
+    private(set) var captureStartupBegan = false
     private var bufferCopyFailureCount = 0
     private var transcriptionUpdateCount = 0
     private var peakRMS: Float = 0
@@ -160,8 +161,12 @@ final class Recorder: ObservableObject {
         else if state.canStart { start(mode: mode) }
     }
 
-    func start(mode: DictMode) {
-        guard state.canStart else { return }
+    @discardableResult
+    func start(mode: DictMode) -> Bool {
+        guard state.canStart else {
+            appendLog("[dictation] start rejected mode=\(mode) phase=\(state.rawValue)")
+            return false
+        }
         guard loadedModels != nil else {
             fail("models not loaded")
             DispatchQueue.main.async {
@@ -175,7 +180,7 @@ final class Recorder: ObservableObject {
                     settingsWindow.show(tab: .dictSettings)
                 }
             }
-            return
+            return false
         }
         sessionID += 1
         let mySession = sessionID
@@ -185,9 +190,11 @@ final class Recorder: ObservableObject {
         totalAudioSeconds = 0; activeSpeechSeconds = 0
         secondsSinceStopTailActivity = .infinity; noiseFloorRMS = 0.003
         capturedBufferCount = 0; bufferCopyFailureCount = 0; transcriptionUpdateCount = 0
+        captureStartupBegan = false
         peakRMS = 0; inputDeviceName = "unknown"
         state = .starting
         log("▶ session \(mySession) start mode=\(mode)")
+        appendLog("[dictation] start session=\(mySession) mode=\(mode) deviceAuthorization=\(AVCaptureDevice.authorizationStatus(for: .audio).rawValue)")
 
         if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized {
             beginStreaming(session: mySession)
@@ -200,10 +207,12 @@ final class Recorder: ObservableObject {
                 }
             }
         }
+        return true
     }
 
     private func beginStreaming(session: Int) {
         guard let models = loadedModels else { fail("loadedModels nil"); return }
+        captureStartupBegan = true
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let hwFormat = inputNode.outputFormat(forBus: 0)
@@ -214,6 +223,10 @@ final class Recorder: ObservableObject {
             let mgr = SlidingWindowAsrManager(config: .default)
             do { try await mgr.loadModels(models) }
             catch { self.fail("mgr.loadModels: \(error)"); return }
+            guard self.sessionID == session, !Task.isCancelled else {
+                self.log("startup abandoned before audio tap session=\(session)")
+                return
+            }
             self.currentMgr = mgr
 
             var bufCount = 0
@@ -260,6 +273,7 @@ final class Recorder: ObservableObject {
                 }
                 self.state = .listening
                 self.log("🎙 listening")
+                appendLog("[dictation] listening session=\(session) device=\(self.inputDeviceName.debugDescription)")
                 if self.stopRequestedDuringStart {
                     self.stopRequestedDuringStart = false
                     self.log("stop was requested during startup — stopping now that audio is live")
@@ -380,6 +394,7 @@ final class Recorder: ObservableObject {
 
     func cancel() {
         log("cancel")
+        appendLog("[dictation] cancel session=\(sessionID) phase=\(state.rawValue) buffers=\(capturedBufferCount)")
         sessionID += 1
         stopRequestedDuringStart = false
         audioEngine?.inputNode.removeTap(onBus: 0)
@@ -390,6 +405,7 @@ final class Recorder: ObservableObject {
         cancelSilenceTimer()
         lastTranscript = ""; liveTranscript = ""
         totalAudioSeconds = 0; activeSpeechSeconds = 0
+        captureStartupBegan = false
         secondsSinceStopTailActivity = .infinity; noiseFloorRMS = 0.003
         audioLevel = 0
         state = .idle

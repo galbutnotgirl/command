@@ -36,6 +36,49 @@ public enum DictationCapturePhase: String, Equatable, Sendable {
     public var canStop: Bool { self == .starting || self == .listening }
 }
 
+public enum DictationTriggerHealthAction: Equatable, Sendable {
+    case proceed
+    case resetStaleTrigger
+    case resetStaleOverlay
+    case waitForFinishing
+}
+
+public func dictationTriggerHealthAction(
+    triggerIsIdle: Bool,
+    overlayVisible: Bool,
+    capturePhase: DictationCapturePhase
+) -> DictationTriggerHealthAction {
+    if capturePhase == .finishing { return .waitForFinishing }
+    if !overlayVisible && !triggerIsIdle { return .resetStaleTrigger }
+    if overlayVisible && (capturePhase == .idle || capturePhase == .error) {
+        return .resetStaleOverlay
+    }
+    return .proceed
+}
+
+public struct DictationCaptureWatchdogPolicy: Equatable, Sendable {
+    public let warningDelayNanoseconds: UInt64
+    public let recoveryDelayNanoseconds: UInt64
+
+    public init(
+        warningDelayNanoseconds: UInt64 = 1_500_000_000,
+        recoveryDelayNanoseconds: UInt64 = 6_000_000_000
+    ) {
+        self.warningDelayNanoseconds = warningDelayNanoseconds
+        self.recoveryDelayNanoseconds = max(recoveryDelayNanoseconds, warningDelayNanoseconds)
+    }
+
+    public func shouldWarn(phase: DictationCapturePhase, capturedBufferCount: Int) -> Bool {
+        capturedBufferCount == 0 && (phase == .starting || phase == .listening)
+    }
+
+    public func shouldRecover(phase: DictationCapturePhase, capturedBufferCount: Int) -> Bool {
+        shouldWarn(phase: phase, capturedBufferCount: capturedBufferCount)
+    }
+}
+
+public let DEFAULT_DICTATION_CAPTURE_WATCHDOG_POLICY = DictationCaptureWatchdogPolicy()
+
 public func preferredDictationTranscript(final: String, lastPartial: String) -> String {
     final.count >= lastPartial.count ? final : lastPartial
 }

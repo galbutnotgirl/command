@@ -238,6 +238,8 @@ SEND_SOURCE="$(cat "$SEND_SCRIPT")"
 AGENT_SOURCE="$(cat "${DIR}/agent/main.swift")"
 SETTINGS_SOURCE="$(cat "${DIR}/agent/SettingsWindow.swift")"
 PERMISSIONS_SOURCE="$(cat "${DIR}/agent/Permissions.swift")"
+DICTATION_OVERLAY_SOURCE="$(cat "${DIR}/agent/DictationOverlay.swift")"
+RECORDER_SOURCE="$(cat "${DIR}/agent/Recorder.swift")"
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
   'helper_newchat ||'
 assert_contains "Native assistant shortcuts use tested core mapping" "$AGENT_SOURCE" \
@@ -254,6 +256,14 @@ assert_contains "voice event tap waits for Accessibility instead of giving up" "
   'scheduleMediaKeyHookRetry()'
 assert_contains "voice event tap reports missing Accessibility" "$AGENT_SOURCE" \
   'waiting for Accessibility before installing media/voice hook'
+assert_contains "dictation trigger reconciles stale state before recording" "$AGENT_SOURCE" \
+  'dictationTriggerHealthAction('
+assert_contains "dictation shows a centered capture warning" "$DICTATION_OVERLAY_SOURCE" \
+  'title: "Microphone isn'"'"'t recording"'
+assert_contains "dictation watchdog recovers zero-buffer capture" "$DICTATION_OVERLAY_SOURCE" \
+  'capture watchdog recovering'
+assert_contains "canceled dictation startup cannot install a stale audio tap" "$RECORDER_SOURCE" \
+  'startup abandoned before audio tap'
 assert_contains "Claude selector exposes combined Chat/Cowork destination" "$SETTINGS_SOURCE" \
   'Text("Chat/Cowork").tag("chat")'
 assert_not_contains "Claude selector no longer exposes separate Cowork destination" "$SETTINGS_SOURCE" \
