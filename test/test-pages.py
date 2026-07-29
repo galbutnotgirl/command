@@ -62,8 +62,8 @@ def main() -> int:
     home = (DOCS / "index.html").read_text(encoding="utf-8")
     install = (DOCS / "install.html").read_text(encoding="utf-8")
     required_home = [
-        "Stop copy-pasting into Claude.",
-        "Claude · Current conversation",
+        "Stop copy-pasting into your AI tools.",
+        "ChatGPT · Current conversation",
         LATEST_RELEASE,
         "install.html",
         "guide.html",
