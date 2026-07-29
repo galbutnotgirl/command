@@ -266,10 +266,21 @@ func dispatchBuiltInAction(_ action: String, source: String, captured: String) {
     runWorker(action, source: source, captured: captured, builtInAutoSubmit: builtInComposeAutoSubmit(action))
 }
 
+private let agentLogLock = NSLock()
+private let agentLogTimestampFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    return formatter
+}()
+
 func appendLog(_ msg: String) {
+    agentLogLock.lock()
+    defer { agentLogLock.unlock() }
+    let timestamp = agentLogTimestampFormatter.string(from: Date())
     for path in ["\(HOME)/.claude/logs/command-agent.err",
                  "\(HOME)/.claude/logs/attribution.log"] {
-        let line = msg + "\n"
+        let line = "\(timestamp) \(msg)\n"
         guard let data = line.data(using: .utf8) else { continue }
         if let fh = FileHandle(forWritingAtPath: path) { fh.seekToEndOfFile(); fh.write(data); fh.closeFile() }
         else { try? data.write(to: URL(fileURLWithPath: path)) }

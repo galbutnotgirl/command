@@ -105,6 +105,12 @@ helper_paste() {
   [ "$(agent_cmd "pasteapp $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]
 }
 helper_return(){ [ "$(agent_cmd "returnapp $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]; }
+submit_or_fail() {
+  helper_return && return 0
+  log "submit failed target=$TARGET_LABEL bundle=$TARGET_BUNDLE"
+  notify "Command could not submit in $TARGET_LABEL. Your prompt is still in the composer."
+  return 1
+}
 helper_newtask(){ [ "$(agent_cmd "newtask $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]; }
 helper_newchat(){ [ "$(agent_cmd "newchat $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]; }
 helper_newprojectless(){ [ "$(agent_cmd "newprojectless $TARGET_BUNDLE" 2>/dev/null)" = "ok" ]; }
@@ -473,7 +479,7 @@ case "$ACTION" in
     sleep 0.8   # let input field populate + focus before follow-up action
     [ "$IMG" = "1" ] && { helper_paste || exit 1; paste_codex_pending || exit 1; sleep 0.4; }
     if [ "$SHOULD_SUBMIT" = "1" ]; then
-      helper_return
+      submit_or_fail || exit 1
       sleep 0.25
       case "$PRIOR" in
         ""|"$TARGET_BUNDLE"|com.claudecommand.*) log "submitted (prior=${PRIOR:-none}; no restore)" ;;
@@ -491,12 +497,12 @@ case "$ACTION" in
       open_new "$(expand_template "$COMMENT_RAW" "")" || { notify "Could not open $TARGET_LABEL."; exit 1; }
       [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste image into new session"; exit 0; }
       wait_for_assistant || log "WARN not frontmost"; sleep 0.3; helper_paste || exit 1; paste_codex_pending || exit 1
-      [ "$SHOULD_SUBMIT" = "1" ] && { sleep 0.1; helper_return; }
+      [ "$SHOULD_SUBMIT" = "1" ] && { sleep 0.1; submit_or_fail || exit 1; }
     else
       open_new "$(expand_template "$COMMENT_RAW" "$SEL")"$'\n\n' \
         || { notify "Could not open $TARGET_LABEL."; exit 1; }
       if [ "$SHOULD_SUBMIT" = "1" ] && [ "$DRY_RUN" != "1" ]; then
-        wait_for_assistant || log "WARN not frontmost"; sleep 0.3; helper_return
+        wait_for_assistant || log "WARN not frontmost"; sleep 0.3; submit_or_fail || exit 1
       fi
       true
     fi
@@ -510,7 +516,7 @@ case "$ACTION" in
       helper_activate "$TARGET_BUNDLE" || { notify "Could not activate $TARGET_LABEL."; exit 1; }
       wait_for_assistant || { notify "$TARGET_LABEL did not become ready."; exit 1; }
       sleep 0.3; helper_paste || exit 1
-      [ "$SHOULD_SUBMIT" = "1" ] && { sleep 0.1; helper_return; }
+      [ "$SHOULD_SUBMIT" = "1" ] && { sleep 0.1; submit_or_fail || exit 1; }
     else
       PAYLOAD="$(expand_template "$ADD_RAW" "$SEL")"
       if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN would copy payload + paste into open $TARGET_LABEL session"; exit 0; fi
@@ -518,7 +524,7 @@ case "$ACTION" in
       helper_activate "$TARGET_BUNDLE" || { notify "Could not activate $TARGET_LABEL."; exit 1; }
       wait_for_assistant || { notify "$TARGET_LABEL did not become ready."; exit 1; }
       sleep 0.3; helper_paste || exit 1
-      [ "$SHOULD_SUBMIT" = "1" ] && { sleep 0.1; helper_return; }
+      [ "$SHOULD_SUBMIT" = "1" ] && { sleep 0.1; submit_or_fail || exit 1; }
     fi
     log "pasted into open $TARGET_LABEL session"
     ;;
@@ -564,18 +570,18 @@ case "$ACTION" in
         wait_for_assistant || { notify "$TARGET_LABEL did not become ready."; exit 1; }
         sleep 0.5; helper_paste || exit 1
       fi
-      if [ "${CUSTOM_SUBMIT:-}" = "go" ]; then sleep 0.3; helper_return || true; fi
+      if [ "${CUSTOM_SUBMIT:-}" = "go" ]; then sleep 0.3; submit_or_fail || exit 1; fi
     else
       # Open new task for selected foreground destination.
       if [ "$IMG" = "1" ]; then
         open_new "${PREFIX}${PAYLOAD}" || { notify "Could not open $TARGET_LABEL."; exit 1; }
         [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste screenshot into custom prompt"; exit 0; }
         wait_for_assistant || log "WARN not frontmost"; sleep 0.3; helper_paste || exit 1; paste_codex_pending || exit 1
-        if [ "${CUSTOM_SUBMIT:-}" = "go" ]; then sleep 0.1; helper_return || true; fi
+        if [ "${CUSTOM_SUBMIT:-}" = "go" ]; then sleep 0.1; submit_or_fail || exit 1; fi
       else
         open_new "${PREFIX}${PAYLOAD}" || { notify "Could not open $TARGET_LABEL."; exit 1; }
         if [ "${CUSTOM_SUBMIT:-}" = "go" ]; then
-          wait_for_assistant || log "WARN not frontmost"; sleep 0.3; helper_return || true
+          wait_for_assistant || log "WARN not frontmost"; sleep 0.3; submit_or_fail || exit 1
         fi
       fi
     fi

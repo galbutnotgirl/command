@@ -242,6 +242,10 @@ assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" 
   'helper_newchat ||'
 assert_contains "Native assistant shortcuts use tested core mapping" "$AGENT_SOURCE" \
   'assistantShortcut(forSocketCommand: parts[0])'
+assert_contains "agent diagnostics include precise UTC timestamps" "$AGENT_SOURCE" \
+  'formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]'
+assert_contains "concurrent agent diagnostics serialize file writes" "$AGENT_SOURCE" \
+  'agentLogLock.lock()'
 assert_not_contains "Codex projectless task no longer uses stale Shift-Command-O shortcut" "$AGENT_SOURCE" \
   'shift: isProjectless,'
 assert_contains "Native session commands target assistant process directly" "$AGENT_SOURCE" \
@@ -272,6 +276,10 @@ assert_contains "paste targets assistant process when Electron window stays back
   'agent_cmd "pasteapp $TARGET_BUNDLE"'
 assert_contains "submit targets assistant process when Electron window stays backgrounded" "$SEND_SOURCE" \
   'agent_cmd "returnapp $TARGET_BUNDLE"'
+assert_contains "auto-submit failures become command failures" "$SEND_SOURCE" \
+  'submit_or_fail || exit 1'
+assert_not_contains "custom auto-submit no longer hides failures" "$SEND_SOURCE" \
+  'helper_return || true'
 assert_not_contains "paste fallback no longer rejects non-settable AXValue" "$SEND_SOURCE" \
   'input field is not ready. Open a session and try again.'
 
