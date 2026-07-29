@@ -4817,7 +4817,7 @@ struct DictSettingsView: View {
                                 }
                             ), in: 0...1.5, step: 0.1)
                         }
-                        Text("Drops accidental taps and near-silence hallucinations before they reach insert, assistant, or custom voice actions.")
+                        Text("Drops accidental recordings shorter than the selected duration before they reach insert, assistant, or custom voice actions.")
                             .font(.caption).foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                         Divider()

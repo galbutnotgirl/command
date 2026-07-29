@@ -423,7 +423,7 @@ final class Recorder: ObservableObject {
 
     private func shouldDispatchDictation(_ text: String) -> Bool {
         let gate = DictationActivityGate(minimumDuration: minimumDictationDuration())
-        return gate.shouldDispatch(text: text, activeSpeechSeconds: activeSpeechSeconds)
+        return gate.shouldDispatch(text: text, recordedSeconds: totalAudioSeconds)
     }
 
     private func fail(_ msg: String) {

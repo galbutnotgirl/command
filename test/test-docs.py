@@ -1119,7 +1119,7 @@ REQUIRED_TEXT = {
         "Built-in Dictate shortcuts live in <strong>Dictation Settings</strong>",
         "voice prompt triggers live in <strong>Shortcut Settings</strong>",
         "Settings -> Dictation Settings -> Ignore below",
-        "near-silence hallucinations",
+        "accidental recordings shorter than the selected duration",
         "The stop sound means release was accepted",
     ],
     "docs/examples.html": [

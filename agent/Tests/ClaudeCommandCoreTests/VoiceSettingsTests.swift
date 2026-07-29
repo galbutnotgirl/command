@@ -40,9 +40,16 @@ final class VoiceSettingsTests: XCTestCase {
 
     func testDictationActivityGateDropsShortOrEmptyResults() {
         let gate = DictationActivityGate(minimumDuration: 0.2)
-        XCTAssertFalse(gate.shouldDispatch(text: "", activeSpeechSeconds: 1.0))
-        XCTAssertFalse(gate.shouldDispatch(text: "hey", activeSpeechSeconds: 0.19))
-        XCTAssertTrue(gate.shouldDispatch(text: "hey", activeSpeechSeconds: 0.2))
+        XCTAssertFalse(gate.shouldDispatch(text: "", recordedSeconds: 1.0))
+        XCTAssertFalse(gate.shouldDispatch(text: "hey", recordedSeconds: 0.19))
+        XCTAssertTrue(gate.shouldDispatch(text: "hey", recordedSeconds: 0.2))
+    }
+
+    func testDictationActivityGateKeepsValidTranscriptWhenRMSMissesSpeech() {
+        let gate = DictationActivityGate(minimumDuration: 0.2)
+        let transcript = String(repeating: "spoken words ", count: 31)
+        XCTAssertEqual(transcript.count, 403)
+        XCTAssertTrue(gate.shouldDispatch(text: transcript, recordedSeconds: 34.1))
     }
 
     func testDictationActivityGateUsesAdaptiveNoiseFloor() {
@@ -68,26 +75,27 @@ final class VoiceSettingsTests: XCTestCase {
         let policy = DEFAULT_DICTATION_STOP_TAIL_POLICY
         XCTAssertEqual(policy.activeAudioLevelThreshold, 0.035, accuracy: 0.0001)
         XCTAssertEqual(policy.recentSpeechWindowSeconds, 0.45, accuracy: 0.0001)
-        XCTAssertEqual(policy.quietTailNanoseconds, 250_000_000)
-        XCTAssertEqual(policy.activeTailNanoseconds, 850_000_000)
-        XCTAssertEqual(policy.tailNanoseconds(for: 0.0), 250_000_000)
-        XCTAssertEqual(policy.tailNanoseconds(for: 0.035), 250_000_000)
-        XCTAssertEqual(policy.tailNanoseconds(for: 0.036), 850_000_000)
+        XCTAssertEqual(policy.quietTailNanoseconds, 150_000_000)
+        XCTAssertEqual(policy.settledSpeechTailNanoseconds, 300_000_000)
+        XCTAssertEqual(policy.activeTailNanoseconds, 500_000_000)
+        XCTAssertEqual(policy.tailNanoseconds(for: 0.0), 150_000_000)
+        XCTAssertEqual(policy.tailNanoseconds(for: 0.035), 150_000_000)
+        XCTAssertEqual(policy.tailNanoseconds(for: 0.036), 500_000_000)
     }
 
     func testDictationStopTailProtectsSpeechBeforeQuietReleaseFrame() {
         let policy = DEFAULT_DICTATION_STOP_TAIL_POLICY
         XCTAssertEqual(
             policy.tailNanoseconds(for: 0.0, secondsSinceActiveSpeech: 0.10),
-            850_000_000
+            500_000_000
         )
         XCTAssertEqual(
             policy.tailNanoseconds(for: 0.0, secondsSinceActiveSpeech: 0.45),
-            850_000_000
+            500_000_000
         )
         XCTAssertEqual(
             policy.tailNanoseconds(for: 0.0, secondsSinceActiveSpeech: 0.46),
-            250_000_000
+            150_000_000
         )
     }
 
@@ -99,7 +107,7 @@ final class VoiceSettingsTests: XCTestCase {
                 secondsSinceActiveSpeech: 1.3,
                 capturedSpeechSeconds: 0.8
             ),
-            850_000_000
+            300_000_000
         )
         XCTAssertEqual(
             policy.tailNanoseconds(
@@ -107,7 +115,7 @@ final class VoiceSettingsTests: XCTestCase {
                 secondsSinceActiveSpeech: .infinity,
                 capturedSpeechSeconds: 0
             ),
-            250_000_000
+            150_000_000
         )
     }
 

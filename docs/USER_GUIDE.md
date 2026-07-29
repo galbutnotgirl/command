@@ -283,7 +283,7 @@ Use **Dictation Settings** for Dictate -> Insert, Dictate -> Assistant, and Dict
 
 Voice custom actions use the same recording engine as built-in Dictate. Configure voice prompt actions in **Shortcuts**, not Dictation Settings.
 
-Use **Ignore below** to drop accidental taps, tiny bursts, and near-silence hallucinations before they insert text or send to an assistant. Default is 0.2 seconds.
+Use **Ignore below** to drop accidental recordings shorter than the selected duration before they insert text or send to an assistant. Default is 0.2 seconds.
 
 If final words are missing, compare **Dictation History** raw text, processed text, and the sent command before filing a bug.
 

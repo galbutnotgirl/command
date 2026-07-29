@@ -65,8 +65,8 @@ public struct DictationActivityGate: Equatable, Sendable {
         max(minimumRMS, noiseFloor * noiseMultiplier)
     }
 
-    public func shouldDispatch(text: String, activeSpeechSeconds: Double) -> Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && activeSpeechSeconds >= minimumDuration
+    public func shouldDispatch(text: String, recordedSeconds: Double) -> Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && recordedSeconds >= minimumDuration
     }
 }
 
@@ -74,17 +74,20 @@ public struct DictationStopTailPolicy: Equatable, Sendable {
     public let activeAudioLevelThreshold: Float
     public let recentSpeechWindowSeconds: Double
     public let quietTailNanoseconds: UInt64
+    public let settledSpeechTailNanoseconds: UInt64
     public let activeTailNanoseconds: UInt64
 
     public init(
         activeAudioLevelThreshold: Float = 0.035,
         recentSpeechWindowSeconds: Double = 0.45,
-        quietTailNanoseconds: UInt64 = 250_000_000,
-        activeTailNanoseconds: UInt64 = 850_000_000
+        quietTailNanoseconds: UInt64 = 150_000_000,
+        settledSpeechTailNanoseconds: UInt64 = 300_000_000,
+        activeTailNanoseconds: UInt64 = 500_000_000
     ) {
         self.activeAudioLevelThreshold = activeAudioLevelThreshold
         self.recentSpeechWindowSeconds = recentSpeechWindowSeconds
         self.quietTailNanoseconds = quietTailNanoseconds
+        self.settledSpeechTailNanoseconds = settledSpeechTailNanoseconds
         self.activeTailNanoseconds = activeTailNanoseconds
     }
 
@@ -95,13 +98,10 @@ public struct DictationStopTailPolicy: Equatable, Sendable {
     ) -> UInt64 {
         let speechIsCurrent = audioLevel > activeAudioLevelThreshold
         let speechWasRecent = secondsSinceActiveSpeech <= recentSpeechWindowSeconds
-        // Parakeet needs trailing context to commit soft final words even when the
-        // speaker paused before releasing the key. Reserve the short path for taps
-        // where no speech was captured at all.
         let recordingContainsSpeech = capturedSpeechSeconds > 0
-        return speechIsCurrent || speechWasRecent || recordingContainsSpeech
-            ? activeTailNanoseconds
-            : quietTailNanoseconds
+        if speechIsCurrent || speechWasRecent { return activeTailNanoseconds }
+        if recordingContainsSpeech { return settledSpeechTailNanoseconds }
+        return quietTailNanoseconds
     }
 }
 
