@@ -195,11 +195,11 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-30)
 
-- Automated local suites: 228 Swift, 58 Node, 179 shell, 17 build-transaction,
+- Automated local suites: 229 Swift, 58 Node, 183 shell, 17 build-transaction,
   17 release-transaction, 41 install-state, 14 updater, 9 restart-handoff,
   9 installed-state preservation, 9 release-policy, 94 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
-- Twenty-six tracked regressions have 81 source/test evidence links; thirteen dictation regressions
+- Twenty-six tracked regressions have 83 source/test evidence links; thirteen dictation regressions
   retain 41 links. Every contract spans at least two files, includes release-executed integration
   evidence, and has runtime evidence, CI enforcement, and public-release
   enforcement. Latest session health is
@@ -211,15 +211,17 @@ Preserve user settings for incremental tests. Use clean install only for onboard
   files; an ad-hoc success run replaced the staged build cleanly with no leftovers.
 - Release zip and checksum are also staged and committed as a pair only after validation and
   optional notarization complete; interrupted or failed packaging restores prior assets.
-- AddressSanitizer and ThreadSanitizer passed all 221 Swift tests before latest watchdog changes;
-  rerun both across all 228 Swift tests after latest recorder, async
-  stream, and event-dispatch changes; rerun both after future recorder, async stream, or
-  shared-state changes.
+- AddressSanitizer and ThreadSanitizer pass all 229 Swift tests after current recorder,
+  midstream-watchdog, owned-buffer, async-stream, and event-dispatch changes. Rerun both after
+  future recorder, async stream, or shared-state changes.
 - Current accessibility-label build passes a 60-second launchd/socket runtime soak with stable
   PID, 61/61 socket pings, flat 50 open descriptors, declining RSS, no new crashes, and no newly
   emitted critical diagnostics.
 - Installed restart regression passes socket-driven restart with a replacement launchd PID,
   responsive replacement socket, preserved UserDefaults sentinel, and no crash report.
+- Installed dictation watchdog coverage injects both a zero-buffer startup stall and a silent
+  production-tap stall after live buffers, before and after restart. Each failure must warn once,
+  reset once, release every capture resource, preserve PID/history, and pass an immediate retry.
 - Legacy top-level settings, action, template, context, and standalone vocabulary imports are
   detected by testable core logic; dated export filenames use a fixed POSIX calendar format.
 - Cached-model streaming probe retains generated final words after immediate release, a one-second

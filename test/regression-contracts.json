@@ -257,11 +257,19 @@
           "contains": "testPassedProbeCarriesStallWarningResetAndRetryEvidence"
         },
         {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationWatchdogProbeTests.swift",
+          "contains": "testPassedMidstreamProbeCarriesLiveBufferStallEvidence"
+        },
+        {
           "file": "test/test-shell.sh",
           "contains": "installed dictation check injects startup stall"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "installed dictation check injects midstream stall"
         }
       ],
-      "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must stall production startup before any audio buffer, release the trigger while startup remains unresolved, observe exactly one watchdog warning and reset, prove all capture resources released with stable PID and unchanged history, then complete an immediate production lifecycle without restarting Command."
+      "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must test two production failures: stall startup before any audio buffer and release the unresolved trigger, then silently stop the live audio tap after at least three buffers while recording remains active. Each scenario must produce exactly one warning and reset, fully release resources with stable PID and unchanged history, and complete an immediate production lifecycle without restarting Command."
     },
     {
       "id": "APP-001",

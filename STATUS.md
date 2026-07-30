@@ -14,8 +14,9 @@ recent change if something in there needs undoing).
 - Dictation capture watchdog now starts when trigger is accepted instead of waiting indefinitely
   for recorder startup. It continuously tracks audio-buffer progress, warns after 1.5 seconds,
   resets after 6 seconds, survives shortcut release while startup remains unresolved, and catches
-  capture that stalls after initial buffers. Installed qualification injects this exact startup
-  stall, requires warning/reset/complete cleanup, and immediately retries production dictation.
+  capture that stalls after initial buffers. Installed qualification injects both exact failure
+  modes: zero-buffer startup plus a silent production audio-tap stall after live buffers. Each
+  requires warning/reset/complete cleanup and immediately retries production dictation.
   DICT-012 and dedicated CI/release attestation gate prevent this path from disappearing.
 - Installed qualification now captures all persisted Command defaults and eleven owned
   configuration/history artifacts before build, compares them after incremental install, and

@@ -343,10 +343,18 @@ assert_contains "installed dictation check injects live capture failure" "$(cat 
   "printf 'dictationrecoveryprobe\\n'"
 assert_contains "installed dictation check injects startup stall" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   "printf 'dictationwatchdogprobe\\n'"
+assert_contains "installed dictation check injects midstream stall" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  "printf 'dictationstreamwatchdogprobe\\n'"
+assert_contains "recorder can inject silent stall after live buffers" "$RECORDER_SOURCE" \
+  'armDiagnosticMidstreamStall(afterBuffers: Int = 3)'
+assert_contains "midstream stall removes live production audio tap" "$RECORDER_SOURCE" \
+  'injecting silent midstream stall after buffers='
 assert_contains "installed startup stall releases shortcut before watchdog reset" "$AGENT_SOURCE" \
   'releasedDuringStartup = recorder.state == .starting'
 assert_contains "installed startup watchdog requires warning and reset" "$AGENT_SOURCE" \
   'warningDelta == 1'
+assert_contains "installed midstream watchdog uses production recorder" "$AGENT_SOURCE" \
+  'recorder.armDiagnosticMidstreamStall(afterBuffers: 3)'
 assert_contains "installed dictation check drives tagged voice events through action routing" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   "printf 'voicedispatchprobe\\n'"
 assert_contains "tagged voice events continue through installed event callback" "$AGENT_SOURCE" \

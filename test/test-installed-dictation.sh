@@ -232,7 +232,7 @@ watchdog_summary="$(python3 -c '
 import json, sys
 result = json.loads(sys.argv[1])
 required = {
-    "ok", "status", "stalledSessionID", "stalledTerminalStage",
+    "ok", "status", "scenario", "stalledSessionID", "stalledCapturedBuffers", "stalledTerminalStage",
     "warningCount", "resetCount", "releasedDuringStartup", "cleanup",
     "recovery", "durationMilliseconds",
 }
@@ -241,6 +241,8 @@ if missing:
     raise SystemExit("missing fields: " + ", ".join(sorted(missing)))
 if result["ok"] is not True or result["status"] != "passed":
     raise SystemExit(result.get("failure") or f"watchdog probe failed: {result}")
+if result["scenario"] != "startup" or result["stalledCapturedBuffers"] != 0:
+    raise SystemExit("startup watchdog probe did not exercise a zero-buffer stall")
 if result["stalledTerminalStage"] != "cancelled":
     raise SystemExit("startup watchdog did not cancel stalled session")
 if result["warningCount"] != 1 or result["resetCount"] != 1:
@@ -295,7 +297,84 @@ if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/nul
   exit 1
 fi
 
-previous_recovery_session="$watchdog_retry_session"
+stream_watchdog_reply="$(printf 'dictationstreamwatchdogprobe\n' | nc -U -w 50 "$SOCKET" 2>/dev/null || true)"
+if [[ -z "$stream_watchdog_reply" ]]; then
+  print -u2 -- "FAIL: dictation midstream-watchdog probe returned no response"
+  exit 1
+fi
+stream_watchdog_summary="$(python3 -c '
+import json, sys
+result = json.loads(sys.argv[1])
+required = {
+    "ok", "status", "scenario", "stalledSessionID", "stalledCapturedBuffers", "stalledTerminalStage",
+    "warningCount", "resetCount", "releasedDuringStartup", "cleanup",
+    "recovery", "durationMilliseconds",
+}
+missing = required.difference(result)
+if missing:
+    raise SystemExit("missing fields: " + ", ".join(sorted(missing)))
+if result["ok"] is not True or result["status"] != "passed":
+    raise SystemExit(result.get("failure") or f"midstream watchdog probe failed: {result}")
+if result["scenario"] != "midstream":
+    raise SystemExit("midstream watchdog probe reported wrong scenario")
+if result["stalledTerminalStage"] != "cancelled" or result["stalledCapturedBuffers"] < 3:
+    raise SystemExit("midstream watchdog did not cancel after live microphone buffers")
+if result["warningCount"] != 1 or result["resetCount"] != 1:
+    raise SystemExit("midstream watchdog did not issue exactly one warning and one reset")
+if result["releasedDuringStartup"] is not False:
+    raise SystemExit("midstream stall was incorrectly reported as a released startup")
+cleanup = result["cleanup"]
+if cleanup.get("capturePhase") != "idle" or cleanup.get("fullyReleased") is not True:
+    raise SystemExit("midstream watchdog left capture resources active")
+for field in (
+    "overlayVisible", "captureStartupBegan", "audioEngineActive", "audioTapActive",
+    "streamTaskActive", "audioContinuationActive", "bufferFeederActive",
+    "managerActive", "silenceTimerActive",
+):
+    if cleanup.get(field) is not False:
+        raise SystemExit(f"midstream watchdog cleanup field stayed active: {field}")
+retry = result["recovery"]
+if not isinstance(retry, dict) or retry.get("ok") is not True or retry.get("status") != "passed":
+    raise SystemExit("immediate production retry did not pass after midstream watchdog reset")
+if retry.get("capturePhase") != "idle" or retry.get("terminalStage") not in {"completed", "empty"}:
+    raise SystemExit("midstream watchdog retry did not finish cleanly")
+if not isinstance(retry.get("capturedBuffers"), int) or retry["capturedBuffers"] < 4:
+    raise SystemExit("midstream watchdog retry captured fewer than four buffers")
+print("{}\t{}\t{}\t{}\t{}\t{}".format(
+    result["stalledSessionID"],
+    result["stalledCapturedBuffers"],
+    retry["sessionID"],
+    retry["capturedBuffers"],
+    retry["terminalStage"],
+    result["durationMilliseconds"],
+))
+' "$stream_watchdog_reply")" || {
+  print -u2 -- "FAIL: dictation midstream-watchdog probe: ${stream_watchdog_summary:-invalid response}"
+  print -u2 -- "$stream_watchdog_reply"
+  exit 1
+}
+stream_watchdog_stalled_session="${stream_watchdog_summary%%$'\t'*}"
+stream_watchdog_remainder="${stream_watchdog_summary#*$'\t'}"
+stream_watchdog_stalled_buffers="${stream_watchdog_remainder%%$'\t'*}"
+stream_watchdog_remainder="${stream_watchdog_remainder#*$'\t'}"
+stream_watchdog_retry_session="${stream_watchdog_remainder%%$'\t'*}"
+stream_watchdog_remainder="${stream_watchdog_remainder#*$'\t'}"
+stream_watchdog_retry_buffers="${stream_watchdog_remainder%%$'\t'*}"
+stream_watchdog_remainder="${stream_watchdog_remainder#*$'\t'}"
+stream_watchdog_retry_stage="${stream_watchdog_remainder%%$'\t'*}"
+stream_watchdog_duration="${stream_watchdog_remainder##*$'\t'}"
+
+if (( stream_watchdog_stalled_session <= watchdog_retry_session || stream_watchdog_retry_session <= stream_watchdog_stalled_session )); then
+  print -u2 -- "FAIL: midstream-watchdog session IDs did not increase"
+  exit 1
+fi
+current_pid="$(job_pid)"
+if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/null; then
+  print -u2 -- "FAIL: Command restarted during midstream-watchdog probe"
+  exit 1
+fi
+
+previous_recovery_session="$stream_watchdog_retry_session"
 recovery_total_duration=0
 for (( recovery_run = 1; recovery_run <= RECOVERY_RUNS; recovery_run++ )); do
 recovery_reply="$(printf 'dictationrecoveryprobe\n' | nc -U -w 50 "$SOCKET" 2>/dev/null || true)"
@@ -398,5 +477,6 @@ print -- "  audio buffers: ${total_buffers} total"
 print -- "  production lifecycle: session ${lifecycle_session}, ${lifecycle_buffers} buffers, ${lifecycle_updates} updates, ${lifecycle_stage}, ${lifecycle_duration} ms"
 print -- "  event-tap voice dispatch: 2/2 tagged events, session ${voice_session}, ${voice_buffers} buffers, ${voice_stage}, ${voice_duration} ms, ${voice_aliases} configured aliases"
 print -- "  startup watchdog: session ${watchdog_stalled_session} warned/reset after release; retry ${watchdog_retry_session} captured ${watchdog_retry_buffers} and finished ${watchdog_retry_stage} in ${watchdog_duration} ms"
+print -- "  midstream watchdog: session ${stream_watchdog_stalled_session} stalled after ${stream_watchdog_stalled_buffers} buffers; retry ${stream_watchdog_retry_session} captured ${stream_watchdog_retry_buffers} and finished ${stream_watchdog_retry_stage} in ${stream_watchdog_duration} ms"
 print -- "  failure recovery: ${RECOVERY_RUNS}/${RECOVERY_RUNS} cycles, final cleanup ${recovery_cleanup_phase}, ${recovery_total_duration} ms total"
 print -- "  dictation history: unchanged"

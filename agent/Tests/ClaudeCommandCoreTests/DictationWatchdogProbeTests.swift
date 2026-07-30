@@ -40,7 +40,9 @@ final class DictationWatchdogProbeTests: XCTestCase {
         )
 
         XCTAssertTrue(result.ok)
+        XCTAssertEqual(result.scenario, .startup)
         XCTAssertEqual(result.stalledSessionID, 11)
+        XCTAssertEqual(result.stalledCapturedBuffers, 0)
         XCTAssertEqual(result.stalledTerminalStage, "cancelled")
         XCTAssertEqual(result.warningCount, 1)
         XCTAssertEqual(result.resetCount, 1)
@@ -55,6 +57,42 @@ final class DictationWatchdogProbeTests: XCTestCase {
         XCTAssertEqual(decoded, result)
     }
 
+    func testPassedMidstreamProbeCarriesLiveBufferStallEvidence() throws {
+        let retry = DictationLifecycleProbeResult(
+            status: .passed,
+            sessionID: 22,
+            modelStatus: "ready",
+            capturePhase: "idle",
+            terminalStage: "completed",
+            capturedBuffers: 6,
+            durationMilliseconds: 850
+        )
+        let result = DictationWatchdogProbeResult(
+            status: .passed,
+            scenario: .midstream,
+            stalledSessionID: 21,
+            stalledCapturedBuffers: 3,
+            stalledTerminalStage: "cancelled",
+            warningCount: 1,
+            resetCount: 1,
+            releasedDuringStartup: false,
+            cleanup: released,
+            recovery: retry,
+            durationMilliseconds: 7_100
+        )
+
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(result.scenario, .midstream)
+        XCTAssertEqual(result.stalledCapturedBuffers, 3)
+        XCTAssertFalse(result.releasedDuringStartup)
+        XCTAssertTrue(result.cleanup.fullyReleased)
+        XCTAssertEqual(result.recovery?.sessionID, 22)
+        XCTAssertEqual(
+            try DictationWatchdogProbeCoding.decode(DictationWatchdogProbeCoding.encode(result)),
+            result
+        )
+    }
+
     func testFailureStatusCannotReportSuccessAndClampsCounters() {
         let result = DictationWatchdogProbeResult(
             status: .watchdogNotObserved,
@@ -67,6 +105,7 @@ final class DictationWatchdogProbeTests: XCTestCase {
         )
 
         XCTAssertFalse(result.ok)
+        XCTAssertEqual(result.scenario, .startup)
         XCTAssertEqual(result.stalledSessionID, 0)
         XCTAssertEqual(result.warningCount, 0)
         XCTAssertEqual(result.resetCount, 0)

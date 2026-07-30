@@ -11,10 +11,17 @@ public enum DictationWatchdogProbeStatus: String, Codable, Equatable, Sendable {
     case failed
 }
 
+public enum DictationWatchdogProbeScenario: String, Codable, Equatable, Sendable {
+    case startup
+    case midstream
+}
+
 public struct DictationWatchdogProbeResult: Codable, Equatable, Sendable {
     public let ok: Bool
     public let status: DictationWatchdogProbeStatus
+    public let scenario: DictationWatchdogProbeScenario
     public let stalledSessionID: Int
+    public let stalledCapturedBuffers: Int
     public let stalledTerminalStage: String
     public let warningCount: Int
     public let resetCount: Int
@@ -26,7 +33,9 @@ public struct DictationWatchdogProbeResult: Codable, Equatable, Sendable {
 
     public init(
         status: DictationWatchdogProbeStatus,
+        scenario: DictationWatchdogProbeScenario = .startup,
         stalledSessionID: Int = 0,
+        stalledCapturedBuffers: Int = 0,
         stalledTerminalStage: String = "none",
         warningCount: Int = 0,
         resetCount: Int = 0,
@@ -38,7 +47,9 @@ public struct DictationWatchdogProbeResult: Codable, Equatable, Sendable {
     ) {
         self.ok = status == .passed
         self.status = status
+        self.scenario = scenario
         self.stalledSessionID = max(0, stalledSessionID)
+        self.stalledCapturedBuffers = max(0, stalledCapturedBuffers)
         self.stalledTerminalStage = stalledTerminalStage
         self.warningCount = max(0, warningCount)
         self.resetCount = max(0, resetCount)

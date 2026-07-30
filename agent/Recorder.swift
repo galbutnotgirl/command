@@ -131,6 +131,7 @@ final class Recorder: ObservableObject {
     private var sessionHealth: DictationSessionHealth?
     private var captureProbeInProgress = false
     private var diagnosticFailureAfterBufferCount: Int?
+    private var diagnosticStallAfterBufferCount: Int?
     private var diagnosticStartupStallArmed = false
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
@@ -193,6 +194,12 @@ final class Recorder: ObservableObject {
     func armDiagnosticCaptureFailure(afterBuffers: Int = 2) -> Bool {
         guard state.canStart, !captureResourcesAreActive, !captureProbeInProgress else { return false }
         diagnosticFailureAfterBufferCount = max(1, afterBuffers)
+        return true
+    }
+
+    func armDiagnosticMidstreamStall(afterBuffers: Int = 3) -> Bool {
+        guard state.canStart, !captureResourcesAreActive, !captureProbeInProgress else { return false }
+        diagnosticStallAfterBufferCount = max(1, afterBuffers)
         return true
     }
 
@@ -328,7 +335,10 @@ final class Recorder: ObservableObject {
             appendLog("[dictation] releasing stale capture resources before session start phase=\(state.rawValue)")
             releaseCaptureResources(finishManager: true)
         }
-        if mode != .diagnostic { diagnosticFailureAfterBufferCount = nil }
+        if mode != .diagnostic {
+            diagnosticFailureAfterBufferCount = nil
+            diagnosticStallAfterBufferCount = nil
+        }
         guard loadedModels != nil else {
             fail("models not loaded")
             DispatchQueue.main.async {
@@ -693,6 +703,7 @@ final class Recorder: ObservableObject {
         sessionID += 1
         stopRequestedDuringStart = false
         diagnosticFailureAfterBufferCount = nil
+        diagnosticStallAfterBufferCount = nil
         diagnosticStartupStallArmed = false
         releaseCaptureResources(finishManager: true)
         lastTranscript = ""; liveTranscript = ""
@@ -745,6 +756,14 @@ final class Recorder: ObservableObject {
             appendLog("[dictation-probe] injecting capture failure after buffers=\(capturedBufferCount)")
             fail("diagnostic injected capture failure")
         }
+        if let stallBufferCount = diagnosticStallAfterBufferCount,
+           capturedBufferCount >= stallBufferCount {
+            diagnosticStallAfterBufferCount = nil
+            appendLog("[dictation-probe] injecting silent midstream stall after buffers=\(capturedBufferCount)")
+            if let engine = audioTapEngine ?? audioEngine {
+                removeProductionAudioTap(from: engine)
+            }
+        }
     }
 
     private func minimumDictationDuration() -> Double {
@@ -763,6 +782,7 @@ final class Recorder: ObservableObject {
         }
         stopRequestedDuringStart = false
         diagnosticFailureAfterBufferCount = nil
+        diagnosticStallAfterBufferCount = nil
         diagnosticStartupStallArmed = false
         releaseCaptureResources(finishManager: true)
         state = .error
