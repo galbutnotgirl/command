@@ -13,12 +13,12 @@ ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "test" / "regression-contracts.json"
 IMPACT_CONFIG = ROOT / "test" / "regression-impact.json"
 BASELINE_AREA_MINIMUMS = {
-    "app-runtime": 5,
-    "dictation": 11,
+    "app-runtime": 9,
+    "dictation": 14,
     "shortcuts-and-input": 3,
     "assistant-routing": 1,
-    "clipboard-history": 1,
-    "settings-and-import": 1,
+    "clipboard-history": 2,
+    "settings-and-import": 2,
     "background-actions": 1,
     "install-update-release": 5,
     "hotkey-configuration": 1,
@@ -29,6 +29,7 @@ MANDATORY_GATES = {
     (".github/workflows/test.yml", "python3 ./test/test-regression-impact.py --base"),
     (".github/workflows/test.yml", "swift test --filter DictationDeliveryPipelineTests"),
     (".github/workflows/test.yml", "swift test --filter DictationInsertProbeTests"),
+    (".github/workflows/test.yml", "swift build --product DictationPasteReceiver"),
     (".github/workflows/test.yml", "swift test --filter 'Dictation(CaptureWatchdog|WatchdogProbe)Tests'"),
     (".github/workflows/test.yml", "./test/test-qualification-orchestration.sh"),
     (".github/workflows/test.yml", "python3 ./test/test-installed-qualification-report.py"),
@@ -36,6 +37,7 @@ MANDATORY_GATES = {
     ("release.sh", 'python3 "${DIR}/test/test-regression-contracts-tests.py"'),
     ("release.sh", "swift test --filter DictationDeliveryPipelineTests"),
     ("release.sh", "swift test --filter DictationInsertProbeTests"),
+    ("release.sh", "swift build --product DictationPasteReceiver"),
     ("release.sh", "swift test --filter 'Dictation(CaptureWatchdog|WatchdogProbe)Tests'"),
     ("release.sh", '"${DIR}/test/test-regression-impact.sh"'),
     ("release.sh", '"${DIR}/test/test-qualification-orchestration.sh"'),
@@ -199,9 +201,9 @@ def validate_contracts(document: dict, impact: dict, root: Path = ROOT) -> tuple
                 failures.append(f"{identifier}: no evidence accepted by feature area: {area}")
 
     for area, minimum in requirements.items():
-        if isinstance(minimum, int) and not isinstance(minimum, bool) and area_counts.get(area, 0) < minimum:
+        if isinstance(minimum, int) and not isinstance(minimum, bool) and area_counts.get(area, 0) != minimum:
             failures.append(
-                f"feature area {area} has {area_counts.get(area, 0)} contracts; requires {minimum}"
+                f"feature area {area} has {area_counts.get(area, 0)} contracts; inventory declares exactly {minimum}"
             )
 
     raw_gates = document.get("requiredGates", [])

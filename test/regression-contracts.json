@@ -1,12 +1,12 @@
 {
   "schemaVersion": 3,
   "coverageRequirements": {
-    "app-runtime": 7,
-    "dictation": 13,
+    "app-runtime": 9,
+    "dictation": 14,
     "shortcuts-and-input": 3,
     "assistant-routing": 1,
-    "clipboard-history": 1,
-    "settings-and-import": 1,
+    "clipboard-history": 2,
+    "settings-and-import": 2,
     "background-actions": 1,
     "install-update-release": 5,
     "hotkey-configuration": 1
@@ -603,6 +603,10 @@
     },
     {
       "file": ".github/workflows/test.yml",
+      "contains": "swift build --product DictationPasteReceiver"
+    },
+    {
+      "file": ".github/workflows/test.yml",
       "contains": "swift test --filter 'Dictation(CaptureWatchdog|WatchdogProbe)Tests'"
     },
     {
@@ -636,6 +640,10 @@
     {
       "file": "release.sh",
       "contains": "swift test --filter DictationInsertProbeTests"
+    },
+    {
+      "file": "release.sh",
+      "contains": "swift build --product DictationPasteReceiver"
     },
     {
       "file": "release.sh",

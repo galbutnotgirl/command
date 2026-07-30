@@ -126,18 +126,27 @@ class RegressionContractValidatorTests(unittest.TestCase):
     def testAreaMinimumCannotBeLowered(self) -> None:
         document = copy.deepcopy(self.document)
         document["coverageRequirements"]["dictation"] = 1
-        self.assertTrue(any("cannot drop below 11" in item for item in self.failures(document)))
+        self.assertTrue(any("cannot drop below 14" in item for item in self.failures(document)))
 
     def testInstalledInputCoverageMinimumsCannotBeLowered(self) -> None:
         document = copy.deepcopy(self.document)
-        document["coverageRequirements"]["app-runtime"] = 4
-        self.assertTrue(any("app-runtime cannot drop below 5" in item for item in self.failures(document)))
+        document["coverageRequirements"]["app-runtime"] = 8
+        self.assertTrue(any("app-runtime cannot drop below 9" in item for item in self.failures(document)))
         document = copy.deepcopy(self.document)
         document["coverageRequirements"]["shortcuts-and-input"] = 2
         self.assertTrue(any("shortcuts-and-input cannot drop below 3" in item for item in self.failures(document)))
         document = copy.deepcopy(self.document)
         document["coverageRequirements"]["install-update-release"] = 4
         self.assertTrue(any("install-update-release cannot drop below 5" in item for item in self.failures(document)))
+
+    def testFeatureAreaInventoryMustMatchContractCountExactly(self) -> None:
+        document = copy.deepcopy(self.document)
+        document["coverageRequirements"]["clipboard-history"] = 3
+        failures = self.failures(document)
+        self.assertTrue(any(
+            "clipboard-history has 2 contracts; inventory declares exactly 3" in item
+            for item in failures
+        ))
 
     def testMandatoryGateDeclarationCannotBeRemoved(self) -> None:
         document = copy.deepcopy(self.document)

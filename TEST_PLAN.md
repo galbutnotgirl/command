@@ -97,6 +97,9 @@ Each tracked regression must cite at least two distinct evidence files and at le
 release-executed integration proof. Multiple methods in one unit-test file do not count as
 independent proof. Editing `test/regression-contracts.json` alone also cannot satisfy runtime
 impact coverage; a matching behavior test must change with runtime code.
+Coverage counts are exact inventory, not loose minima. Removing or adding a contract requires an
+explicit count update, and hard-coded baselines prevent lowering current protection silently.
+CI and release both compile installed dictation paste receiver used by focused-field qualification.
 
 Full `release.sh` gates create `regression-gates-attestation.json` only after every required
 test passes, then sign it inside app. Local installer, in-app updater, and detached swapper

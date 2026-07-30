@@ -1375,6 +1375,10 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 - **Watchdog gate declaration parity**: focused dictation startup-watchdog tests were already run by
   local release and CI and signed into build attestations; the contract manifest now declares both
   commands as mandatory too, preventing either focused gate from disappearing unnoticed.
+- **Contract inventory and receiver build fail closed**: feature-area counts now equal actual
+  contract inventory and cannot fall below current coverage. CI and release both compile external
+  AppKit receiver used by installed focused-paste proof, so harness drift cannot hide until local
+  packaging.
 
 ## Next up (roughly in the order they came up)
 
