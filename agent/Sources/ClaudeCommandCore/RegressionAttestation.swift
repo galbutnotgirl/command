@@ -7,6 +7,7 @@ public let requiredRegressionGateIDs = [
     "regression-contracts",
     "swift",
     "dictation-delivery",
+    "dictation-watchdog",
     "clipboard-watcher",
     "node",
     "assistant-contract",

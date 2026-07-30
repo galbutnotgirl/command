@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "coverageRequirements": {
-    "app-runtime": 5,
-    "dictation": 11,
+    "app-runtime": 6,
+    "dictation": 12,
     "shortcuts-and-input": 3,
     "assistant-routing": 1,
     "clipboard-history": 1,
@@ -238,6 +238,30 @@
         }
       ],
       "runtimeEvidence": "Cached Parakeet fixtures must print delivery=delivered while preserving bright yellow lantern, cobalt compass, and silver shoreline through model finalization, transcript selection, activity decision, processing hook, and delivery handoff."
+    },
+    {
+      "id": "DICT-012",
+      "areas": ["dictation", "app-runtime"],
+      "risk": "Dictation startup stalls before the first capture marker, shortcut release disables the watchdog, or audio buffers stop after initial progress, leaving the app apparently recording until Command is restarted.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationCaptureWatchdogTests.swift",
+          "contains": "testStartupWithoutCaptureWarnsThenResets"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationCaptureWatchdogTests.swift",
+          "contains": "testBufferProgressRecoversWarningAndRestartsDeadline"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationWatchdogProbeTests.swift",
+          "contains": "testPassedProbeCarriesStallWarningResetAndRetryEvidence"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "installed dictation check injects startup stall"
+        }
+      ],
+      "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must stall production startup before any audio buffer, release the trigger while startup remains unresolved, observe exactly one watchdog warning and reset, prove all capture resources released with stable PID and unchanged history, then complete an immediate production lifecycle without restarting Command."
     },
     {
       "id": "APP-001",

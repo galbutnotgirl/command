@@ -11,6 +11,12 @@ recent change if something in there needs undoing).
 
 ## Installed regression gates (2026-07-30)
 
+- Dictation capture watchdog now starts when trigger is accepted instead of waiting indefinitely
+  for recorder startup. It continuously tracks audio-buffer progress, warns after 1.5 seconds,
+  resets after 6 seconds, survives shortcut release while startup remains unresolved, and catches
+  capture that stalls after initial buffers. Installed qualification injects this exact startup
+  stall, requires warning/reset/complete cleanup, and immediately retries production dictation.
+  DICT-012 and dedicated CI/release attestation gate prevent this path from disappearing.
 - Installed qualification now captures all persisted Command defaults and eleven owned
   configuration/history artifacts before build, compares them after incremental install, and
   compares them again after restart and runtime probes. Semantic JSON fingerprints ignore harmless
@@ -48,7 +54,8 @@ recent change if something in there needs undoing).
   `checkpoint/2026-07-30-0236-voice-dispatch-endurance`, and
   `checkpoint/2026-07-30-0259-qualified-install-gate`, and
   `checkpoint/2026-07-30-0331-dictation-delivery-pipeline`, and
-  `checkpoint/2026-07-30-0353-installed-state-baseline`.
+  `checkpoint/2026-07-30-0353-installed-state-baseline`, and
+  `checkpoint/2026-07-30-0427-dictation-startup-watchdog`.
 
 ## Modifier chords and uninstaller (2026-07-28)
 

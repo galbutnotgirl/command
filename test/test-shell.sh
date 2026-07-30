@@ -261,6 +261,7 @@ DICTATION_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/Dictation
 DICTATION_PROBE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationCaptureProbe.swift")"
 DICTATION_LIFECYCLE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationLifecycleProbe.swift")"
 DICTATION_RECOVERY_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationRecoveryProbe.swift")"
+DICTATION_WATCHDOG_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationWatchdogProbe.swift")"
 VOICE_DISPATCH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/VoiceDispatchProbe.swift")"
 HOTKEY_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/HotkeyHealthProbe.swift")"
 DICTATION_TRIGGER_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationTriggerCoordinator.swift")"
@@ -290,6 +291,8 @@ assert_contains "installed production lifecycle probe is reachable through owner
   'case "dictationlifecycleprobe": return runInstalledDictationLifecycleProbe()'
 assert_contains "installed dictation recovery probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "dictationrecoveryprobe": return runInstalledDictationRecoveryProbe()'
+assert_contains "installed dictation watchdog probe is reachable through owner-only socket" "$AGENT_SOURCE" \
+  'case "dictationwatchdogprobe": return runInstalledDictationWatchdogProbe()'
 assert_contains "installed voice dispatch probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "voicedispatchprobe": return runInstalledVoiceDispatchProbe()'
 assert_contains "installed hotkey health probe is reachable through owner-only socket" "$AGENT_SOURCE" \
@@ -330,12 +333,20 @@ assert_contains "production lifecycle probe returns typed metrics" "$DICTATION_L
   'public struct DictationLifecycleProbeResult'
 assert_contains "dictation recovery probe returns typed cleanup metrics" "$DICTATION_RECOVERY_SOURCE" \
   'public struct DictationCaptureResourceSnapshot'
+assert_contains "dictation watchdog probe returns typed stall and retry metrics" "$DICTATION_WATCHDOG_SOURCE" \
+  'public struct DictationWatchdogProbeResult'
 assert_contains "voice dispatch probe returns typed event and capture metrics" "$VOICE_DISPATCH_SOURCE" \
   'public struct VoiceDispatchProbeResult'
 assert_contains "installed dictation check executes production lifecycle" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   "printf 'dictationlifecycleprobe\\n'"
 assert_contains "installed dictation check injects live capture failure" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   "printf 'dictationrecoveryprobe\\n'"
+assert_contains "installed dictation check injects startup stall" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  "printf 'dictationwatchdogprobe\\n'"
+assert_contains "installed startup stall releases shortcut before watchdog reset" "$AGENT_SOURCE" \
+  'releasedDuringStartup = recorder.state == .starting'
+assert_contains "installed startup watchdog requires warning and reset" "$AGENT_SOURCE" \
+  'warningDelta == 1'
 assert_contains "installed dictation check drives tagged voice events through action routing" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   "printf 'voicedispatchprobe\\n'"
 assert_contains "tagged voice events continue through installed event callback" "$AGENT_SOURCE" \
@@ -392,6 +403,10 @@ assert_contains "dictation shows a centered capture warning" "$DICTATION_OVERLAY
   'title: "Microphone isn'"'"'t recording"'
 assert_contains "dictation watchdog recovers zero-buffer capture" "$DICTATION_OVERLAY_SOURCE" \
   'capture watchdog recovering'
+assert_contains "dictation watchdog starts before capture startup marker" "$DICTATION_OVERLAY_SOURCE" \
+  'var watchdog = DictationCaptureWatchdog(policy: watchdogPolicy)'
+assert_not_contains "dictation watchdog never waits indefinitely for startup marker" "$DICTATION_OVERLAY_SOURCE" \
+  'while self.isVisible, !self.isFinishing, !recorder.captureStartupBegan'
 assert_contains "canceled dictation startup cannot install a stale audio tap" "$RECORDER_SOURCE" \
   'startup abandoned before audio tap'
 assert_contains "dictation persists latest session health" "$RECORDER_SOURCE" \

@@ -69,8 +69,11 @@ Running before and after restart catches dead input hooks without firing user ac
 Installed dictation test performs repeated raw microphone-buffer captures and one production
 lifecycle through trigger, model stream, recorder, stop-tail drain, ASR finish, and clean terminal
 health without changing history. Tagged Fn down/up next travels through installed HID event tap and
-voice action routing into diagnostic capture. It then runs three failure/retry cycles after live
-microphone buffers, verifying every capture resource releases and session IDs keep increasing.
+voice action routing into diagnostic capture. It then stalls startup before its first audio buffer,
+releases the trigger while startup remains unresolved, and requires one warning, one automatic
+reset, complete resource cleanup, and an immediate production retry. Three later failure/retry
+cycles inject faults after live microphone buffers, verifying every capture resource releases and
+session IDs keep increasing.
 Run on both sides of restart to catch process-local state bugs.
 Physical-key dispatch remains a manual check. Focused delivery tests prove selected raw text reaches
 processing, history preparation, and dispatch exactly once; blank processor output falls back to raw
@@ -187,12 +190,12 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-30)
 
-- Automated local suites: 221 Swift, 58 Node, 172 shell, 17 build-transaction,
+- Automated local suites: 228 Swift, 58 Node, 179 shell, 17 build-transaction,
   17 release-transaction, 41 install-state, 14 updater, 9 restart-handoff,
-  9 installed-state preservation, 9 release-policy, 91 static syntax/configuration, and 2 string-review;
+  9 installed-state preservation, 9 release-policy, 94 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
-- Twenty-five tracked regressions have 73 source/test evidence links; eleven dictation regressions
-  retain 33 links. Each contract has runtime evidence, CI enforcement, and public-release
+- Twenty-six tracked regressions have 77 source/test evidence links; thirteen dictation regressions
+  retain 41 links. Each contract has runtime evidence, CI enforcement, and public-release
   enforcement. Latest session health is
   persisted through start, model load, listening, first buffer, finish, and terminal outcome.
 - Settings pickers and toggles have explicit hidden accessibility labels, and static analysis
@@ -202,7 +205,8 @@ Preserve user settings for incremental tests. Use clean install only for onboard
   files; an ad-hoc success run replaced the staged build cleanly with no leftovers.
 - Release zip and checksum are also staged and committed as a pair only after validation and
   optional notarization complete; interrupted or failed packaging restores prior assets.
-- AddressSanitizer and ThreadSanitizer passed all 221 Swift tests after latest recorder, async
+- AddressSanitizer and ThreadSanitizer passed all 221 Swift tests before latest watchdog changes;
+  rerun both across all 228 Swift tests after latest recorder, async
   stream, and event-dispatch changes; rerun both after future recorder, async stream, or
   shared-state changes.
 - Current accessibility-label build passes a 60-second launchd/socket runtime soak with stable

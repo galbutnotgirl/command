@@ -49,6 +49,10 @@ jobs:
         working-directory: agent
         run: swift test --filter DictationDeliveryPipelineTests
 
+      - name: Dictation startup and liveness watchdog
+        working-directory: agent
+        run: swift test --filter 'Dictation(CaptureWatchdog|WatchdogProbe)Tests'
+
       - name: Native Clipboard History helper smoke test
         run: |
           swift build --package-path agent --product CommandClipboardWatcher

@@ -51,7 +51,7 @@ while GATE_VALUE="$(json_value "requiredGates.${GATE_INDEX}")"; do
 done
 (( ${#GATE_VALUES} > 0 )) || fail "regression attestation gates are unreadable"
 for gate in \
-  regression-impact regression-contracts swift dictation-delivery clipboard-watcher node assistant-contract shell \
+  regression-impact regression-contracts swift dictation-delivery dictation-watchdog clipboard-watcher node assistant-contract shell \
   build-transaction release-transaction install-state state-preservation uninstall updater-swap restart release-policy \
   qualification-orchestration qualification-report regression-attestation static-analysis docs pages \
   string-review dictation-model; do
@@ -61,4 +61,4 @@ done
 print -- "regression attestation passed"
 print -- "  commit: ${COMMIT}"
 print -- "  version: ${VERSION}"
-print -- "  gates: 24"
+print -- "  gates: 25"
