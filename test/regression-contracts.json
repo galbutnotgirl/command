@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "coverageRequirements": {
     "app-runtime": 2,
-    "dictation": 6,
+    "dictation": 7,
     "shortcuts-and-input": 1,
     "assistant-routing": 1,
     "clipboard-history": 1,
@@ -119,6 +119,26 @@
         }
       ],
       "runtimeEvidence": "Persistent logs record press, release, and deferred-release actions with trigger mode and capture phase."
+    },
+    {
+      "id": "DICT-007",
+      "areas": ["dictation"],
+      "risk": "Installed app retains microphone permission but AVAudioEngine delivers no buffers after an update.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationCaptureProbeTests.swift",
+          "contains": "testCompletedProbeFailsWhenEngineDeliversNoBuffers"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationCaptureProbeTests.swift",
+          "contains": "testProbeResultRoundTripsAsSingleLineJSON"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "installed microphone probe cannot dispatch transcript"
+        }
+      ],
+      "runtimeEvidence": "test/test-installed-dictation.sh must pass repeated installed-process captures with positive buffer counts, stable PID, and unchanged dictation history."
     },
     {
       "id": "APP-001",

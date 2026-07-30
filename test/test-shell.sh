@@ -241,6 +241,7 @@ PERMISSIONS_SOURCE="$(cat "${DIR}/agent/Permissions.swift")"
 DICTATION_OVERLAY_SOURCE="$(cat "${DIR}/agent/DictationOverlay.swift")"
 RECORDER_SOURCE="$(cat "${DIR}/agent/Recorder.swift")"
 DICTATION_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationSessionHealth.swift")"
+DICTATION_PROBE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationCaptureProbe.swift")"
 DICTATION_TRIGGER_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationTriggerCoordinator.swift")"
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
   'helper_newchat ||'
@@ -262,6 +263,15 @@ assert_contains "dictation trigger reconciles stale state before recording" "$AG
   'dictationTriggerHealthAction('
 assert_contains "dictation release paths share one state transition" "$AGENT_SOURCE" \
   'releaseDictationTrigger()'
+assert_contains "installed microphone probe is reachable through owner-only socket" "$AGENT_SOURCE" \
+  'case "dictationprobe": return runInstalledDictationProbe()'
+assert_contains "installed microphone probe captures through AVAudioEngine" "$RECORDER_SOURCE" \
+  'func runCaptureProbe('
+assert_contains "installed microphone probe rejects zero buffers" "$DICTATION_PROBE_SOURCE" \
+  'capturedBuffers > 0 ? .passed : .noAudioBuffers'
+DICTATION_PROBE_RUNTIME_SOURCE="$(sed -n '/func runCaptureProbe(/,/private func beginStreaming/p' "${DIR}/agent/Recorder.swift")"
+assert_not_contains "installed microphone probe cannot dispatch transcript" "$DICTATION_PROBE_RUNTIME_SOURCE" \
+  'onFinal?'
 assert_contains "dictation quick tap keeps double-tap lock available" "$DICTATION_TRIGGER_SOURCE" \
   'mode = .awaitingSecondTap'
 assert_contains "held dictation release remains immediate" "$DICTATION_TRIGGER_SOURCE" \

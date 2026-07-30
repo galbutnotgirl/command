@@ -17,6 +17,23 @@ private struct OwnedAudioBuffer: @unchecked Sendable {
     let value: AVAudioPCMBuffer
 }
 
+private final class DictationCaptureProbeAccumulator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var bufferCount = 0
+
+    func recordBuffer() {
+        lock.lock()
+        bufferCount += 1
+        lock.unlock()
+    }
+
+    func snapshot() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return bufferCount
+    }
+}
+
 let dictationSessionHealthURL = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent(".claude/state/dictation-health.json")
 
@@ -102,6 +119,7 @@ final class Recorder: ObservableObject {
     private var peakRMS: Float = 0
     private var inputDeviceName = "unknown"
     private var sessionHealth: DictationSessionHealth?
+    private var captureProbeInProgress = false
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
 
@@ -212,6 +230,10 @@ final class Recorder: ObservableObject {
 
     @discardableResult
     func start(mode: DictMode) -> Bool {
+        guard !captureProbeInProgress else {
+            appendLog("[dictation] start rejected because installed microphone probe is running")
+            return false
+        }
         guard state.canStart else {
             appendLog("[dictation] start rejected mode=\(mode) phase=\(state.rawValue)")
             return false
@@ -262,6 +284,89 @@ final class Recorder: ObservableObject {
             }
         }
         return true
+    }
+
+    func runCaptureProbe(
+        duration: TimeInterval = 0.8,
+        completion: @escaping (DictationCaptureProbeResult) -> Void
+    ) {
+        let authorizationStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        let authorization = String(describing: authorizationStatus)
+        guard authorizationStatus == .authorized else {
+            completion(DictationCaptureProbeResult(
+                status: .microphoneDenied,
+                authorization: authorization,
+                failure: "Command does not have microphone access."
+            ))
+            return
+        }
+        guard state.canStart, audioEngine == nil, !captureProbeInProgress else {
+            completion(DictationCaptureProbeResult(
+                status: .recorderBusy,
+                authorization: authorization,
+                failure: "Dictation recorder is busy."
+            ))
+            return
+        }
+
+        captureProbeInProgress = true
+        let engine = AVAudioEngine()
+        let inputNode = engine.inputNode
+        let format = inputNode.outputFormat(forBus: 0)
+        let inputDevice = AVCaptureDevice.default(for: .audio)?.localizedName ?? "unknown"
+        let duration = min(max(duration, 0.25), 2.0)
+        let durationMilliseconds = Int((duration * 1_000).rounded())
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            captureProbeInProgress = false
+            completion(DictationCaptureProbeResult(
+                status: .inputUnavailable,
+                authorization: authorization,
+                inputDevice: inputDevice,
+                sampleRate: format.sampleRate,
+                channelCount: Int(format.channelCount),
+                durationMilliseconds: durationMilliseconds,
+                failure: "Default microphone has no usable input format."
+            ))
+            return
+        }
+
+        let accumulator = DictationCaptureProbeAccumulator()
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { _, _ in
+            accumulator.recordBuffer()
+        }
+        do {
+            try engine.start()
+        } catch {
+            inputNode.removeTap(onBus: 0)
+            captureProbeInProgress = false
+            completion(DictationCaptureProbeResult(
+                status: .engineStartFailed,
+                authorization: authorization,
+                inputDevice: inputDevice,
+                sampleRate: format.sampleRate,
+                channelCount: Int(format.channelCount),
+                durationMilliseconds: durationMilliseconds,
+                failure: error.localizedDescription
+            ))
+            return
+        }
+
+        appendLog("[dictation-probe] started device=\(inputDevice.debugDescription) durationMs=\(durationMilliseconds)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            inputNode.removeTap(onBus: 0)
+            engine.stop()
+            self?.captureProbeInProgress = false
+            let result = DictationCaptureProbeResult.completed(
+                authorization: authorization,
+                capturedBuffers: accumulator.snapshot(),
+                inputDevice: inputDevice,
+                sampleRate: format.sampleRate,
+                channelCount: Int(format.channelCount),
+                durationMilliseconds: durationMilliseconds
+            )
+            appendLog("[dictation-probe] completed status=\(result.status.rawValue) buffers=\(result.capturedBuffers) device=\(inputDevice.debugDescription)")
+            completion(result)
+        }
     }
 
     private func beginStreaming(session: Int) {

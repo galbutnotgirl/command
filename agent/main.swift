@@ -1872,6 +1872,66 @@ func tapWatchdog() {
 }
 
 // ---- Unix-socket keystroke + picker service --------------------------------
+private final class DictationProbeResponseBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: DictationCaptureProbeResult?
+    private var cancelled = false
+
+    func store(_ result: DictationCaptureProbeResult) {
+        lock.lock()
+        self.result = result
+        lock.unlock()
+    }
+
+    func load() -> DictationCaptureProbeResult? {
+        lock.lock()
+        defer { lock.unlock() }
+        return result
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+
+    func isCancelled() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+}
+
+func runInstalledDictationProbe() -> String {
+    let response = DictationProbeResponseBox()
+    let completed = DispatchSemaphore(value: 0)
+    DispatchQueue.main.async {
+        guard !response.isCancelled() else { return }
+        recorder.runCaptureProbe { result in
+            response.store(result)
+            completed.signal()
+        }
+    }
+
+    if completed.wait(timeout: .now() + 5) == .timedOut {
+        response.cancel()
+        response.store(DictationCaptureProbeResult(
+            status: .timedOut,
+            authorization: "unknown",
+            failure: "Microphone probe did not complete within five seconds."
+        ))
+    }
+    let result = response.load() ?? DictationCaptureProbeResult(
+        status: .timedOut,
+        authorization: "unknown",
+        failure: "Microphone probe returned no result."
+    )
+    guard let data = try? DictationCaptureProbeCoding.encode(result) else {
+        return #"{"ok":false,"status":"timedOut","failure":"Could not encode microphone probe result."}"#
+    }
+    return String(decoding: data, as: UTF8.self)
+}
+
 func handle(_ line: String) -> String {
     let parts = line.split(separator: " ", maxSplits: 1).map(String.init)
     switch parts.first ?? "" {
@@ -1940,6 +2000,7 @@ func handle(_ line: String) -> String {
         return "ok"
     case "reloadhotkeys": DispatchQueue.main.async { reregisterHotkeys() }; return "ok"
     case "showsettings":  DispatchQueue.main.async { settingsWindow.show(tab: .setup) }; return "ok"
+    case "dictationprobe": return runInstalledDictationProbe()
     case "restart":
         // Reply before beginning the detached handoff so callers can distinguish
         // an accepted restart from a dead socket.
