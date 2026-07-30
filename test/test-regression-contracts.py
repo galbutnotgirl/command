@@ -20,16 +20,18 @@ BASELINE_AREA_MINIMUMS = {
     "clipboard-history": 1,
     "settings-and-import": 1,
     "background-actions": 1,
-    "install-update-release": 1,
+    "install-update-release": 2,
     "hotkey-configuration": 1,
 }
 MANDATORY_GATES = {
     (".github/workflows/test.yml", "python3 ./test/test-regression-contracts.py"),
     (".github/workflows/test.yml", "python3 ./test/test-regression-contracts-tests.py"),
     (".github/workflows/test.yml", "python3 ./test/test-regression-impact.py --base"),
+    (".github/workflows/test.yml", "./test/test-qualification-orchestration.sh"),
     ("release.sh", 'python3 "${DIR}/test/test-regression-contracts.py"'),
     ("release.sh", 'python3 "${DIR}/test/test-regression-contracts-tests.py"'),
     ("release.sh", '"${DIR}/test/test-regression-impact.sh"'),
+    ("release.sh", '"${DIR}/test/test-qualification-orchestration.sh"'),
     ("release.sh", '"${DIR}/test/test-dictation-model.sh"'),
     ("release.sh", "--skip-checks cannot be used with --publish"),
 }

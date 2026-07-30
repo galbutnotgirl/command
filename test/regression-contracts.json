@@ -8,7 +8,7 @@
     "clipboard-history": 1,
     "settings-and-import": 1,
     "background-actions": 1,
-    "install-update-release": 1,
+    "install-update-release": 2,
     "hotkey-configuration": 1
   },
   "regressions": [
@@ -281,6 +281,26 @@
       "runtimeEvidence": "Installed bundle keeps designated requirement and path; pre/post state sentinels remain; failed swap restores valid prior signature."
     },
     {
+      "id": "INSTALL-002",
+      "areas": ["install-update-release"],
+      "risk": "Source tests pass but installed app is reported validated without proving exact build identity, microphone capture, restart recovery, runtime stability, or final-word decoding.",
+      "automatedEvidence": [
+        {
+          "file": "test/test-qualification-orchestration.sh",
+          "contains": "qualification executes every step in fixed order"
+        },
+        {
+          "file": "test/test-qualification-orchestration.sh",
+          "contains": "failure report identifies failed step"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "installed qualification forbids clean install"
+        }
+      ],
+      "runtimeEvidence": "dist/installed-qualification.json must report passed, exact current commit, incremental install, and eight successful qualification steps."
+    },
+    {
       "id": "HOTKEY-001",
       "areas": ["hotkey-configuration"],
       "risk": "Generated default hotkeys collide, reference missing actions, or overwrite user-customized bindings.",
@@ -311,6 +331,10 @@
       "contains": "python3 ./test/test-regression-impact.py --base"
     },
     {
+      "file": ".github/workflows/test.yml",
+      "contains": "./test/test-qualification-orchestration.sh"
+    },
+    {
       "file": "release.sh",
       "contains": "python3 \"${DIR}/test/test-regression-contracts.py\""
     },
@@ -321,6 +345,10 @@
     {
       "file": "release.sh",
       "contains": "\"${DIR}/test/test-regression-impact.sh\""
+    },
+    {
+      "file": "release.sh",
+      "contains": "\"${DIR}/test/test-qualification-orchestration.sh\""
     },
     {
       "file": "release.sh",

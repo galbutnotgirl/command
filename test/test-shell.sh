@@ -324,6 +324,15 @@ assert_not_contains "paste fallback no longer rejects non-settable AXValue" "$SE
 INSTALL_SOURCE="$(cat "${DIR}/install-agent.sh")"
 assert_contains "fresh install keeps Clipboard History opt-in" "$INSTALL_SOURCE" \
   'defaults write com.claudecommand cliphistoryEnabled -bool false'
+QUALIFICATION_SOURCE="$(cat "${DIR}/qualify-installed-build.sh")"
+assert_contains "installed qualification forbids clean install" "$QUALIFICATION_SOURCE" \
+  'clean install is forbidden during qualification'
+assert_contains "installed qualification verifies microphone before restart" "$QUALIFICATION_SOURCE" \
+  'run_step "Microphone capture before restart"'
+assert_contains "installed qualification verifies microphone after restart" "$QUALIFICATION_SOURCE" \
+  'run_step "Microphone capture after restart"'
+assert_contains "installed qualification records exact commit" "$QUALIFICATION_SOURCE" \
+  '"commit": commit'
 
 DOCTOR_SOURCE="$(cat "${DIR}/doctor.sh")"
 assert_contains "doctor accepts built-in shortcuts without override file" "$DOCTOR_SOURCE" \

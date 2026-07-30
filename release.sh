@@ -136,6 +136,7 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   "${DIR}/test/test-updater-swap.sh" || fail "updater swap tests failed — fix install/rollback before release."
   "${DIR}/test/test-restart-app.sh" || fail "restart handoff tests failed — fix relaunch behavior before release."
   "${DIR}/test/test-release-policy.sh" || fail "release policy tests failed — fix signing/notarization guards before release."
+  "${DIR}/test/test-qualification-orchestration.sh" || fail "installed qualification orchestration tests failed — fix local runtime qualification before release."
   "${DIR}/test/test-static-analysis.sh" || fail "static analysis failed — fix script or configuration syntax before release."
   python3 "${DIR}/test/test-docs.py" || fail "docs validation failed — fix docs links/metadata/packaging guards before release."
   python3 "${DIR}/test/test-pages.py" || fail "Pages validation failed — fix deploy assets and install recovery before release."

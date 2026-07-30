@@ -82,6 +82,9 @@ jobs:
       - name: Release signing policy tests
         run: ./test/test-release-policy.sh
 
+      - name: Installed qualification orchestration tests
+        run: ./test/test-qualification-orchestration.sh
+
       - name: Static syntax and configuration checks
         run: ./test/test-static-analysis.sh
 
