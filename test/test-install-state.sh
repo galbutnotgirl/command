@@ -49,8 +49,9 @@ cat > "$SOURCE_APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleShortVersionString</key><string>9.9.9-test</string>
 </dict></plist>
 PLIST
-print '#!/bin/sh\nexit 0' > "$SOURCE_APP/Contents/MacOS/Command"
-chmod +x "$SOURCE_APP/Contents/MacOS/Command"
+# Use Mach-O fixture so ad-hoc signature is embedded like production Command.
+# Script executables can store signatures in xattrs that rsync -a omits.
+cp /usr/bin/true "$SOURCE_APP/Contents/MacOS/Command"
 codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/null 2>&1
 
 cat > "$FAKE_BIN/launchctl" <<'SH'
