@@ -21,11 +21,15 @@ HOTKEY_SCRIPT="${COMMAND_QUALIFY_HOTKEY_SCRIPT:-${DIR}/test/test-installed-hotke
 RESTART_SCRIPT="${COMMAND_QUALIFY_RESTART_SCRIPT:-${DIR}/test/test-installed-restart.sh}"
 RUNTIME_SCRIPT="${COMMAND_QUALIFY_RUNTIME_SCRIPT:-${DIR}/test/test-installed-runtime.sh}"
 MODEL_SCRIPT="${COMMAND_QUALIFY_MODEL_SCRIPT:-${DIR}/test/test-dictation-model.sh}"
+STATE_SCRIPT="${COMMAND_QUALIFY_STATE_SCRIPT:-${DIR}/test/installed-state-snapshot.py}"
+STATE_POLICY="${COMMAND_QUALIFY_STATE_POLICY:-${DIR}/test/installed-state-policy.json}"
 
 COMMIT="$(git -C "$DIR" rev-parse HEAD 2>/dev/null || print unknown)"
 BRANCH="$(git -C "$DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || print unknown)"
 STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 STEPS_FILE="$(mktemp "${TMPDIR:-/tmp}/command-qualification-steps.XXXXXX")"
+STATE_BEFORE="$(mktemp "${TMPDIR:-/tmp}/command-state-before.XXXXXX")"
+STATE_AFTER="$(mktemp "${TMPDIR:-/tmp}/command-state-after.XXXXXX")"
 CURRENT_STEP="Preflight"
 QUALIFICATION_RESULT="failed"
 
@@ -71,7 +75,7 @@ finish() {
   local exit_code="$?"
   trap - EXIT
   write_report "$exit_code"
-  rm -f "$STEPS_FILE"
+  rm -f "$STEPS_FILE" "$STATE_BEFORE" "$STATE_AFTER"
   if (( exit_code == 0 )); then
     print -- "[qualify] PASSED ${BRANCH}@${COMMIT[1,7]} (${VERSION})"
     print -- "[qualify] report: ${REPORT}"
@@ -108,6 +112,16 @@ run_step() {
   print -- "[qualify] passed ${name} (${duration}s)"
 }
 
+capture_durable_state() {
+  "$STATE_SCRIPT" --policy "$STATE_POLICY" capture --output "$1"
+}
+
+verify_durable_state() {
+  capture_durable_state "$STATE_AFTER" \
+    && "$STATE_SCRIPT" --policy "$STATE_POLICY" compare \
+      --before "$STATE_BEFORE" --after "$STATE_AFTER"
+}
+
 [[ "$COMMIT" != "unknown" ]] || fail "repository commit is unavailable"
 [[ -z "$(git -C "$DIR" status --porcelain 2>/dev/null)" ]] \
   || fail "working tree must be clean so report identifies exact source"
@@ -124,12 +138,16 @@ run_step() {
 [[ "$SOAK_SECONDS" == <-> ]] && (( SOAK_SECONDS >= 1 && SOAK_SECONDS <= 300 )) \
   || fail "COMMAND_QUALIFY_SOAK_SECONDS must be between 1 and 300"
 for required_script in "$RELEASE_SCRIPT" "$INSTALL_SCRIPT" "$IDENTITY_SCRIPT" \
-  "$DICTATION_SCRIPT" "$HOTKEY_SCRIPT" "$RESTART_SCRIPT" "$RUNTIME_SCRIPT" "$MODEL_SCRIPT"; do
+  "$DICTATION_SCRIPT" "$HOTKEY_SCRIPT" "$RESTART_SCRIPT" "$RUNTIME_SCRIPT" "$MODEL_SCRIPT" \
+  "$STATE_SCRIPT"; do
   [[ -x "$required_script" ]] || fail "required executable missing: ${required_script}"
 done
+[[ -r "$STATE_POLICY" ]] || fail "durable-state policy missing: ${STATE_POLICY}"
 
+run_step "Capture durable state baseline" capture_durable_state "$STATE_BEFORE" || exit $?
 run_step "Full release gates and signed build" "$RELEASE_SCRIPT" || exit $?
 run_step "Incremental install" "$INSTALL_SCRIPT" || exit $?
+run_step "Durable state after install" verify_durable_state || exit $?
 run_step "Installed build identity" "$IDENTITY_SCRIPT" || exit $?
 run_step "Hotkey input before restart" env \
   COMMAND_HOTKEY_PROBE_EVENTS="$HOTKEY_EVENTS" "$HOTKEY_SCRIPT" || exit $?
@@ -143,6 +161,7 @@ run_step "Microphone capture after restart" env \
 run_step "Installed runtime soak" env \
   COMMAND_SOAK_SECONDS="$SOAK_SECONDS" "$RUNTIME_SCRIPT" || exit $?
 run_step "Final-word model fixtures" "$MODEL_SCRIPT" || exit $?
+run_step "Durable state after qualification" verify_durable_state || exit $?
 
 CURRENT_STEP="Complete"
 QUALIFICATION_RESULT="passed"

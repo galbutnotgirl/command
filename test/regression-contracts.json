@@ -8,7 +8,7 @@
     "clipboard-history": 1,
     "settings-and-import": 1,
     "background-actions": 1,
-    "install-update-release": 4,
+    "install-update-release": 5,
     "hotkey-configuration": 1
   },
   "regressions": [
@@ -421,7 +421,7 @@
           "contains": "installed qualification forbids clean install"
         }
       ],
-      "runtimeEvidence": "dist/installed-qualification.json must report passed, exact current commit, incremental install, and ten successful qualification steps."
+      "runtimeEvidence": "dist/installed-qualification.json must report passed, exact current commit, incremental install, and thirteen successful qualification steps including pre-install and post-runtime durable-state checks."
     },
     {
       "id": "INSTALL-003",
@@ -430,7 +430,7 @@
       "automatedEvidence": [
         {
           "file": "test/test-installed-qualification-report.py",
-          "contains": "test_accepts_exact_recent_ten_step_report"
+          "contains": "test_accepts_exact_recent_thirteen_step_report"
         },
         {
           "file": "test/test-installed-qualification-report.py",
@@ -445,7 +445,7 @@
           "contains": "public release rechecks qualification before tagging"
         }
       ],
-      "runtimeEvidence": "release.sh --publish fails unless a recent report matches exact HEAD, branch, and version with all ten incremental installed checks passed; the gate reruns immediately before tagging."
+      "runtimeEvidence": "release.sh --publish fails unless a recent report matches exact HEAD, branch, and version with all thirteen incremental installed checks passed; the gate reruns immediately before tagging."
     },
     {
       "id": "INSTALL-004",
@@ -470,6 +470,30 @@
         }
       ],
       "runtimeEvidence": "Every qualified Command.app contains a signed regression-gates-attestation.json matching its full commit, branch marker, and version. Local installer, in-app updater, and detached swapper reject missing, failed, stale, or mismatched attestations before mutating the installed app."
+    },
+    {
+      "id": "INSTALL-005",
+      "areas": ["install-update-release", "settings-and-import", "clipboard-history", "dictation"],
+      "risk": "An incremental build preserves app identity but silently resets user preferences, shortcuts, custom actions, context, vocabulary, background configuration, dictation history, command history, or Clipboard History during install or restart.",
+      "automatedEvidence": [
+        {
+          "file": "test/test-installed-state-preservation.py",
+          "contains": "test_changed_preference_fails_without_printing_value"
+        },
+        {
+          "file": "test/test-installed-state-preservation.py",
+          "contains": "test_removed_history_directory_fails"
+        },
+        {
+          "file": "test/test-installed-state-preservation.py",
+          "contains": "test_policy_covers_all_owned_configuration_and_history"
+        },
+        {
+          "file": "test/test-qualification-orchestration.sh",
+          "contains": "thirteen passed steps"
+        }
+      ],
+      "runtimeEvidence": "Every installed qualification captures all persisted Command defaults plus eleven owned configuration/history artifacts before build, compares them immediately after incremental install, and compares them again after restart, hotkey, microphone, recovery, soak, and final-word probes. Any added, removed, or changed durable state fails qualification without printing private values."
     },
     {
       "id": "HOTKEY-001",

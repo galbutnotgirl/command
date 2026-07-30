@@ -14,6 +14,7 @@ public let requiredRegressionGateIDs = [
     "build-transaction",
     "release-transaction",
     "install-state",
+    "state-preservation",
     "uninstall",
     "updater-swap",
     "restart",

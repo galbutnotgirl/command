@@ -11,6 +11,12 @@ recent change if something in there needs undoing).
 
 ## Installed regression gates (2026-07-30)
 
+- Installed qualification now captures all persisted Command defaults and eleven owned
+  configuration/history artifacts before build, compares them after incremental install, and
+  compares them again after restart and runtime probes. Semantic JSON fingerprints ignore harmless
+  key-order rewrites; changed, added, removed, or reset durable state fails without printing values.
+  INSTALL-005 tracks settings, shortcuts, actions, context, vocabulary, background configuration,
+  dictation history, Command History, and Clipboard History preservation.
 - Shared dictation delivery pipeline now owns final/partial selection, minimum-duration decision,
   processing handoff, and exact delivery. Recorder, overlay, and cached Parakeet fixture use same
   code. Non-empty raw speech falls back to raw delivery when processing returns blank, preventing
@@ -21,7 +27,7 @@ recent change if something in there needs undoing).
   and final-word model checks pass. Build signs attestation into app; local installer, in-app
   updater, and detached swapper verify it before mutation. Missing, failed, wrong-version,
   wrong-commit, or incomplete attestations fail closed.
-- Exact-commit qualification now runs ten ordered checks and blocks public publication when
+- Exact-commit qualification now runs thirteen ordered checks and blocks public publication when
   report is stale, edited, mismatched, incomplete, or from clean install.
 - Installed dictation checks run before and after restart: repeated raw microphone captures plus
   production trigger, model stream, recorder, stop-tail, ASR finish, and terminal cleanup. Each
@@ -41,7 +47,8 @@ recent change if something in there needs undoing).
   `checkpoint/2026-07-30-0205-dictation-fault-recovery`, and
   `checkpoint/2026-07-30-0236-voice-dispatch-endurance`, and
   `checkpoint/2026-07-30-0259-qualified-install-gate`, and
-  `checkpoint/2026-07-30-0331-dictation-delivery-pipeline`.
+  `checkpoint/2026-07-30-0331-dictation-delivery-pipeline`, and
+  `checkpoint/2026-07-30-0353-installed-state-baseline`.
 
 ## Modifier chords and uninstaller (2026-07-28)
 

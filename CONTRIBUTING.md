@@ -41,6 +41,7 @@ cd ../.. && ./test/test-shell.sh
 ./test/test-build-transaction.sh
 ./test/test-release-transaction.sh
 ./test/test-install-state.sh
+python3 ./test/test-installed-state-preservation.py
 ./test/test-updater-swap.sh
 ./test/test-restart-app.sh
 ./test/test-release-policy.sh

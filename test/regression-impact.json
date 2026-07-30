@@ -51,6 +51,7 @@
         "agent/Tests/ClaudeCommandCoreTests/DictationSessionHealthTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/DictationTriggerCoordinatorTests.swift",
         "test/test-dictation-model.sh",
+        "test/test-installed-state-preservation.py",
         "test/test-shell.sh",
         "test/regression-contracts.json"
       ]
@@ -106,6 +107,7 @@
       ],
       "evidence": [
         "agent/Tests/ClaudeCommandCoreTests/ClipboardURLTests.swift",
+        "test/test-installed-state-preservation.py",
         "test/test-clipboard-watcher.sh",
         "test/test-shell.sh",
         "test/regression-contracts.json"
@@ -123,6 +125,7 @@
       "evidence": [
         "agent/Tests/ClaudeCommandCoreTests/Import*.swift",
         "agent/Tests/ClaudeCommandCoreTests/TemplatesTests.swift",
+        "test/test-installed-state-preservation.py",
         "test/test-shell.sh",
         "test/test_string_review.py",
         "test/regression-contracts.json"
@@ -174,6 +177,7 @@
         "agent/Tests/ClaudeCommandCoreTests/UpdateLogicTests.swift",
         "test/test-build-transaction.sh",
         "test/test-install-state.sh",
+        "test/test-installed-state-preservation.py",
         "test/test-installed-qualification-report.py",
         "test/test-qualification-orchestration.sh",
         "test/test-regression-attestation.py",

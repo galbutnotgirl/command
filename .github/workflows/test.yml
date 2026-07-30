@@ -74,6 +74,9 @@ jobs:
       - name: Fresh and incremental install state tests
         run: ./test/test-install-state.sh
 
+      - name: Installed user-state preservation tests
+        run: python3 ./test/test-installed-state-preservation.py
+
       - name: Uninstall ownership and permission-reset tests
         run: ./test/test-uninstall.sh
 

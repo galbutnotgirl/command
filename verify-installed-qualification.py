@@ -13,8 +13,10 @@ from pathlib import Path
 
 
 EXPECTED_STEPS = [
+    "Capture durable state baseline",
     "Full release gates and signed build",
     "Incremental install",
+    "Durable state after install",
     "Installed build identity",
     "Hotkey input before restart",
     "Microphone capture before restart",
@@ -23,6 +25,7 @@ EXPECTED_STEPS = [
     "Microphone capture after restart",
     "Installed runtime soak",
     "Final-word model fixtures",
+    "Durable state after qualification",
 ]
 
 

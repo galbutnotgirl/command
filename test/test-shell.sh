@@ -466,9 +466,15 @@ assert_contains "installed qualification verifies hotkey input before restart" "
   'run_step "Hotkey input before restart"'
 assert_contains "installed qualification verifies hotkey input after restart" "$QUALIFICATION_SOURCE" \
   'run_step "Hotkey input after restart"'
+assert_contains "installed qualification captures durable state before build" "$QUALIFICATION_SOURCE" \
+  'run_step "Capture durable state baseline"'
+assert_contains "installed qualification verifies durable state after install" "$QUALIFICATION_SOURCE" \
+  'run_step "Durable state after install"'
+assert_contains "installed qualification verifies durable state after runtime probes" "$QUALIFICATION_SOURCE" \
+  'run_step "Durable state after qualification"'
 assert_contains "installed qualification records exact commit" "$QUALIFICATION_SOURCE" \
   '"commit": commit'
-assert_contains "qualification verifier requires ten ordered checks" "$QUALIFICATION_VERIFIER_SOURCE" \
+assert_contains "qualification verifier requires thirteen ordered checks" "$QUALIFICATION_VERIFIER_SOURCE" \
   'if names != EXPECTED_STEPS:'
 assert_contains "public release verifies installed qualification before gates" "$RELEASE_SOURCE" \
   'public release requires a recent installed qualification for this exact commit'

@@ -149,6 +149,8 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   "${DIR}/test/test-build-transaction.sh" || fail "build transaction tests failed — fix artifact preservation before release."
   "${DIR}/test/test-release-transaction.sh" || fail "release transaction tests failed — fix package preservation before release."
   "${DIR}/test/test-install-state.sh" || fail "install state tests failed — fix fresh/update behavior before release."
+  python3 "${DIR}/test/test-installed-state-preservation.py" \
+    || fail "installed state preservation tests failed — user settings or history may be lost during update."
   "${DIR}/test/test-uninstall.sh" || fail "uninstall tests failed — fix scoped cleanup before release."
   "${DIR}/test/test-updater-swap.sh" || fail "updater swap tests failed — fix install/rollback before release."
   "${DIR}/test/test-restart-app.sh" || fail "restart handoff tests failed — fix relaunch behavior before release."

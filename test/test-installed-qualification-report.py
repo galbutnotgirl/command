@@ -13,8 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 VERIFIER = ROOT / "verify-installed-qualification.py"
 NOW = "2026-07-30T08:00:00Z"
 STEPS = [
+    "Capture durable state baseline",
     "Full release gates and signed build",
     "Incremental install",
+    "Durable state after install",
     "Installed build identity",
     "Hotkey input before restart",
     "Microphone capture before restart",
@@ -23,6 +25,7 @@ STEPS = [
     "Microphone capture after restart",
     "Installed runtime soak",
     "Final-word model fixtures",
+    "Durable state after qualification",
 ]
 
 
@@ -87,10 +90,10 @@ class InstalledQualificationReportTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(expected, result.stderr)
 
-    def test_accepts_exact_recent_ten_step_report(self) -> None:
+    def test_accepts_exact_recent_thirteen_step_report(self) -> None:
         result = self.run_verifier(self.report)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("steps: 10/10", result.stdout)
+        self.assertIn("steps: 13/13", result.stdout)
 
     def test_rejects_missing_report(self) -> None:
         result = self.run_verifier()

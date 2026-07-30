@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "defaultsDomain": "com.claudecommand",
+  "ignoredDefaultsKeys": [
+    "lastAutoUpdateCheckAt",
+    "lastSettingsTab",
+    "postOnboardingOpenShortcuts"
+  ],
+  "ignoredDefaultsPrefixes": [
+    "NSWindow Frame ",
+    "commandRestartTestSentinel"
+  ],
+  "artifacts": [
+    ".claude/state/command-hotkeys.json",
+    ".claude/state/custom-actions.json",
+    ".claude/state/built-in-compose.json",
+    ".claude/state/command-templates.json",
+    ".claude/state/enrichment-rules.json",
+    ".claude/state/command-config.json",
+    ".claude/state/cliphistory",
+    "Library/Application Support/DictationLab/vocabulary.json",
+    "Library/Application Support/DictationLab/history.json",
+    "Library/Application Support/claude-command/settings.json",
+    "Library/Application Support/claude-command/command-history"
+  ]
+}

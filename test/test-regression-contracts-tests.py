@@ -104,8 +104,8 @@ class RegressionContractValidatorTests(unittest.TestCase):
         document["coverageRequirements"]["shortcuts-and-input"] = 2
         self.assertTrue(any("shortcuts-and-input cannot drop below 3" in item for item in self.failures(document)))
         document = copy.deepcopy(self.document)
-        document["coverageRequirements"]["install-update-release"] = 3
-        self.assertTrue(any("install-update-release cannot drop below 4" in item for item in self.failures(document)))
+        document["coverageRequirements"]["install-update-release"] = 4
+        self.assertTrue(any("install-update-release cannot drop below 5" in item for item in self.failures(document)))
 
     def testMandatoryGateDeclarationCannotBeRemoved(self) -> None:
         document = copy.deepcopy(self.document)

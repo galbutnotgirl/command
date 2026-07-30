@@ -21,6 +21,7 @@ swift build --package-path agent --product CommandClipboardWatcher
 ./test/test-build-transaction.sh
 ./test/test-release-transaction.sh
 ./test/test-install-state.sh
+python3 ./test/test-installed-state-preservation.py
 ./test/test-updater-swap.sh
 ./test/test-restart-app.sh
 ./test/test-release-policy.sh
@@ -51,6 +52,12 @@ With Command installed and running under launchd:
 ./test/test-installed-dictation.sh
 ./test/test-installed-runtime.sh
 ```
+
+`qualify-installed-build.sh` snapshots persisted Command defaults plus eleven owned settings and
+history artifacts before build. It compares same state immediately after incremental install and
+again after restart/runtime probes. Semantic JSON hashing ignores harmless key-order rewrites while
+any setting, shortcut, action, context, vocabulary, background configuration, or history mutation
+fails qualification without printing private values.
 
 Restart test verifies socket acknowledgement, replacement launchd PID, recovered socket, preserved
 UserDefaults, and no crash report. Runtime test then performs a 15-second idle soak with repeated
@@ -180,12 +187,13 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-30)
 
-- Automated local suites: 221 Swift, 58 Node, 169 shell, 17 build-transaction,
+- Automated local suites: 221 Swift, 58 Node, 172 shell, 17 build-transaction,
   17 release-transaction, 41 install-state, 14 updater, 9 restart-handoff,
-  9 release-policy, 91 static syntax/configuration, and 2 string-review;
+  9 installed-state preservation, 9 release-policy, 91 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
-- Eleven critical dictation regressions have stable IDs, 33 source/test evidence links, runtime
-  evidence contracts, CI enforcement, and public-release enforcement. Latest session health is
+- Twenty-five tracked regressions have 73 source/test evidence links; eleven dictation regressions
+  retain 33 links. Each contract has runtime evidence, CI enforcement, and public-release
+  enforcement. Latest session health is
   persisted through start, model load, listening, first buffer, finish, and terminal outcome.
 - Settings pickers and toggles have explicit hidden accessibility labels, and static analysis
   rejects future empty labels. Full keyboard and VoiceOver traversal remains a manual gate.

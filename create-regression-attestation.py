@@ -27,6 +27,7 @@ REQUIRED_GATES = [
     "build-transaction",
     "release-transaction",
     "install-state",
+    "state-preservation",
     "uninstall",
     "updater-swap",
     "restart",

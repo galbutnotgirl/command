@@ -46,7 +46,7 @@ print -- "${name} argc=$# clean=${COMMAND_CLEAN_INSTALL:-unset}" >> "$COMMAND_TE
 exit 0
 SH
 chmod +x "$FAKE_BIN/fake-step"
-for name in release install identity hotkey dictation restart runtime model; do
+for name in release install identity hotkey dictation restart runtime model state; do
   ln -s fake-step "$FAKE_BIN/$name"
 done
 
@@ -93,6 +93,8 @@ run_qualifier() {
   COMMAND_QUALIFY_RESTART_SCRIPT="$FAKE_BIN/restart" \
   COMMAND_QUALIFY_RUNTIME_SCRIPT="$FAKE_BIN/runtime" \
   COMMAND_QUALIFY_MODEL_SCRIPT="$FAKE_BIN/model" \
+  COMMAND_QUALIFY_STATE_SCRIPT="$FAKE_BIN/state" \
+  COMMAND_QUALIFY_STATE_POLICY="$ROOT/test/installed-state-policy.json" \
   COMMAND_TEST_STEP_LOG="$LOG" \
   COMMAND_TEST_FAIL_STEP="${1:-}" \
   zsh "$FIXTURE/qualify-installed-build.sh" 2>&1
@@ -100,10 +102,10 @@ run_qualifier() {
 
 : > "$LOG"
 SUCCESS_OUTPUT="$(run_qualifier)"
-EXPECTED_ORDER=$'release argc=0 clean=unset\ninstall argc=0 clean=unset\nidentity argc=0 clean=unset\nhotkey argc=0 clean=unset\ndictation argc=0 clean=unset\nrestart argc=0 clean=unset\nhotkey argc=0 clean=unset\ndictation argc=0 clean=unset\nruntime argc=0 clean=unset\nmodel argc=0 clean=unset'
+EXPECTED_ORDER=$'state argc=5 clean=unset\nrelease argc=0 clean=unset\ninstall argc=0 clean=unset\nstate argc=5 clean=unset\nstate argc=7 clean=unset\nidentity argc=0 clean=unset\nhotkey argc=0 clean=unset\ndictation argc=0 clean=unset\nrestart argc=0 clean=unset\nhotkey argc=0 clean=unset\ndictation argc=0 clean=unset\nruntime argc=0 clean=unset\nmodel argc=0 clean=unset\nstate argc=5 clean=unset\nstate argc=7 clean=unset'
 assert_true "qualification executes every step in fixed order" test "$(cat "$LOG")" = "$EXPECTED_ORDER"
 assert_contains "qualification reports success" "[qualify] PASSED" "$SUCCESS_OUTPUT"
-assert_true "success report binds exact fixture commit and ten passed steps" python3 - "$REPORT" "$FIXTURE" <<'PY'
+assert_true "success report binds exact fixture commit and thirteen passed steps" python3 - "$REPORT" "$FIXTURE" <<'PY'
 import json, subprocess, sys
 document = json.load(open(sys.argv[1], encoding="utf-8"))
 commit = subprocess.check_output(["git", "-C", sys.argv[2], "rev-parse", "HEAD"], text=True).strip()
@@ -111,7 +113,7 @@ assert document["result"] == "passed"
 assert document["commit"] == commit
 assert document["installMode"] == "incremental"
 assert document["publicReleasePublished"] is False
-assert len(document["steps"]) == 10
+assert len(document["steps"]) == 13
 assert all(step["status"] == "passed" for step in document["steps"])
 PY
 

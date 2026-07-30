@@ -188,6 +188,7 @@ cd agent && swift test --filter DictationDeliveryPipelineTests
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
 ./test/test-install-state.sh
+python3 ./test/test-installed-state-preservation.py
 ./test/test-updater-swap.sh
 ./test/test-restart-app.sh
 ./test/test-release-policy.sh
