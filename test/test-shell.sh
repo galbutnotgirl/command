@@ -376,6 +376,8 @@ assert_contains "target activation tolerates busy LaunchServices" "$AGENT_SOURCE
   'func waitForActive(_ bundle: String, attempts: Int = 120) -> Bool'
 assert_contains "installed paste probe activates receiver without blocking main run loop" "$AGENT_SOURCE" \
   'activateReceiverThenStart('
+assert_contains "installed paste probe requests Launch Services activation before polling" "$AGENT_SOURCE" \
+  'activate(targetBundle)'
 assert_contains "installed paste probe requests foreground activation" "$AGENT_SOURCE" \
   'NSApp.activate(ignoringOtherApps: true)'
 assert_contains "installed paste probe brings receiver forward" "$AGENT_SOURCE" \

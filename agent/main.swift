@@ -2119,6 +2119,10 @@ private final class InstalledDictationInsertProbeHarness {
         response: DictationInsertProbeResponseBox,
         completed: DispatchSemaphore
     ) {
+        // Request Launch Services activation while the main run loop is free to
+        // receive the reopen event. Production dispatch can then verify focus
+        // synchronously without deadlocking this process on its own event.
+        activate(targetBundle)
         activateReceiverThenStart(
             rawText: rawText,
             response: response,
