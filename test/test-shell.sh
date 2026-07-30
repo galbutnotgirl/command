@@ -240,6 +240,7 @@ SETTINGS_SOURCE="$(cat "${DIR}/agent/SettingsWindow.swift")"
 PERMISSIONS_SOURCE="$(cat "${DIR}/agent/Permissions.swift")"
 DICTATION_OVERLAY_SOURCE="$(cat "${DIR}/agent/DictationOverlay.swift")"
 RECORDER_SOURCE="$(cat "${DIR}/agent/Recorder.swift")"
+DICTATION_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationSessionHealth.swift")"
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
   'helper_newchat ||'
 assert_contains "Native assistant shortcuts use tested core mapping" "$AGENT_SOURCE" \
@@ -264,6 +265,14 @@ assert_contains "dictation watchdog recovers zero-buffer capture" "$DICTATION_OV
   'capture watchdog recovering'
 assert_contains "canceled dictation startup cannot install a stale audio tap" "$RECORDER_SOURCE" \
   'startup abandoned before audio tap'
+assert_contains "dictation persists latest session health" "$RECORDER_SOURCE" \
+  'dictation-health.json'
+assert_contains "dictation reports previous interrupted session" "$RECORDER_SOURCE" \
+  'previous session interrupted'
+assert_contains "dictation health has explicit terminal stages" "$DICTATION_HEALTH_SOURCE" \
+  'case completed'
+assert_contains "copied diagnostics include latest dictation session" "$SETTINGS_SOURCE" \
+  'Latest dictation session:'
 assert_contains "Claude selector exposes combined Chat/Cowork destination" "$SETTINGS_SOURCE" \
   'Text("Chat/Cowork").tag("chat")'
 assert_not_contains "Claude selector no longer exposes separate Cowork destination" "$SETTINGS_SOURCE" \

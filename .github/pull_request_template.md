@@ -1,6 +1,6 @@
 ## Summary
 
-- 
+-
 
 ## User Impact
 
@@ -21,9 +21,16 @@
 
 ## Validation
 
+Regression IDs affected (from `test/regression-contracts.json`), or `none`:
+
+- `none`
+
+Behavior changes must add or update automated evidence before merge.
+
 Paste relevant results:
 
 ```bash
+python3 ./test/test-regression-contracts.py
 cd agent && swift test
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
@@ -37,6 +44,12 @@ python3 ./test/test-pages.py
 python3 ./test/test_string_review.py
 ./release.sh --skip-checks
 ./test/test-release-asset.sh
+```
+
+For dictation behavior changes, also run with cached Parakeet models:
+
+```bash
+./test/test-dictation-model.sh
 ```
 
 ## Notes

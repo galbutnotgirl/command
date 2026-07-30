@@ -54,6 +54,8 @@ expect_ok "notarization accepts explicit keychain profile" \
   "$RELEASE" --notarize --notary-profile=command-notary --validate-config
 expect_fail_with "notarized and unnotarized modes conflict" "not both" \
   "$RELEASE" --notarize --allow-unnotarized --notary-profile=command-notary --validate-config
+expect_fail_with "public release cannot bypass regression gates" "--skip-checks cannot be used with --publish" \
+  "$RELEASE" --publish --notarize --notary-profile=command-notary --skip-checks --validate-config
 expect_fail_with "unknown release option is rejected" "unknown option" \
   "$RELEASE" --definitely-not-valid
 

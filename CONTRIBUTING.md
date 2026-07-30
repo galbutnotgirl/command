@@ -28,6 +28,7 @@ Verify the app process, dispatch socket, and bundled docs:
 Run the same checks CI and release preflight use:
 
 ```bash
+python3 ./test/test-regression-contracts.py
 cd agent && swift test
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
@@ -44,6 +45,8 @@ python3 ./test/test_string_review.py
 ./release.sh --skip-checks
 ./test/test-release-asset.sh
 ```
+
+Critical failures and their proof live in [`test/regression-contracts.json`](test/regression-contracts.json). Behavior fixes must update that manifest with deterministic evidence. Dictation changes also require `./test/test-dictation-model.sh` on a Mac with cached Parakeet models.
 
 `test/test-docs.py` validates README/docs links, rendered HTML structure, metadata, sitemap, bundled-doc asset lists, maintainer release coverage, About controls, Markdown/HTML parity, local media assets, and repo support/security policy links.
 
@@ -84,4 +87,4 @@ Use [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md). Normal release runs execute Sw
 ./release.sh --publish --notarize
 ```
 
-`--skip-checks` is only for local one-off packaging and CI packaging smoke tests. Use `./release.sh --publish --notarize` for real releases from clean `main` with Developer ID credentials.
+`--skip-checks` is only for local one-off packaging and CI packaging smoke tests and is rejected with `--publish`. Public release preflight requires regression contracts plus real Parakeet final-word fixtures before notarization and upload.

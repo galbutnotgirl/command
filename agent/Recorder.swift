@@ -17,6 +17,14 @@ private struct OwnedAudioBuffer: @unchecked Sendable {
     let value: AVAudioPCMBuffer
 }
 
+let dictationSessionHealthURL = FileManager.default.homeDirectoryForCurrentUser
+    .appendingPathComponent(".claude/state/dictation-health.json")
+
+func latestDictationSessionHealth() -> DictationSessionHealth? {
+    guard let data = try? Data(contentsOf: dictationSessionHealthURL) else { return nil }
+    return try? DictationSessionHealthCoding.decode(data)
+}
+
 private func copyAudioBuffer(_ source: AVAudioPCMBuffer) -> OwnedAudioBuffer? {
     guard let copy = AVAudioPCMBuffer(
         pcmFormat: source.format,
@@ -93,8 +101,49 @@ final class Recorder: ObservableObject {
     private var transcriptionUpdateCount = 0
     private var peakRMS: Float = 0
     private var inputDeviceName = "unknown"
+    private var sessionHealth: DictationSessionHealth?
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
+
+    private func persistSessionHealth() {
+        guard let sessionHealth else { return }
+        do {
+            let directory = dictationSessionHealthURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try DictationSessionHealthCoding.encode(sessionHealth).write(
+                to: dictationSessionHealthURL,
+                options: .atomic
+            )
+        } catch {
+            appendLog("[dictation] health snapshot write failed error=\(error.localizedDescription)")
+        }
+    }
+
+    private func transitionSessionHealth(
+        to stage: DictationSessionStage,
+        finalCharacters: Int? = nil,
+        failure: String? = nil,
+        persist: Bool = true
+    ) {
+        sessionHealth?.transition(
+            to: stage,
+            inputDevice: inputDeviceName,
+            capturedBuffers: capturedBufferCount,
+            transcriptionUpdates: transcriptionUpdateCount,
+            finalCharacters: finalCharacters,
+            failure: failure
+        )
+        if persist { persistSessionHealth() }
+    }
+
+    private func updateSessionHealthMetrics(persist: Bool) {
+        sessionHealth?.updateMetrics(
+            inputDevice: inputDeviceName,
+            capturedBuffers: capturedBufferCount,
+            transcriptionUpdates: transcriptionUpdateCount
+        )
+        if persist { persistSessionHealth() }
+    }
 
     // MARK: - Model management
 
@@ -184,6 +233,9 @@ final class Recorder: ObservableObject {
         }
         sessionID += 1
         let mySession = sessionID
+        if let previous = latestDictationSessionHealth(), previous.indicatesInterruptedCapture {
+            appendLog("[dictation] previous session interrupted \(previous.diagnosticSummary)")
+        }
         currentMode = mode
         stopRequestedDuringStart = false
         lastTranscript = ""; liveTranscript = ""
@@ -192,6 +244,8 @@ final class Recorder: ObservableObject {
         capturedBufferCount = 0; bufferCopyFailureCount = 0; transcriptionUpdateCount = 0
         captureStartupBegan = false
         peakRMS = 0; inputDeviceName = "unknown"
+        sessionHealth = DictationSessionHealth(sessionID: mySession, mode: String(describing: mode))
+        persistSessionHealth()
         state = .starting
         log("▶ session \(mySession) start mode=\(mode)")
         appendLog("[dictation] start session=\(mySession) mode=\(mode) deviceAuthorization=\(AVCaptureDevice.authorizationStatus(for: .audio).rawValue)")
@@ -212,7 +266,7 @@ final class Recorder: ObservableObject {
 
     private func beginStreaming(session: Int) {
         guard let models = loadedModels else { fail("loadedModels nil"); return }
-        captureStartupBegan = true
+        transitionSessionHealth(to: .loadingModel)
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let hwFormat = inputNode.outputFormat(forBus: 0)
@@ -227,6 +281,7 @@ final class Recorder: ObservableObject {
                 self.log("startup abandoned before audio tap session=\(session)")
                 return
             }
+            self.captureStartupBegan = true
             self.currentMgr = mgr
 
             var bufCount = 0
@@ -272,6 +327,7 @@ final class Recorder: ObservableObject {
                     engine.stop(); inputNode.removeTap(onBus: 0); self.audioEngine = nil; return
                 }
                 self.state = .listening
+                self.transitionSessionHealth(to: .listening)
                 self.log("🎙 listening")
                 appendLog("[dictation] listening session=\(session) device=\(self.inputDeviceName.debugDescription)")
                 if self.stopRequestedDuringStart {
@@ -285,6 +341,9 @@ final class Recorder: ObservableObject {
                 for await update in await mgr.transcriptionUpdates {
                     guard self.sessionID == session, !Task.isCancelled else { break }
                     self.transcriptionUpdateCount += 1
+                    self.updateSessionHealthMetrics(
+                        persist: self.transcriptionUpdateCount == 1 || self.transcriptionUpdateCount % 10 == 0
+                    )
                     self.liveTranscript = update.text
                     self.lastTranscript = update.text
                     self.onPartial?(update.text)
@@ -317,6 +376,7 @@ final class Recorder: ObservableObject {
         }
         let mgr = currentMgr; currentMgr = nil
         state = .finishing
+        transitionSessionHealth(to: .finishing)
 
         let capturedStreamTask = streamTask
         streamTask = nil
@@ -370,8 +430,10 @@ final class Recorder: ObservableObject {
                 self.state = .idle
                 self.audioLevel = 0
                 if self.shouldDispatchDictation(best) {
+                    self.transitionSessionHealth(to: .completed, finalCharacters: best.count)
                     self.onFinal?(best, mode)
                 } else {
+                    self.transitionSessionHealth(to: .empty, finalCharacters: best.count)
                     self.appendEmptyDiagnostics(session: finishingSession, mode: mode)
                     self.log("⚠ dictation suppressed — textChars=\(best.count) activeSpeech=\(String(format: "%.3f", self.activeSpeechSeconds))s totalAudio=\(String(format: "%.3f", self.totalAudioSeconds))s min=\(String(format: "%.1f", self.minimumDictationDuration()))s")
                     self.onFinishedWithoutText?(mode)
@@ -383,8 +445,10 @@ final class Recorder: ObservableObject {
                 self.state = .idle
                 self.audioLevel = 0
                 if self.shouldDispatchDictation(self.lastTranscript) {
+                    self.transitionSessionHealth(to: .completed, finalCharacters: self.lastTranscript.count)
                     self.onFinal?(self.lastTranscript, mode)
                 } else {
+                    self.transitionSessionHealth(to: .empty, finalCharacters: self.lastTranscript.count)
                     self.appendEmptyDiagnostics(session: finishingSession, mode: mode)
                     self.onFinishedWithoutText?(mode)
                 }
@@ -395,6 +459,7 @@ final class Recorder: ObservableObject {
     func cancel() {
         log("cancel")
         appendLog("[dictation] cancel session=\(sessionID) phase=\(state.rawValue) buffers=\(capturedBufferCount)")
+        transitionSessionHealth(to: .cancelled)
         sessionID += 1
         stopRequestedDuringStart = false
         audioEngine?.inputNode.removeTap(onBus: 0)
@@ -429,6 +494,11 @@ final class Recorder: ObservableObject {
 
     private func observeAudioFrame(rms: Float, seconds: Double) {
         capturedBufferCount += 1
+        if capturedBufferCount == 1,
+           let stage = sessionHealth?.stage,
+           stage == .loadingModel || stage == .listening {
+            transitionSessionHealth(to: .capturing)
+        }
         peakRMS = max(peakRMS, rms)
         totalAudioSeconds += seconds
         let gate = DictationActivityGate(minimumDuration: minimumDictationDuration())
@@ -464,6 +534,9 @@ final class Recorder: ObservableObject {
 
     private func fail(_ msg: String) {
         log("ERROR: \(msg)")
+        if state == .loading || state == .starting || state == .listening || state == .finishing {
+            transitionSessionHealth(to: .failed, failure: msg)
+        }
         stopRequestedDuringStart = false
         streamTask?.cancel(); streamTask = nil
         audioLevel = 0; state = .error

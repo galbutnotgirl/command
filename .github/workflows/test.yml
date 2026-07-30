@@ -23,6 +23,9 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      - name: Critical regression contract audit
+        run: python3 ./test/test-regression-contracts.py
+
       - name: Swift unit tests (ClaudeCommandCoreTests)
         working-directory: agent
         run: swift test

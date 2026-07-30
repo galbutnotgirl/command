@@ -87,6 +87,9 @@ fi
 if [ "$ALLOW_UNNOTARIZED" = "1" ] && [[ "$TAG" != *alpha* ]]; then
   fail "--allow-unnotarized is restricted to alpha versions; notarize beta and stable releases."
 fi
+if [ "$PUBLISH" = "1" ] && [ "$SKIP_CHECKS" = "1" ]; then
+  fail "--skip-checks cannot be used with --publish; public builds require full regression gates."
+fi
 if [ "$VALIDATE_CONFIG" = "1" ]; then
   print -- "[release] configuration ok"
   exit 0
@@ -112,6 +115,7 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   command -v swift >/dev/null 2>&1 || fail "swift not found — needed for app tests (--skip-checks to override)."
   command -v node >/dev/null 2>&1 || fail "node not found — needed for background runner tests (--skip-checks to override)."
   command -v python3 >/dev/null 2>&1 || fail "python3 not found — needed for docs validation (--skip-checks to override)."
+  python3 "${DIR}/test/test-regression-contracts.py" || fail "regression contracts failed — restore tracked evidence before release."
   (cd "${DIR}/agent" && swift test) || fail "Swift tests failed — fix app/core tests before release."
   (cd "${DIR}/vendor/claude-command-capture" && node --test) || fail "Node tests failed — fix background runner tests before release."
   "${DIR}/test/test-shell.sh" || fail "shell tests failed — fix scripts before release."
@@ -126,6 +130,9 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   python3 "${DIR}/test/test-docs.py" || fail "docs validation failed — fix docs links/metadata/packaging guards before release."
   python3 "${DIR}/test/test-pages.py" || fail "Pages validation failed — fix deploy assets and install recovery before release."
   python3 "${DIR}/test/test_string_review.py" || fail "string review round-trip failed — fix export/apply safety before release."
+  if [ "$PUBLISH" = "1" ]; then
+    "${DIR}/test/test-dictation-model.sh" || fail "real Parakeet dictation regression probe failed — do not publish this build."
+  fi
 fi
 
 print -- "[release] building ${TAG}…"

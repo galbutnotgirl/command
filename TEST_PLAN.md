@@ -9,6 +9,7 @@ that cannot be proven reliably in CI.
 Run from repository root on clean `main`:
 
 ```bash
+python3 ./test/test-regression-contracts.py
 cd agent && swift test
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
@@ -50,6 +51,8 @@ With Parakeet models cached on release Mac:
 ```bash
 ./test/test-dictation-model.sh
 ```
+
+`release.sh --publish` runs this Parakeet probe automatically and refuses `--skip-checks`. Known critical failures and required proof are tracked in [`test/regression-contracts.json`](test/regression-contracts.json); `test-regression-contracts.py` fails when evidence or release wiring disappears.
 
 Before release-candidate packaging, run memory and data-race instrumentation in isolated build
 directories so sanitizer flags never contaminate normal products:
@@ -145,12 +148,15 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 - Verify focus order follows visual order, sheets return focus to their opener, and no control
   requires pointer input.
 
-## Current Evidence (2026-07-22)
+## Current Evidence (2026-07-29)
 
-- Automated local suites: 143 Swift, 58 Node, 61 shell, 15 build-transaction,
-  17 release-transaction, 25 install-state, 11 updater, 9 restart-handoff,
-  7 release-policy, 72 static syntax/configuration, and 2 string-review;
+- Automated local suites: 178 Swift, 58 Node, 85 shell, 15 build-transaction,
+  17 release-transaction, 30 install-state, 12 updater, 9 restart-handoff,
+  9 release-policy, 74 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
+- Five critical dictation regressions have stable IDs, 12 source/test evidence links, runtime
+  evidence contracts, CI enforcement, and public-release enforcement. Latest session health is
+  persisted through start, model load, listening, first buffer, finish, and terminal outcome.
 - Settings pickers and toggles have explicit hidden accessibility labels, and static analysis
   rejects future empty labels. Full keyboard and VoiceOver traversal remains a manual gate.
 - App builds assemble and sign in a same-volume staging directory. A reproduced locked-Keychain
@@ -158,7 +164,8 @@ Preserve user settings for incremental tests. Use clean install only for onboard
   files; an ad-hoc success run replaced the staged build cleanly with no leftovers.
 - Release zip and checksum are also staged and committed as a pair only after validation and
   optional notarization complete; interrupted or failed packaging restores prior assets.
-- All 143 Swift tests also pass independently under AddressSanitizer and ThreadSanitizer.
+- AddressSanitizer and ThreadSanitizer remain release-candidate gates; rerun both after recorder,
+  async stream, or shared-state changes.
 - Current accessibility-label build passes a 60-second launchd/socket runtime soak with stable
   PID, 61/61 socket pings, flat 50 open descriptors, declining RSS, no new crashes, and no newly
   emitted critical diagnostics.
@@ -166,8 +173,9 @@ Preserve user settings for incremental tests. Use clean install only for onboard
   responsive replacement socket, preserved UserDefaults sentinel, and no crash report.
 - Legacy top-level settings, action, template, context, and standalone vocabulary imports are
   detected by testable core logic; dated export filenames use a fixed POSIX calendar format.
-- Cached-model streaming probe rejects an empty synthesized fixture, then retains generated
-  speech's distinctive final words after immediate stream drain and Parakeet `finish()`.
+- Cached-model streaming probe retains generated final words after immediate release, a one-second
+  pause, and quiet 18% volume input. Public release preflight now requires this probe and rejects
+  `--skip-checks`.
 - Menu visibility logic has direct unit coverage: only enabled bindings with a nonzero keycode
   appear in menu; disabled and unbound rows remain Settings-only.
 - Microphone tap frames are deep-copied before crossing the async transcription stream, preventing

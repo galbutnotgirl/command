@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "regressions": [
+    {
+      "id": "DICT-001",
+      "risk": "Pressing dictation shortcut does not start microphone capture.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/VoiceSettingsTests.swift",
+          "contains": "testDictationTriggerHealthResetsDriftAndBlocksFinishing"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationSessionHealthTests.swift",
+          "contains": "testNonterminalSessionIdentifiesPriorInterruptedCapture"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "dictation persists latest session health"
+        }
+      ],
+      "runtimeEvidence": "dictation-health.json must advance from starting to listening or failed."
+    },
+    {
+      "id": "DICT-002",
+      "risk": "Microphone opens but delivers no audio buffers while user keeps speaking.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/VoiceSettingsTests.swift",
+          "contains": "testDictationCaptureWatchdogOnlyFlagsActiveCaptureWithoutBuffers"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "capture watchdog recovering"
+        }
+      ],
+      "runtimeEvidence": "Center warning appears after 1.5 seconds and capture resets after 6 seconds with zero buffers."
+    },
+    {
+      "id": "DICT-003",
+      "risk": "Final spoken words are dropped when shortcut is released.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/VoiceSettingsTests.swift",
+          "contains": "testDictationStopTailProtectsSoftFinalWordsAfterPause"
+        },
+        {
+          "file": "test/test-dictation-model.sh",
+          "contains": "cobalt compass"
+        },
+        {
+          "file": "test/test-dictation-model.sh",
+          "contains": "silver shoreline"
+        }
+      ],
+      "runtimeEvidence": "Stop and finish logs record tailMs, finalChars, partialChars, and selectedChars."
+    },
+    {
+      "id": "DICT-004",
+      "risk": "Parakeet final flush returns less text than latest partial transcript.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/VoiceSettingsTests.swift",
+          "contains": "testPreferredTranscriptKeepsLongerTail"
+        },
+        {
+          "file": "agent/Tools/DictationModelProbe/main.swift",
+          "contains": "preferredDictationTranscript"
+        }
+      ],
+      "runtimeEvidence": "Session health stores final character count and logs compare final, partial, and selected lengths."
+    },
+    {
+      "id": "DICT-005",
+      "risk": "Shortcut press is received but trigger state remains stuck across later attempts.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/VoiceSettingsTests.swift",
+          "contains": "testDictationCapturePhaseBlocksRestartWhileFinishing"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "dictation trigger reconciles stale state before recording"
+        }
+      ],
+      "runtimeEvidence": "Persistent logs record shortcut press/release state plus capture phase."
+    }
+  ],
+  "requiredGates": [
+    {
+      "file": ".github/workflows/test.yml",
+      "contains": "python3 ./test/test-regression-contracts.py"
+    },
+    {
+      "file": "release.sh",
+      "contains": "python3 \"${DIR}/test/test-regression-contracts.py\""
+    },
+    {
+      "file": "release.sh",
+      "contains": "\"${DIR}/test/test-dictation-model.sh\""
+    },
+    {
+      "file": "release.sh",
+      "contains": "--skip-checks cannot be used with --publish"
+    }
+  ]
+}

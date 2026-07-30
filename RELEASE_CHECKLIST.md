@@ -57,6 +57,8 @@ Optional local packaging check:
 ./test/test-release-asset.sh
 ```
 
+Review `test/regression-contracts.json` for behavior touched by this release. `./release.sh --publish --notarize` requires full gates and runs cached Parakeet final-word fixtures automatically; `--skip-checks` cannot publish.
+
 That builds `dist/Command-<version>.zip`, writes `dist/Command-<version>.zip.sha256`, and verifies `Command.app` is at the zip top level, the embedded version matches `VERSION`, the bundle identifier is `com.claudecommand`, the minimum macOS metadata is `14.0`, the packaged executable exists and is executable, codesign metadata identifies `com.claudecommand`, every shareable bundled docs asset plus the bundled README is present and byte-for-byte current with source, including `PRIVACY.md` and `SECURITY.md`, required runtime resources (`send-to-claude.sh`, Clipboard History, restart/update helpers, and background vendor core) are present, internal `STATUS.md` is absent, and AppleDouble `._*` metadata files are absent. Those checks match what updater install, restart, shortcut dispatch, Clipboard History, background actions, and About -> Documentation expect.
 
 For manual spot checks, run:
@@ -100,7 +102,7 @@ For custom notes, append them to same release command:
 
 Publishing without notarization is blocked by default. `--allow-unnotarized` exists only as an explicit emergency override for alpha versions and leaves users with Gatekeeper warning. Never use override for beta or stable release.
 
-Normal release runs also execute `swift test`, `node --test`, `./test/test-shell.sh`, `./test/test-build-transaction.sh`, `./test/test-release-transaction.sh`, `./test/test-install-state.sh`, `./test/test-uninstall.sh`, `./test/test-updater-swap.sh`, `./test/test-restart-app.sh`, `./test/test-release-policy.sh`, `./test/test-static-analysis.sh`, `python3 ./test/test-docs.py`, `python3 ./test/test-pages.py`, and `python3 ./test/test_string_review.py` before packaging. App/core failures, transactional build or package regressions, background runner failures, fresh/incremental install-state regressions, scoped uninstall regressions, updater copy/signature/rollback failures, restart handoff failures, signing/notarization policy regressions, syntax errors, broken docs, or stale bundled assets stop release. GitHub test workflow runs same suite plus `./release.sh --skip-checks` and `./test/test-release-asset.sh` as packaging smoke test on macOS. `--skip-checks` is only for local one-off packaging and CI packaging smoke tests.
+Normal release runs also execute regression-contract audit, `swift test`, `node --test`, shell and transaction suites, install/update/uninstall/restart checks, release policy, static analysis, docs/Pages/string checks, and cached Parakeet final-word fixtures before public packaging. App/core failures, missing regression evidence, background runner failures, install-state regressions, updater failures, restart failures, signing policy regressions, syntax errors, broken docs, stale assets, or dictation-tail regressions stop release. GitHub workflow runs deterministic suite plus packaging smoke. `--skip-checks` is limited to local packaging and CI smoke and cannot publish.
 
 ## After Publish
 

@@ -3710,6 +3710,11 @@ func copyCommandDiagnosticInfo(
         out += "\(check.title): \(stateLabel(check.state)) — \(check.detail)\n"
     }
     out += "Dictation model: \(modelStatusLabel(recorder.modelStatus))\n\n"
+    if let health = latestDictationSessionHealth() {
+        out += "Latest dictation session: \(health.diagnosticSummary)\n\n"
+    } else {
+        out += "Latest dictation session: (none)\n\n"
+    }
 
     let logs = [
         "\(HOME)/Library/Logs/claude-command.log",
@@ -4115,6 +4120,11 @@ struct AboutView: View {
             out += "\(check.title): \(stateLabel(check.state)) — \(check.detail)\n"
         }
         out += "Dictation model: \(modelStatusLabel(recorder.modelStatus))\n\n"
+        if let health = latestDictationSessionHealth() {
+            out += "Latest dictation session: \(health.diagnosticSummary)\n\n"
+        } else {
+            out += "Latest dictation session: (none)\n\n"
+        }
 
         let logs = [
             "\(HOME)/Library/Logs/claude-command.log",
