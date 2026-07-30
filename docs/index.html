@@ -63,7 +63,7 @@
     .button.primary { background: var(--purple); border-color: var(--purple); color: #0b0912; }
     .button:hover { filter: brightness(1.08); }
     .hero { min-height: 680px; padding: 86px 0 72px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr); gap: 72px; align-items: center; }
-    .eyebrow { margin: 0 0 16px; color: var(--purple); font: 700 12px/1 var(--mono); text-transform: uppercase; }
+    .eyebrow { margin: 0 0 16px; color: var(--purple); font: 700 14px/1.1 var(--mono); text-transform: uppercase; }
     h1 { margin: 0; max-width: 11ch; font-size: 72px; line-height: .98; font-weight: 730; letter-spacing: 0; }
     .hero-copy { margin: 26px 0 30px; max-width: 570px; color: var(--muted); font-size: 19px; }
     .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -93,7 +93,8 @@
     .feature p { margin: 0; color: var(--muted); font-size: 14px; }
     .feature:nth-child(2) .feature-icon { background: #183528; color: var(--green); } .feature:nth-child(3) .feature-icon { background: #172a43; color: var(--blue); }
     .history-layout { display: grid; grid-template-columns: minmax(0, .75fr) minmax(480px, 1.25fr); align-items: center; gap: 72px; }
-    .history-copy p { max-width: 450px; margin: 0; color: var(--muted); font-size: 18px; }
+    .history-copy .eyebrow { color: var(--green); }
+    .history-description { max-width: 450px; margin: 0; color: var(--muted); font-size: 18px; }
     .history-demo { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 24px 70px rgba(0,0,0,.32); }
     .history-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; min-height: 52px; padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
     .filter { min-width: 34px; height: 30px; padding: 0 10px; border: 1px solid #3a324c; border-radius: 6px; background: #211c2d; color: var(--muted); font: 700 10px var(--sans); }
@@ -179,7 +180,7 @@
     <section id="features">
       <div class="shell">
         <p class="eyebrow">Build your commands</p>
-        <h2>Save instructions. Use them anywhere.</h2>
+        <h2>Define instructions once. Use every time.</h2>
         <p class="section-lead">Set up what you want done once, including instructions and source context, then send it to Claude or ChatGPT from wherever you work.</p>
         <div class="feature-grid">
           <article class="feature"><div class="feature-icon">⌘</div><h3>Capture or dictate</h3><p>Use selected text, screenshots, clipboard items, typed notes, URLs, or speak with on-device voice dictation.</p></article>
@@ -194,7 +195,7 @@
         <div class="history-copy">
         <p class="eyebrow">Clipboard History</p>
         <h2>Find it again in seconds.</h2>
-        <p>Command keeps your clipboard history from the last seven days on your Mac. Search everything or filter instantly by text, images, URLs, dictation, and items sent to Claude or ChatGPT.</p>
+        <p class="history-description">Command keeps your clipboard history from the last seven days on your Mac. Search everything or filter instantly by text, images, URLs, dictation, and items sent to Claude or ChatGPT.</p>
         </div>
         <div class="history-demo" aria-label="Clipboard History preview">
           <div class="history-toolbar">
@@ -213,7 +214,7 @@
 
     <section>
       <div class="shell install-band">
-        <div><h2>Give Claude and ChatGPT a shortcut to your work.</h2><p>Download Command beta and finish setup in a few minutes.</p></div>
+        <div><h2>Skip the back-and-forth. Send it with Command.</h2><p>Download Command beta and finish setup in a few minutes.</p></div>
         <div class="hero-actions"><a class="button primary" href="https://github.com/galbutnotgirl/command/releases/latest">Download Command</a><a class="button" href="install.html">Open Install Guide</a></div>
       </div>
     </section>
