@@ -13,6 +13,7 @@ private final class ReceiverDelegate: NSObject, NSApplicationDelegate, NSTextVie
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        installMainMenu()
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 360, height: 100),
             styleMask: [.titled, .closable],
@@ -39,6 +40,20 @@ private final class ReceiverDelegate: NSObject, NSApplicationDelegate, NSTextVie
         // before posting Command-V. Readiness only means window and editor exist;
         // requiring this background helper to steal focus during launch is flaky.
         DispatchQueue.main.async { [weak self] in self?.publishReady() }
+    }
+
+    private func installMainMenu() {
+        let mainMenu = NSMenu()
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(NSMenuItem(
+            title: "Paste",
+            action: #selector(NSText.paste(_:)),
+            keyEquivalent: "v"
+        ))
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
+        NSApp.mainMenu = mainMenu
     }
 
     func textDidChange(_ notification: Notification) {
