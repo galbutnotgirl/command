@@ -134,8 +134,8 @@ if [ -d "$APP" ]; then
     }
 
     rsync -a --delete "${SRC_APP}/" "${APP}/" || restore_previous_app "copy failed"
-    /usr/bin/codesign --verify --deep --strict "$APP" >/dev/null 2>&1 \
-        || restore_previous_app "installed signature invalid"
+    installed_verify_detail="$(/usr/bin/codesign --verify --deep --strict --verbose=2 "$APP" 2>&1)" \
+        || restore_previous_app "installed signature invalid: ${installed_verify_detail:-unknown verification error}"
     if [ -d "$OLD_APP" ]; then
         rm -rf "$OLD_APP"
         print -- "[agent] removed old ClaudeCommand.app bundle"
