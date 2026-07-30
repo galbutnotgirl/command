@@ -2426,6 +2426,213 @@ func runInstalledDictationRecoveryProbe() -> String {
     )
 }
 
+private func encodeDictationWatchdogProbeResult(_ result: DictationWatchdogProbeResult) -> String {
+    guard let data = try? DictationWatchdogProbeCoding.encode(result) else {
+        return #"{"ok":false,"status":"failed","failure":"Could not encode dictation watchdog probe result."}"#
+    }
+    return String(decoding: data, as: UTF8.self)
+}
+
+private func dictationWatchdogCounts() -> (warnings: Int, resets: Int) {
+    var counts = (warnings: 0, resets: 0)
+    DispatchQueue.main.sync {
+        counts = (
+            warnings: DictationOverlay.shared.captureWatchdogWarningCount,
+            resets: DictationOverlay.shared.captureWatchdogRecoveryCount
+        )
+    }
+    return counts
+}
+
+private func makeDictationWatchdogProbeResult(
+    status: DictationWatchdogProbeStatus,
+    startedAt: Date,
+    stalledHealth: DictationSessionHealth? = nil,
+    warningCount: Int = 0,
+    resetCount: Int = 0,
+    releasedDuringStartup: Bool = false,
+    cleanup: DictationCaptureResourceSnapshot,
+    recovery: DictationLifecycleProbeResult? = nil,
+    failure: String? = nil
+) -> String {
+    encodeDictationWatchdogProbeResult(DictationWatchdogProbeResult(
+        status: status,
+        stalledSessionID: stalledHealth?.sessionID ?? 0,
+        stalledTerminalStage: stalledHealth?.stage.rawValue ?? "none",
+        warningCount: warningCount,
+        resetCount: resetCount,
+        releasedDuringStartup: releasedDuringStartup,
+        cleanup: cleanup,
+        recovery: recovery,
+        durationMilliseconds: Int(Date().timeIntervalSince(startedAt) * 1_000),
+        failure: failure
+    ))
+}
+
+func runInstalledDictationWatchdogProbe() -> String {
+    dispatchPrecondition(condition: .notOnQueue(.main))
+    let startedAt = Date()
+    let initial = dictationLifecycleRuntimeSnapshot()
+    let initialResources = dictationCaptureResourceSnapshot()
+    guard initial.modelReady else {
+        return makeDictationWatchdogProbeResult(
+            status: .modelUnavailable,
+            startedAt: startedAt,
+            cleanup: initialResources,
+            failure: "Parakeet model is not ready."
+        )
+    }
+    guard [DictationCapturePhase.idle.rawValue, DictationCapturePhase.error.rawValue]
+            .contains(initial.capturePhase),
+          !initial.overlayVisible,
+          initialResources.fullyReleased else {
+        return makeDictationWatchdogProbeResult(
+            status: .recorderBusy,
+            startedAt: startedAt,
+            cleanup: initialResources,
+            failure: "Dictation recorder has active resources before watchdog probe."
+        )
+    }
+
+    let previousHealth = latestDictationSessionHealth()
+    let countsBefore = dictationWatchdogCounts()
+    var armed = false
+    DispatchQueue.main.sync {
+        armed = recorder.armDiagnosticStartupStall()
+        if armed {
+            triggerDictation(mode: .diagnostic, keycode: nil, pollForRelease: false)
+        }
+    }
+    guard armed else {
+        return makeDictationWatchdogProbeResult(
+            status: .recorderBusy,
+            startedAt: startedAt,
+            cleanup: dictationCaptureResourceSnapshot(),
+            failure: "Could not arm diagnostic startup stall."
+        )
+    }
+
+    let startupDeadline = Date().addingTimeInterval(2)
+    var stalledHealth: DictationSessionHealth?
+    while Date() < startupDeadline {
+        if let health = latestDictationSessionHealth(),
+           health.mode == String(describing: DictMode.diagnostic),
+           health != previousHealth {
+            stalledHealth = health
+            if health.stage == .starting { break }
+        }
+        usleep(25_000)
+    }
+    guard let startingHealth = stalledHealth, startingHealth.stage == .starting else {
+        cancelInstalledDictationLifecycleProbe()
+        return makeDictationWatchdogProbeResult(
+            status: .startRejected,
+            startedAt: startedAt,
+            stalledHealth: stalledHealth,
+            cleanup: dictationCaptureResourceSnapshot(),
+            failure: "Diagnostic startup stall did not create a starting session."
+        )
+    }
+
+    var releasedDuringStartup = false
+    DispatchQueue.main.sync {
+        releasedDuringStartup = recorder.state == .starting
+            && recorder.capturedBufferCount == 0
+            && DictationOverlay.shared.isVisible
+        releaseDictationTrigger(at: Date().timeIntervalSinceReferenceDate + 1)
+    }
+
+    let watchdogDeadline = Date().addingTimeInterval(9)
+    var cleanup = dictationCaptureResourceSnapshot()
+    var countsAfter = countsBefore
+    while Date() < watchdogDeadline {
+        if let health = latestDictationSessionHealth(), health.sessionID == startingHealth.sessionID {
+            stalledHealth = health
+        }
+        cleanup = dictationCaptureResourceSnapshot()
+        countsAfter = dictationWatchdogCounts()
+        if stalledHealth?.stage == .cancelled,
+           countsAfter.warnings > countsBefore.warnings,
+           countsAfter.resets > countsBefore.resets,
+           cleanup.fullyReleased {
+            break
+        }
+        usleep(50_000)
+    }
+
+    let warningDelta = countsAfter.warnings - countsBefore.warnings
+    let resetDelta = countsAfter.resets - countsBefore.resets
+    guard stalledHealth?.stage == .cancelled,
+          warningDelta == 1,
+          resetDelta == 1 else {
+        cancelInstalledDictationLifecycleProbe()
+        return makeDictationWatchdogProbeResult(
+            status: .watchdogNotObserved,
+            startedAt: startedAt,
+            stalledHealth: stalledHealth,
+            warningCount: warningDelta,
+            resetCount: resetDelta,
+            releasedDuringStartup: releasedDuringStartup,
+            cleanup: dictationCaptureResourceSnapshot(),
+            failure: "Startup stall did not produce one warning and one automatic reset."
+        )
+    }
+    guard releasedDuringStartup, cleanup.fullyReleased,
+          cleanup.capturePhase == DictationCapturePhase.idle.rawValue else {
+        cancelInstalledDictationLifecycleProbe()
+        return makeDictationWatchdogProbeResult(
+            status: .cleanupTimedOut,
+            startedAt: startedAt,
+            stalledHealth: stalledHealth,
+            warningCount: warningDelta,
+            resetCount: resetDelta,
+            releasedDuringStartup: releasedDuringStartup,
+            cleanup: cleanup,
+            failure: "Watchdog did not fully release stalled startup resources."
+        )
+    }
+
+    let recoveryJSON = runInstalledDictationLifecycleProbe()
+    guard let recoveryData = recoveryJSON.data(using: .utf8),
+          let recovery = try? DictationLifecycleProbeCoding.decode(recoveryData) else {
+        return makeDictationWatchdogProbeResult(
+            status: .failed,
+            startedAt: startedAt,
+            stalledHealth: stalledHealth,
+            warningCount: warningDelta,
+            resetCount: resetDelta,
+            releasedDuringStartup: releasedDuringStartup,
+            cleanup: cleanup,
+            failure: "Could not decode immediate watchdog retry result."
+        )
+    }
+    guard recovery.ok else {
+        return makeDictationWatchdogProbeResult(
+            status: .recoveryFailed,
+            startedAt: startedAt,
+            stalledHealth: stalledHealth,
+            warningCount: warningDelta,
+            resetCount: resetDelta,
+            releasedDuringStartup: releasedDuringStartup,
+            cleanup: cleanup,
+            recovery: recovery,
+            failure: recovery.failure ?? "Immediate dictation retry failed after watchdog reset."
+        )
+    }
+
+    appendLog("[dictation-probe] startup watchdog passed stalledSession=\(startingHealth.sessionID) retrySession=\(recovery.sessionID)")
+    return makeDictationWatchdogProbeResult(
+        status: .passed,
+        startedAt: startedAt,
+        stalledHealth: stalledHealth,
+        warningCount: warningDelta,
+        resetCount: resetDelta,
+        releasedDuringStartup: releasedDuringStartup,
+        cleanup: cleanup,
+        recovery: recovery
+    )
+}
+
 private func encodeVoiceDispatchProbeResult(_ result: VoiceDispatchProbeResult) -> String {
     guard let data = try? VoiceDispatchProbeCoding.encode(result) else {
         return #"{"ok":false,"status":"eventCreationFailed","failure":"Could not encode voice dispatch probe result."}"#
@@ -2937,6 +3144,7 @@ func handle(_ line: String) -> String {
     case "dictationprobe": return runInstalledDictationProbe()
     case "dictationlifecycleprobe": return runInstalledDictationLifecycleProbe()
     case "dictationrecoveryprobe": return runInstalledDictationRecoveryProbe()
+    case "dictationwatchdogprobe": return runInstalledDictationWatchdogProbe()
     case "voicedispatchprobe": return runInstalledVoiceDispatchProbe()
     case "hotkeyhealthprobe":
         let requested = Int(parts.count > 1 ? parts[1] : "") ?? 20

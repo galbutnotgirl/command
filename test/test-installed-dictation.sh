@@ -223,7 +223,79 @@ if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/nul
   exit 1
 fi
 
-previous_recovery_session="$voice_session"
+watchdog_reply="$(printf 'dictationwatchdogprobe\n' | nc -U -w 50 "$SOCKET" 2>/dev/null || true)"
+if [[ -z "$watchdog_reply" ]]; then
+  print -u2 -- "FAIL: dictation startup-watchdog probe returned no response"
+  exit 1
+fi
+watchdog_summary="$(python3 -c '
+import json, sys
+result = json.loads(sys.argv[1])
+required = {
+    "ok", "status", "stalledSessionID", "stalledTerminalStage",
+    "warningCount", "resetCount", "releasedDuringStartup", "cleanup",
+    "recovery", "durationMilliseconds",
+}
+missing = required.difference(result)
+if missing:
+    raise SystemExit("missing fields: " + ", ".join(sorted(missing)))
+if result["ok"] is not True or result["status"] != "passed":
+    raise SystemExit(result.get("failure") or f"watchdog probe failed: {result}")
+if result["stalledTerminalStage"] != "cancelled":
+    raise SystemExit("startup watchdog did not cancel stalled session")
+if result["warningCount"] != 1 or result["resetCount"] != 1:
+    raise SystemExit("startup watchdog did not issue exactly one warning and one reset")
+if result["releasedDuringStartup"] is not True:
+    raise SystemExit("probe did not release shortcut during stalled startup")
+cleanup = result["cleanup"]
+if cleanup.get("capturePhase") != "idle" or cleanup.get("fullyReleased") is not True:
+    raise SystemExit("startup watchdog left capture resources active")
+for field in (
+    "overlayVisible", "captureStartupBegan", "audioEngineActive", "audioTapActive",
+    "streamTaskActive", "audioContinuationActive", "bufferFeederActive",
+    "managerActive", "silenceTimerActive",
+):
+    if cleanup.get(field) is not False:
+        raise SystemExit(f"startup watchdog cleanup field stayed active: {field}")
+retry = result["recovery"]
+if not isinstance(retry, dict) or retry.get("ok") is not True or retry.get("status") != "passed":
+    raise SystemExit("immediate production retry did not pass after startup watchdog reset")
+if retry.get("capturePhase") != "idle" or retry.get("terminalStage") not in {"completed", "empty"}:
+    raise SystemExit("startup watchdog retry did not finish cleanly")
+if not isinstance(retry.get("capturedBuffers"), int) or retry["capturedBuffers"] < 4:
+    raise SystemExit("startup watchdog retry captured fewer than four buffers")
+print("{}\t{}\t{}\t{}\t{}".format(
+    result["stalledSessionID"],
+    retry["sessionID"],
+    retry["capturedBuffers"],
+    retry["terminalStage"],
+    result["durationMilliseconds"],
+))
+' "$watchdog_reply")" || {
+  print -u2 -- "FAIL: dictation startup-watchdog probe: ${watchdog_summary:-invalid response}"
+  print -u2 -- "$watchdog_reply"
+  exit 1
+}
+watchdog_stalled_session="${watchdog_summary%%$'\t'*}"
+watchdog_remainder="${watchdog_summary#*$'\t'}"
+watchdog_retry_session="${watchdog_remainder%%$'\t'*}"
+watchdog_remainder="${watchdog_remainder#*$'\t'}"
+watchdog_retry_buffers="${watchdog_remainder%%$'\t'*}"
+watchdog_remainder="${watchdog_remainder#*$'\t'}"
+watchdog_retry_stage="${watchdog_remainder%%$'\t'*}"
+watchdog_duration="${watchdog_remainder##*$'\t'}"
+
+if (( watchdog_stalled_session <= voice_session || watchdog_retry_session <= watchdog_stalled_session )); then
+  print -u2 -- "FAIL: startup-watchdog session IDs did not increase"
+  exit 1
+fi
+current_pid="$(job_pid)"
+if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/null; then
+  print -u2 -- "FAIL: Command restarted during startup-watchdog probe"
+  exit 1
+fi
+
+previous_recovery_session="$watchdog_retry_session"
 recovery_total_duration=0
 for (( recovery_run = 1; recovery_run <= RECOVERY_RUNS; recovery_run++ )); do
 recovery_reply="$(printf 'dictationrecoveryprobe\n' | nc -U -w 50 "$SOCKET" 2>/dev/null || true)"
@@ -325,5 +397,6 @@ print -- "  probes: ${RUNS}/${RUNS}"
 print -- "  audio buffers: ${total_buffers} total"
 print -- "  production lifecycle: session ${lifecycle_session}, ${lifecycle_buffers} buffers, ${lifecycle_updates} updates, ${lifecycle_stage}, ${lifecycle_duration} ms"
 print -- "  event-tap voice dispatch: 2/2 tagged events, session ${voice_session}, ${voice_buffers} buffers, ${voice_stage}, ${voice_duration} ms, ${voice_aliases} configured aliases"
+print -- "  startup watchdog: session ${watchdog_stalled_session} warned/reset after release; retry ${watchdog_retry_session} captured ${watchdog_retry_buffers} and finished ${watchdog_retry_stage} in ${watchdog_duration} ms"
 print -- "  failure recovery: ${RECOVERY_RUNS}/${RECOVERY_RUNS} cycles, final cleanup ${recovery_cleanup_phase}, ${recovery_total_duration} ms total"
 print -- "  dictation history: unchanged"

@@ -131,6 +131,7 @@ final class Recorder: ObservableObject {
     private var sessionHealth: DictationSessionHealth?
     private var captureProbeInProgress = false
     private var diagnosticFailureAfterBufferCount: Int?
+    private var diagnosticStartupStallArmed = false
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
 
@@ -192,6 +193,12 @@ final class Recorder: ObservableObject {
     func armDiagnosticCaptureFailure(afterBuffers: Int = 2) -> Bool {
         guard state.canStart, !captureResourcesAreActive, !captureProbeInProgress else { return false }
         diagnosticFailureAfterBufferCount = max(1, afterBuffers)
+        return true
+    }
+
+    func armDiagnosticStartupStall() -> Bool {
+        guard state.canStart, !captureResourcesAreActive, !captureProbeInProgress else { return false }
+        diagnosticStartupStallArmed = true
         return true
     }
 
@@ -355,6 +362,12 @@ final class Recorder: ObservableObject {
         state = .starting
         log("▶ session \(mySession) start mode=\(mode)")
         appendLog("[dictation] start session=\(mySession) mode=\(mode) deviceAuthorization=\(AVCaptureDevice.authorizationStatus(for: .audio).rawValue)")
+
+        if mode == .diagnostic, diagnosticStartupStallArmed {
+            diagnosticStartupStallArmed = false
+            appendLog("[dictation-probe] startup stall injected session=\(mySession)")
+            return true
+        }
 
         if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized {
             beginStreaming(session: mySession)
@@ -680,6 +693,7 @@ final class Recorder: ObservableObject {
         sessionID += 1
         stopRequestedDuringStart = false
         diagnosticFailureAfterBufferCount = nil
+        diagnosticStartupStallArmed = false
         releaseCaptureResources(finishManager: true)
         lastTranscript = ""; liveTranscript = ""
         totalAudioSeconds = 0; activeSpeechSeconds = 0
@@ -749,6 +763,7 @@ final class Recorder: ObservableObject {
         }
         stopRequestedDuringStart = false
         diagnosticFailureAfterBufferCount = nil
+        diagnosticStartupStallArmed = false
         releaseCaptureResources(finishManager: true)
         state = .error
         onFailure?(msg, currentMode)

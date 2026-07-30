@@ -110,6 +110,8 @@ final class DictationOverlay: NSObject {
     private var captureWarningVisible = false
     private var isFinishing: Bool = false
     private let watchdogPolicy = DEFAULT_DICTATION_CAPTURE_WATCHDOG_POLICY
+    private(set) var captureWatchdogWarningCount = 0
+    private(set) var captureWatchdogRecoveryCount = 0
 
     private override init() {
         super.init()
@@ -176,11 +178,6 @@ final class DictationOverlay: NSObject {
         levelTask = Task { @MainActor [weak self] in
             while let s = self, s.isVisible, !Task.isCancelled {
                 menuBar.updateAudioLevel(recorder.audioLevel)
-                if s.captureWarningVisible && recorder.capturedBufferCount > 0 {
-                    s.captureWarningVisible = false
-                    DictationCaptureWarningPanel.shared.hide()
-                    appendLog("[dictation] capture recovered after warning buffers=\(recorder.capturedBufferCount)")
-                }
                 try? await Task.sleep(nanoseconds: 66_000_000)   // ~15 fps
             }
         }
@@ -190,40 +187,50 @@ final class DictationOverlay: NSObject {
         captureWatchdogTask?.cancel()
         captureWatchdogTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            while self.isVisible, !self.isFinishing, !recorder.captureStartupBegan, !Task.isCancelled {
+            var watchdog = DictationCaptureWatchdog(policy: watchdogPolicy)
+            while self.isVisible, !Task.isCancelled {
+                let buffers = recorder.capturedBufferCount
+                switch watchdog.observe(
+                    nowNanoseconds: DispatchTime.now().uptimeNanoseconds,
+                    phase: recorder.state,
+                    capturedBufferCount: buffers
+                ) {
+                case .none:
+                    break
+                case .warn:
+                    self.captureWatchdogWarningCount += 1
+                    self.captureWarningVisible = true
+                    appendLog("[dictation] capture warning phase=\(recorder.state.rawValue) buffers=\(buffers) startup=\(recorder.captureStartupBegan)")
+                    if recorder.currentMode != .diagnostic {
+                        let detail = buffers == 0
+                            ? "Stop speaking. Command has not received audio yet and is trying to recover."
+                            : "Stop speaking. Command stopped receiving audio and is trying to recover."
+                        DictationCaptureWarningPanel.shared.show(
+                            title: "Microphone isn't recording",
+                            detail: detail
+                        )
+                    }
+                case .recovered:
+                    self.captureWarningVisible = false
+                    DictationCaptureWarningPanel.shared.hide()
+                    appendLog("[dictation] capture recovered after warning buffers=\(buffers)")
+                case .resetCapture:
+                    self.captureWatchdogRecoveryCount += 1
+                    appendLog("[dictation] capture watchdog recovering phase=\(recorder.state.rawValue) buffers=\(buffers) startup=\(recorder.captureStartupBegan) finishing=\(self.isFinishing)")
+                    let diagnostic = recorder.currentMode == .diagnostic
+                    recorder.cancel()
+                    self.hide()
+                    if !diagnostic {
+                        DictationCaptureWarningPanel.shared.show(
+                            title: "Dictation stopped",
+                            detail: "Audio capture stalled. Release your shortcut and try again; Command reset the microphone.",
+                            autoDismissAfter: 8
+                        )
+                    }
+                    return
+                }
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
-            guard !Task.isCancelled, self.isVisible, !self.isFinishing else { return }
-            try? await Task.sleep(nanoseconds: watchdogPolicy.warningDelayNanoseconds)
-            guard !Task.isCancelled, self.isVisible, !self.isFinishing,
-                  watchdogPolicy.shouldWarn(
-                    phase: recorder.state,
-                    capturedBufferCount: recorder.capturedBufferCount
-                  ) else { return }
-
-            self.captureWarningVisible = true
-            appendLog("[dictation] capture warning phase=\(recorder.state.rawValue) buffers=\(recorder.capturedBufferCount)")
-            DictationCaptureWarningPanel.shared.show(
-                title: "Microphone isn't recording",
-                detail: "Stop speaking. Command has not received audio yet and is trying to recover."
-            )
-
-            let remaining = watchdogPolicy.recoveryDelayNanoseconds - watchdogPolicy.warningDelayNanoseconds
-            try? await Task.sleep(nanoseconds: remaining)
-            guard !Task.isCancelled, self.isVisible, !self.isFinishing,
-                  watchdogPolicy.shouldRecover(
-                    phase: recorder.state,
-                    capturedBufferCount: recorder.capturedBufferCount
-                  ) else { return }
-
-            appendLog("[dictation] capture watchdog recovering phase=\(recorder.state.rawValue) buffers=\(recorder.capturedBufferCount)")
-            recorder.cancel()
-            self.hide()
-            DictationCaptureWarningPanel.shared.show(
-                title: "Dictation stopped",
-                detail: "No audio was captured. Release your shortcut and try again; Command reset the microphone.",
-                autoDismissAfter: 8
-            )
         }
     }
 

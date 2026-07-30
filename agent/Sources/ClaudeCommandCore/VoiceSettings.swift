@@ -79,6 +79,65 @@ public struct DictationCaptureWatchdogPolicy: Equatable, Sendable {
 
 public let DEFAULT_DICTATION_CAPTURE_WATCHDOG_POLICY = DictationCaptureWatchdogPolicy()
 
+public enum DictationCaptureWatchdogAction: Equatable, Sendable {
+    case none
+    case warn
+    case recovered
+    case resetCapture
+}
+
+public struct DictationCaptureWatchdog: Equatable, Sendable {
+    public let policy: DictationCaptureWatchdogPolicy
+
+    private var lastBufferCount = 0
+    private var lastProgressAtNanoseconds: UInt64?
+    private var warningIssued = false
+
+    public init(policy: DictationCaptureWatchdogPolicy = DEFAULT_DICTATION_CAPTURE_WATCHDOG_POLICY) {
+        self.policy = policy
+    }
+
+    public mutating func observe(
+        nowNanoseconds: UInt64,
+        phase: DictationCapturePhase,
+        capturedBufferCount: Int
+    ) -> DictationCaptureWatchdogAction {
+        guard phase == .starting || phase == .listening else {
+            reset(capturedBufferCount: capturedBufferCount)
+            return .none
+        }
+
+        let bufferCount = max(0, capturedBufferCount)
+        if lastProgressAtNanoseconds == nil || bufferCount != lastBufferCount {
+            let recovered = warningIssued && bufferCount > lastBufferCount
+            lastBufferCount = bufferCount
+            lastProgressAtNanoseconds = nowNanoseconds
+            warningIssued = false
+            return recovered ? .recovered : .none
+        }
+
+        let lastProgress = lastProgressAtNanoseconds ?? nowNanoseconds
+        let elapsed = nowNanoseconds >= lastProgress ? nowNanoseconds - lastProgress : 0
+        if elapsed >= policy.recoveryDelayNanoseconds {
+            return .resetCapture
+        }
+        if elapsed >= policy.warningDelayNanoseconds, !warningIssued {
+            warningIssued = true
+            return .warn
+        }
+        return .none
+    }
+
+    public mutating func reset(
+        nowNanoseconds: UInt64? = nil,
+        capturedBufferCount: Int = 0
+    ) {
+        lastBufferCount = max(0, capturedBufferCount)
+        lastProgressAtNanoseconds = nowNanoseconds
+        warningIssued = false
+    }
+}
+
 public func preferredDictationTranscript(final: String, lastPartial: String) -> String {
     final.count >= lastPartial.count ? final : lastPartial
 }
