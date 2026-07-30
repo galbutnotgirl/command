@@ -70,7 +70,8 @@ func postKey(_ k: CGKeyCode, cmd: Bool, opt: Bool = false, shift: Bool = false) 
 }
 
 func postKey(_ k: CGKeyCode, cmd: Bool, opt: Bool = false, shift: Bool = false, to bundle: String) -> Bool {
-    guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first else {
+    let apps = NSRunningApplication.runningApplications(withBundleIdentifier: bundle)
+    guard let app = apps.first(where: \.isActive) ?? apps.first else {
         return false
     }
     let s = CGEventSource(stateID: .combinedSessionState)
