@@ -2,6 +2,12 @@ import XCTest
 @testable import ClaudeCommandCore
 
 final class VoiceSettingsTests: XCTestCase {
+    func testDictationToggleControlsBuiltInAndCustomVoiceRegistration() {
+        XCTAssertTrue(voiceShortcutRegistrationAllowed(isVoice: false, dictationEnabled: false))
+        XCTAssertFalse(voiceShortcutRegistrationAllowed(isVoice: true, dictationEnabled: false))
+        XCTAssertTrue(voiceShortcutRegistrationAllowed(isVoice: true, dictationEnabled: true))
+    }
+
     func testVoiceSettingsKeysStayStableForPersistenceAndImportExport() {
         XCTAssertEqual(VoiceSettingsKeys.fillerRemoval, "proc_filler")
         XCTAssertEqual(VoiceSettingsKeys.smartFormatting, "proc_format")

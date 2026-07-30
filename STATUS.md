@@ -1383,6 +1383,11 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   press and release through every registered Carbon voice shortcut and verifies real handler receives
   both while suppressing user actions. Existing tagged Fn probe still proves event tap, live microphone
   capture, release, and cleanup.
+- **Every event-tap voice alias gets installed route proof**: hotkey qualification now resolves and
+  swallows synthetic press and release for each configured Fn, modifier-only, modifier-chord, and
+  media-key voice alias inside installed event-tap callback. Exact expected and validated route counts
+  must match before live microphone probe runs. Disabling Dictation now also skips custom voice
+  shortcut registration, matching built-in voice behavior and preventing Carbon bypass.
 
 ## Next up (roughly in the order they came up)
 

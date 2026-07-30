@@ -15,6 +15,7 @@ final class HotkeyHealthProbeTests: XCTestCase {
             expectedCarbonVoiceAliases: 2,
             expectedEventTapVoiceAliases: 1,
             validatedCarbonVoiceAliases: 2,
+            validatedEventTapVoiceAliases: 1,
             requestedEvents: 100,
             deliveredEvents: 100,
             durationMilliseconds: 25
@@ -23,6 +24,7 @@ final class HotkeyHealthProbeTests: XCTestCase {
         XCTAssertTrue(result.ok)
         XCTAssertEqual(result.expectedCarbonRegistrations, result.actualCarbonRegistrations)
         XCTAssertEqual(result.validatedCarbonVoiceAliases, result.expectedCarbonVoiceAliases)
+        XCTAssertEqual(result.validatedEventTapVoiceAliases, result.expectedEventTapVoiceAliases)
         XCTAssertEqual(result.requestedEvents, result.deliveredEvents)
     }
 
@@ -51,9 +53,10 @@ final class HotkeyHealthProbeTests: XCTestCase {
             expectedCarbonVoiceAliases: -6,
             expectedEventTapVoiceAliases: -7,
             validatedCarbonVoiceAliases: -8,
-            requestedEvents: -9,
-            deliveredEvents: -10,
-            durationMilliseconds: -11
+            validatedEventTapVoiceAliases: -9,
+            requestedEvents: -10,
+            deliveredEvents: -11,
+            durationMilliseconds: -12
         )
 
         XCTAssertEqual(result.expectedCarbonRegistrations, 0)
@@ -64,6 +67,7 @@ final class HotkeyHealthProbeTests: XCTestCase {
         XCTAssertEqual(result.expectedCarbonVoiceAliases, 0)
         XCTAssertEqual(result.expectedEventTapVoiceAliases, 0)
         XCTAssertEqual(result.validatedCarbonVoiceAliases, 0)
+        XCTAssertEqual(result.validatedEventTapVoiceAliases, 0)
         XCTAssertEqual(result.requestedEvents, 0)
         XCTAssertEqual(result.deliveredEvents, 0)
         XCTAssertEqual(result.durationMilliseconds, 0)

@@ -29,6 +29,13 @@ public enum VoiceSettingsDefaults {
     public static let dictationAssistant2Provider = "codex"
 }
 
+public func voiceShortcutRegistrationAllowed(
+    isVoice: Bool,
+    dictationEnabled: Bool
+) -> Bool {
+    !isVoice || dictationEnabled
+}
+
 public enum DictationCapturePhase: String, Equatable, Sendable {
     case idle, loading, starting, listening, finishing, error
 

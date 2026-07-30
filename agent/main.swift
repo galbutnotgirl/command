@@ -1213,7 +1213,10 @@ func loadHotkeys() -> [HK] {
     let dictationEnabled = UserDefaults.standard.bool(forKey: VoiceSettingsKeys.dictationEnabled)
     return loadBindings().flatMap { binding -> [HK] in
         guard binding.enabled,
-              !isBuiltInVoiceAction(binding.action) || dictationEnabled,
+              voiceShortcutRegistrationAllowed(
+                  isVoice: isBuiltInVoiceAction(binding.action),
+                  dictationEnabled: dictationEnabled
+              ),
               binding.action != "cliphistory" || clipboardEnabled else { return [] }
         return binding.shortcuts.map { HK(action: binding.action, keycode: $0.keycode, mods: $0.mods) }
     }
@@ -1222,6 +1225,7 @@ func loadHotkeys() -> [HK] {
 var hotkeyActions: [UInt32: String] = [:]
 var hotkeyKeycodes: [UInt32: UInt32] = [:]   // hotkey ID → Carbon keycode for PTT polling
 var hotkeyShortcuts: [UInt32: HotkeyShortcut] = [:]
+var eventTapVoiceShortcuts: [HotkeyShortcut] = []
 var hotkeyRefs: [EventHotKeyRef?] = []
 
 private final class CarbonVoiceRouteProbeBox: @unchecked Sendable {
@@ -1369,7 +1373,9 @@ func registerFromConfig() {
     hotkeyActions.removeAll()
     hotkeyKeycodes.removeAll()
     hotkeyShortcuts.removeAll()
+    eventTapVoiceShortcuts.removeAll()
     _hotkeyRegistrationSnapshot = HotkeyRegistrationSnapshot()
+    let dictationEnabled = UserDefaults.standard.bool(forKey: VoiceSettingsKeys.dictationEnabled)
     let sig = OSType(0x434D4447) // 'CMDG'
     for (i, hk) in loadHotkeys().enumerated() {
         guard hk.keycode != 0 else { continue }  // keycode 0 = 'A' key; 0 means unbound
@@ -1379,7 +1385,10 @@ func registerFromConfig() {
         // like external-keyboard Home, which is more reliable for Kinesis keyboards.
         if eventTapOwnsShortcut(keycode: hk.keycode, isVoice: isVoice) {
             _hotkeyRegistrationSnapshot.expectedEventTapAliases += 1
-            if isVoice { _hotkeyRegistrationSnapshot.expectedEventTapVoiceAliases += 1 }
+            if isVoice {
+                _hotkeyRegistrationSnapshot.expectedEventTapVoiceAliases += 1
+                eventTapVoiceShortcuts.append(HotkeyShortcut(keycode: hk.keycode, mods: hk.mods))
+            }
             continue
         }
         _hotkeyRegistrationSnapshot.expectedCarbonRegistrations += 1
@@ -1410,13 +1419,18 @@ func registerFromConfig() {
     var triggerSlot = 0
     for ca in loadCustomActions() where ca.enabled {
         for trig in ca.triggers where trig.enabled {
+            guard voiceShortcutRegistrationAllowed(isVoice: trig.kind == .voice,
+                                                     dictationEnabled: dictationEnabled) else { continue }
             for shortcut in trig.shortcuts {
                 guard shortcut.keycode != 0 else { continue }
                 let isVoice = trig.kind == .voice
                 if isVoice { _hotkeyRegistrationSnapshot.configuredVoiceAliases += 1 }
                 if eventTapOwnsShortcut(keycode: shortcut.keycode, isVoice: isVoice) {
                     _hotkeyRegistrationSnapshot.expectedEventTapAliases += 1
-                    if isVoice { _hotkeyRegistrationSnapshot.expectedEventTapVoiceAliases += 1 }
+                    if isVoice {
+                        _hotkeyRegistrationSnapshot.expectedEventTapVoiceAliases += 1
+                        eventTapVoiceShortcuts.append(shortcut)
+                    }
                     continue
                 }
                 _hotkeyRegistrationSnapshot.expectedCarbonRegistrations += 1
@@ -1479,7 +1493,10 @@ private var _mediaHookRetryScheduled = false
 private var _mediaHookWaitingForAccessibility = false
 private let HOTKEY_EVENT_PROBE_PREFIX: Int64 = 0x434D000000000000 // "CM" + random payload
 private let VOICE_DISPATCH_EVENT_PROBE_PREFIX: Int64 = 0x434E000000000000 // "CN" + random payload
+private let VOICE_ROUTE_EVENT_PROBE_PREFIX: Int64 = 0x434F000000000000 // "CO" + random payload
 private let HOTKEY_EVENT_PROBE_MASK = Int64(bitPattern: 0xFFFF000000000000)
+private let VOICE_ROUTE_PRESS_KIND: UInt32 = 1
+private let VOICE_ROUTE_RELEASE_KIND: UInt32 = 2
 
 private final class HotkeyEventProbeBox: @unchecked Sendable {
     private let lock = NSLock()
@@ -1509,28 +1526,78 @@ private let _hotkeyEventProbeLock = NSLock()
 private var _activeHotkeyEventProbe: HotkeyEventProbeBox?
 private var _activeVoiceDispatchEventProbe: HotkeyEventProbeBox?
 
+private final class EventTapVoiceRouteProbeBox: @unchecked Sendable {
+    let marker: Int64
+    let shortcut: HotkeyShortcut
+    private let lock = NSLock()
+    private var deliveredKinds: Set<UInt32> = []
+    let delivery = DispatchSemaphore(value: 0)
+
+    init(marker: Int64, shortcut: HotkeyShortcut) {
+        self.marker = marker
+        self.shortcut = shortcut
+    }
+
+    func record(kind: UInt32) {
+        lock.lock()
+        let inserted = deliveredKinds.insert(kind).inserted
+        lock.unlock()
+        if inserted { delivery.signal() }
+    }
+
+    func deliveredCount() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return deliveredKinds.count
+    }
+}
+
+private var _activeEventTapVoiceRouteProbe: EventTapVoiceRouteProbeBox?
+
 private enum HotkeyProbeDisposition: Equatable {
     case none
     case swallow
     case voiceDispatch
+    case voiceRoute
 }
 
 private func hotkeyProbeDisposition(_ event: CGEvent) -> HotkeyProbeDisposition {
     let marker = event.getIntegerValueField(.eventSourceUserData)
     let prefix = marker & HOTKEY_EVENT_PROBE_MASK
-    guard prefix == HOTKEY_EVENT_PROBE_PREFIX || prefix == VOICE_DISPATCH_EVENT_PROBE_PREFIX else {
+    guard prefix == HOTKEY_EVENT_PROBE_PREFIX ||
+          prefix == VOICE_DISPATCH_EVENT_PROBE_PREFIX ||
+          prefix == VOICE_ROUTE_EVENT_PROBE_PREFIX else {
         return .none
     }
     _hotkeyEventProbeLock.lock()
-    let probe = prefix == HOTKEY_EVENT_PROBE_PREFIX
-        ? _activeHotkeyEventProbe
-        : _activeVoiceDispatchEventProbe
+    if prefix == VOICE_ROUTE_EVENT_PROBE_PREFIX {
+        let routeProbe = _activeEventTapVoiceRouteProbe
+        _hotkeyEventProbeLock.unlock()
+        return routeProbe?.marker == marker ? .voiceRoute : .swallow
+    }
+    let probe = prefix == HOTKEY_EVENT_PROBE_PREFIX ? _activeHotkeyEventProbe : _activeVoiceDispatchEventProbe
     _hotkeyEventProbeLock.unlock()
     if probe?.marker == marker { probe?.recordDelivery() }
     if prefix == VOICE_DISPATCH_EVENT_PROBE_PREFIX, probe?.marker == marker {
         return .voiceDispatch
     }
     return .swallow
+}
+
+private func recordEventTapVoiceRoute(
+    keycode: UInt32,
+    mods: UInt32,
+    kind: UInt32
+) -> Bool {
+    _hotkeyEventProbeLock.lock()
+    let probe = _activeEventTapVoiceRouteProbe
+    _hotkeyEventProbeLock.unlock()
+    guard probe?.shortcut == HotkeyShortcut(keycode: keycode, mods: mods),
+          voiceHotkeyTarget(keycode: keycode, mods: mods) != nil else {
+        return false
+    }
+    probe?.record(kind: kind)
+    return true
 }
 // NX_SYSDEFINED events fire repeating isDown=true while held (no autorepeat flag).
 // Track held state per keyCode to swallow repeats without breaking double-tap detection.
@@ -1823,6 +1890,7 @@ func startMediaKeyHook() {
             let probeDisposition = hotkeyProbeDisposition(event)
             if probeDisposition == .swallow { return nil }
             let isVoiceDispatchProbe = probeDisposition == .voiceDispatch
+            let isVoiceRouteProbe = probeDisposition == .voiceRoute
             let passthrough = Unmanaged.passUnretained(event)
 
             // --- media-key mode (NX_SYSDEFINED subtype 8) ---
@@ -1831,6 +1899,16 @@ func startMediaKeyHook() {
                 let keyCode = Int((ns.data1 & 0xFFFF0000) >> 16)
                 let isDown  = ((Int(ns.data1) & 0xFF00) >> 8) == 0xA
                 let cm = physicalModifierMask(fallback: ns.modifierFlags)
+                if isVoiceRouteProbe {
+                    if let carbon = MEDIA_TO_CARBON[keyCode] {
+                        _ = recordEventTapVoiceRoute(
+                            keycode: carbon,
+                            mods: cm,
+                            kind: isDown ? VOICE_ROUTE_PRESS_KIND : VOICE_ROUTE_RELEASE_KIND
+                        )
+                    }
+                    return nil
+                }
                 if !isDown {
                     _nxHeld[keyCode] = false   // key released — next isDown is a genuine press
                     if MEDIA_TO_CARBON[keyCode] == 63, _voiceHeldKeycodes.contains(63) {
@@ -1878,6 +1956,14 @@ func startMediaKeyHook() {
                 let isDown = isModifierKeyDown(keycode: kc, flags: event.flags)
                 let activeMods = physicalModifierMask(cgFlags: event.flags)
                 let cm = chordModifiers(activeModifiers: activeMods, primaryKeycode: kc)
+                if isVoiceRouteProbe {
+                    _ = recordEventTapVoiceRoute(
+                        keycode: kc,
+                        mods: cm,
+                        kind: isDown ? VOICE_ROUTE_PRESS_KIND : VOICE_ROUTE_RELEASE_KIND
+                    )
+                    return nil
+                }
                 if isDown {
                     let voiceTarget: VoiceHotkeyTarget? = isVoiceDispatchProbe
                         ? .builtIn(.diagnostic)
@@ -1909,6 +1995,17 @@ func startMediaKeyHook() {
             if type == .keyDown || type == .keyUp {
                 let kc = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
                 let f  = event.flags
+                let cm = physicalModifierMask(cgFlags: f)
+
+                if isVoiceRouteProbe {
+                    guard eventTapOwnsVoiceHotkey(keycode: kc) else { return nil }
+                    _ = recordEventTapVoiceRoute(
+                        keycode: kc,
+                        mods: cm,
+                        kind: type == .keyDown ? VOICE_ROUTE_PRESS_KIND : VOICE_ROUTE_RELEASE_KIND
+                    )
+                    return nil
+                }
 
                 // Capture copy/cut source at keypress time — fires BEFORE app writes to
                 // clipboard, so Clipboard History sees the correct bundle.
@@ -1930,7 +2027,6 @@ func startMediaKeyHook() {
                     return passthrough  // never swallow Cmd+C/X
                 }
 
-                let cm = physicalModifierMask(cgFlags: f)
                 if type == .keyDown, MEDIA_KEYCODES.contains(kc), settingsModel.recordingAction != nil {
                     DispatchQueue.main.async {
                         settingsModel.recordHardwareHotkey(keycode: kc, mods: cm)
@@ -3064,7 +3160,9 @@ func runInstalledVoiceDispatchProbe() -> String {
     let marker = VOICE_DISPATCH_EVENT_PROBE_PREFIX | Int64.random(in: 1..<(1 << 48))
     let probe = HotkeyEventProbeBox(marker: marker)
     _hotkeyEventProbeLock.lock()
-    guard _activeHotkeyEventProbe == nil, _activeVoiceDispatchEventProbe == nil else {
+    guard _activeHotkeyEventProbe == nil,
+          _activeVoiceDispatchEventProbe == nil,
+          _activeEventTapVoiceRouteProbe == nil else {
         _hotkeyEventProbeLock.unlock()
         return makeVoiceDispatchProbeResult(
             status: .probeBusy,
@@ -3280,6 +3378,7 @@ private func makeHotkeyHealthProbeResult(
     requestedEvents: Int,
     deliveredEvents: Int = 0,
     validatedCarbonVoiceAliases: Int = 0,
+    validatedEventTapVoiceAliases: Int = 0,
     failure: String? = nil
 ) -> String {
     let registrations = runtime.registrations
@@ -3296,6 +3395,7 @@ private func makeHotkeyHealthProbeResult(
         expectedCarbonVoiceAliases: registrations.expectedCarbonVoiceAliases,
         expectedEventTapVoiceAliases: registrations.expectedEventTapVoiceAliases,
         validatedCarbonVoiceAliases: validatedCarbonVoiceAliases,
+        validatedEventTapVoiceAliases: validatedEventTapVoiceAliases,
         requestedEvents: requestedEvents,
         deliveredEvents: deliveredEvents,
         durationMilliseconds: Int(Date().timeIntervalSince(startedAt) * 1_000),
@@ -3310,6 +3410,43 @@ private func eventFlags(carbonModifiers: UInt32) -> CGEventFlags {
     if carbonModifiers & 2048 != 0 { flags.insert(.maskAlternate) }
     if carbonModifiers & 4096 != 0 { flags.insert(.maskControl) }
     return flags
+}
+
+private func primaryModifierFlag(keycode: UInt32) -> CGEventFlags {
+    switch keycode {
+    case 54, 55: return .maskCommand
+    case 56, 60: return .maskShift
+    case 58, 61: return .maskAlternate
+    case 59, 62: return .maskControl
+    case 63: return .maskSecondaryFn
+    default: return []
+    }
+}
+
+private func makeEventTapVoiceRouteEvent(
+    source: CGEventSource,
+    shortcut: HotkeyShortcut,
+    marker: Int64,
+    keyDown: Bool
+) -> CGEvent? {
+    let event: CGEvent?
+    if MODIFIER_ONLY_KEYCODES.contains(shortcut.keycode) {
+        event = CGEvent(source: source)
+        event?.type = .flagsChanged
+        event?.setIntegerValueField(.keyboardEventKeycode, value: Int64(shortcut.keycode))
+        var flags = eventFlags(carbonModifiers: shortcut.mods)
+        if keyDown { flags.formUnion(primaryModifierFlag(keycode: shortcut.keycode)) }
+        event?.flags = flags
+    } else {
+        event = CGEvent(
+            keyboardEventSource: source,
+            virtualKey: CGKeyCode(shortcut.keycode),
+            keyDown: keyDown
+        )
+        event?.flags = eventFlags(carbonModifiers: shortcut.mods)
+    }
+    event?.setIntegerValueField(.eventSourceUserData, value: marker)
+    return event
 }
 
 private func runInstalledCarbonVoiceRouteProbe(
@@ -3377,6 +3514,75 @@ private func runInstalledCarbonVoiceRouteProbe(
     return (validated, nil)
 }
 
+private func runInstalledEventTapVoiceRouteProbe(
+    expectedAliases: Int
+) -> (validated: Int, failure: String?) {
+    var routes: [HotkeyShortcut] = []
+    DispatchQueue.main.sync {
+        routes = eventTapVoiceShortcuts.sorted { $0.human < $1.human }
+    }
+    guard routes.count == expectedAliases else {
+        return (0, "Registered event-tap voice alias inventory is incomplete.")
+    }
+    guard !routes.isEmpty else { return (0, nil) }
+    guard let source = CGEventSource(stateID: .combinedSessionState) else {
+        return (0, "Could not create event-tap voice route event source.")
+    }
+
+    var validated = 0
+    for shortcut in routes {
+        let marker = VOICE_ROUTE_EVENT_PROBE_PREFIX | Int64.random(in: 1..<(1 << 48))
+        let probe = EventTapVoiceRouteProbeBox(marker: marker, shortcut: shortcut)
+        _hotkeyEventProbeLock.lock()
+        guard _activeHotkeyEventProbe == nil,
+              _activeVoiceDispatchEventProbe == nil,
+              _activeEventTapVoiceRouteProbe == nil else {
+            _hotkeyEventProbeLock.unlock()
+            return (validated, "Another event-tap voice route probe is active.")
+        }
+        _activeEventTapVoiceRouteProbe = probe
+        _hotkeyEventProbeLock.unlock()
+
+        guard let down = makeEventTapVoiceRouteEvent(
+            source: source,
+            shortcut: shortcut,
+            marker: marker,
+            keyDown: true
+        ), let up = makeEventTapVoiceRouteEvent(
+            source: source,
+            shortcut: shortcut,
+            marker: marker,
+            keyDown: false
+        ) else {
+            _hotkeyEventProbeLock.lock()
+            _activeEventTapVoiceRouteProbe = nil
+            _hotkeyEventProbeLock.unlock()
+            return (validated, "Could not create event-tap voice alias events.")
+        }
+
+        down.post(tap: .cghidEventTap)
+        var deadline = DispatchTime.now() + .seconds(3)
+        while probe.deliveredCount() < 1, probe.delivery.wait(timeout: deadline) == .success {}
+        if probe.deliveredCount() == 1 {
+            up.post(tap: .cghidEventTap)
+            deadline = DispatchTime.now() + .seconds(3)
+            while probe.deliveredCount() < 2, probe.delivery.wait(timeout: deadline) == .success {}
+        }
+
+        _hotkeyEventProbeLock.lock()
+        if _activeEventTapVoiceRouteProbe === probe { _activeEventTapVoiceRouteProbe = nil }
+        _hotkeyEventProbeLock.unlock()
+        guard probe.deliveredCount() == 2 else {
+            return (
+                validated,
+                "Event-tap voice alias \(shortcut.human) did not route press and release."
+            )
+        }
+        validated += 1
+    }
+    return (validated, nil)
+}
+
 func runInstalledHotkeyHealthProbe(requestedEvents: Int) -> String {
     let startedAt = Date()
     let eventCount = min(max(requestedEvents, 2), 200)
@@ -3433,11 +3639,28 @@ func runInstalledHotkeyHealthProbe(requestedEvents: Int) -> String {
             failure: carbonVoiceRoutes.failure ?? "Carbon voice alias route count mismatch."
         )
     }
+    let eventTapVoiceRoutes = runInstalledEventTapVoiceRouteProbe(
+        expectedAliases: registrations.expectedEventTapVoiceAliases
+    )
+    guard eventTapVoiceRoutes.failure == nil,
+          eventTapVoiceRoutes.validated == registrations.expectedEventTapVoiceAliases else {
+        return makeHotkeyHealthProbeResult(
+            status: .eventDeliveryTimedOut,
+            startedAt: startedAt,
+            runtime: installedHotkeyRuntimeSnapshot(),
+            requestedEvents: eventCount,
+            validatedCarbonVoiceAliases: carbonVoiceRoutes.validated,
+            validatedEventTapVoiceAliases: eventTapVoiceRoutes.validated,
+            failure: eventTapVoiceRoutes.failure ?? "Event-tap voice alias route count mismatch."
+        )
+    }
 
     let marker = HOTKEY_EVENT_PROBE_PREFIX | Int64.random(in: 1..<(1 << 48))
     let probe = HotkeyEventProbeBox(marker: marker)
     _hotkeyEventProbeLock.lock()
-    guard _activeHotkeyEventProbe == nil, _activeVoiceDispatchEventProbe == nil else {
+    guard _activeHotkeyEventProbe == nil,
+          _activeVoiceDispatchEventProbe == nil,
+          _activeEventTapVoiceRouteProbe == nil else {
         _hotkeyEventProbeLock.unlock()
         return makeHotkeyHealthProbeResult(
             status: .probeBusy,
@@ -3445,6 +3668,7 @@ func runInstalledHotkeyHealthProbe(requestedEvents: Int) -> String {
             runtime: initial,
             requestedEvents: eventCount,
             validatedCarbonVoiceAliases: carbonVoiceRoutes.validated,
+            validatedEventTapVoiceAliases: eventTapVoiceRoutes.validated,
             failure: "Another hotkey health probe is active."
         )
     }
@@ -3463,6 +3687,7 @@ func runInstalledHotkeyHealthProbe(requestedEvents: Int) -> String {
             runtime: initial,
             requestedEvents: eventCount,
             validatedCarbonVoiceAliases: carbonVoiceRoutes.validated,
+            validatedEventTapVoiceAliases: eventTapVoiceRoutes.validated,
             failure: "Could not create event source."
         )
     }
@@ -3479,6 +3704,7 @@ func runInstalledHotkeyHealthProbe(requestedEvents: Int) -> String {
                 requestedEvents: eventCount,
                 deliveredEvents: probe.count(),
                 validatedCarbonVoiceAliases: carbonVoiceRoutes.validated,
+                validatedEventTapVoiceAliases: eventTapVoiceRoutes.validated,
                 failure: "Could not create tagged keyboard event."
             )
         }
@@ -3498,6 +3724,7 @@ func runInstalledHotkeyHealthProbe(requestedEvents: Int) -> String {
             requestedEvents: eventCount,
             deliveredEvents: delivered,
             validatedCarbonVoiceAliases: carbonVoiceRoutes.validated,
+            validatedEventTapVoiceAliases: eventTapVoiceRoutes.validated,
             failure: "Tagged HID events did not reach installed event-tap callback."
         )
     }
@@ -3508,7 +3735,8 @@ func runInstalledHotkeyHealthProbe(requestedEvents: Int) -> String {
         runtime: final,
         requestedEvents: eventCount,
         deliveredEvents: delivered,
-        validatedCarbonVoiceAliases: carbonVoiceRoutes.validated
+        validatedCarbonVoiceAliases: carbonVoiceRoutes.validated,
+        validatedEventTapVoiceAliases: eventTapVoiceRoutes.validated
     )
 }
 

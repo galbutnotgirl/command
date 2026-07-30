@@ -322,6 +322,14 @@ assert_contains "installed hotkey runtime probes registered Carbon voice aliases
   'runInstalledCarbonVoiceRouteProbe('
 assert_contains "Carbon voice route probe is intercepted inside real handler" "$AGENT_SOURCE" \
   'routeProbe?.record(kind: kind)'
+assert_contains "installed hotkey check validates every event-tap voice route" "$(cat "${DIR}/test/test-installed-hotkeys.sh")" \
+  'result["validatedEventTapVoiceAliases"] != result["expectedEventTapVoiceAliases"]'
+assert_contains "installed hotkey runtime probes every event-tap voice alias" "$AGENT_SOURCE" \
+  'runInstalledEventTapVoiceRouteProbe('
+assert_contains "event-tap callback resolves configured voice route before recording proof" "$AGENT_SOURCE" \
+  'recordEventTapVoiceRoute('
+assert_contains "disabling dictation prevents custom voice shortcut registration" "$AGENT_SOURCE" \
+  'guard voiceShortcutRegistrationAllowed(isVoice: trig.kind == .voice,'
 assert_contains "installed restart can identify socket-owning process" "$AGENT_SOURCE" \
   'case "runtimepid": return "\(ProcessInfo.processInfo.processIdentifier)"'
 assert_contains "installed restart requires socket PID to match launchd" "$(cat "${DIR}/test/test-installed-restart.sh")" \

@@ -65,8 +65,9 @@ UserDefaults, and no crash report. Runtime test then performs a 15-second idle s
 socket pings and verifies stable PID, bounded open descriptors, no new crash reports, and no new
 fatal or SwiftUI cycle diagnostics. Override duration with `COMMAND_SOAK_SECONDS` for longer runs.
 Installed hotkey test compares configured Carbon aliases with successful registrations, requires
-trusted enabled event tap, injects press/release through every registered Carbon voice alias while
-handler suppresses user actions, and injects tagged HID events that callback swallows before dispatch.
+trusted enabled event tap, injects press/release through every registered Carbon and event-tap voice
+alias while handlers suppress user actions, and injects tagged HID events that callback swallows
+before dispatch.
 Running before and after restart catches dead input hooks without firing user actions.
 Installed dictation test performs repeated raw microphone-buffer captures and one production
 lifecycle through trigger, model stream, recorder, stop-tail drain, ASR finish, and clean terminal
@@ -205,7 +206,7 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-30)
 
-- Automated local suites: 231 Swift, 58 Node, 200 shell, 17 build-transaction,
+- Automated local suites: 232 Swift, 58 Node, 204 shell, 17 build-transaction,
   17 release-transaction, 41 install-state, 14 updater, 9 restart-handoff,
   9 installed-state preservation, 9 release-policy, 94 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
