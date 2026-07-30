@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # FluidAudio (a dependency of the executable target, pulled in when
       # resolving the package graph even though tests don't touch it) needs
@@ -25,6 +27,17 @@ jobs:
 
       - name: Critical regression contract audit
         run: python3 ./test/test-regression-contracts.py
+
+      - name: Runtime change regression impact
+        env:
+          REGRESSION_IMPACT_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          ./test/test-regression-impact.sh
+          if [[ -z "$REGRESSION_IMPACT_BASE" || "$REGRESSION_IMPACT_BASE" == "0000000000000000000000000000000000000000" ]]; then
+            python3 ./test/test-regression-impact.py --audit-only
+          else
+            python3 ./test/test-regression-impact.py --base "$REGRESSION_IMPACT_BASE"
+          fi
 
       - name: Swift unit tests (ClaudeCommandCoreTests)
         working-directory: agent

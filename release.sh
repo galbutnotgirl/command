@@ -115,6 +115,15 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   command -v swift >/dev/null 2>&1 || fail "swift not found — needed for app tests (--skip-checks to override)."
   command -v node >/dev/null 2>&1 || fail "node not found — needed for background runner tests (--skip-checks to override)."
   command -v python3 >/dev/null 2>&1 || fail "python3 not found — needed for docs validation (--skip-checks to override)."
+  "${DIR}/test/test-regression-impact.sh" || fail "regression impact self-tests failed — fix change-to-test enforcement before release."
+  LATEST_VERSION_TAG="$(git -C "$DIR" tag --list 'v*' --sort=-version:refname | head -1)"
+  if [ -n "$LATEST_VERSION_TAG" ]; then
+    python3 "${DIR}/test/test-regression-impact.py" --base "$LATEST_VERSION_TAG" \
+      || fail "runtime changes since ${LATEST_VERSION_TAG} lack matching regression evidence."
+  else
+    python3 "${DIR}/test/test-regression-impact.py" --audit-only \
+      || fail "runtime regression ownership audit failed."
+  fi
   python3 "${DIR}/test/test-regression-contracts.py" || fail "regression contracts failed — restore tracked evidence before release."
   (cd "${DIR}/agent" && swift test) || fail "Swift tests failed — fix app/core tests before release."
   (cd "${DIR}/vendor/claude-command-capture" && node --test) || fail "Node tests failed — fix background runner tests before release."

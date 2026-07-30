@@ -30,6 +30,8 @@ Behavior changes must add or update automated evidence before merge.
 Paste relevant results:
 
 ```bash
+./test/test-regression-impact.sh
+python3 ./test/test-regression-impact.py --base HEAD^
 python3 ./test/test-regression-contracts.py
 cd agent && swift test
 cd ../vendor/claude-command-capture && node --test

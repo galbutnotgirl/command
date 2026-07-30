@@ -91,8 +91,16 @@
       "contains": "python3 ./test/test-regression-contracts.py"
     },
     {
+      "file": ".github/workflows/test.yml",
+      "contains": "python3 ./test/test-regression-impact.py --base"
+    },
+    {
       "file": "release.sh",
       "contains": "python3 \"${DIR}/test/test-regression-contracts.py\""
+    },
+    {
+      "file": "release.sh",
+      "contains": "\"${DIR}/test/test-regression-impact.sh\""
     },
     {
       "file": "release.sh",

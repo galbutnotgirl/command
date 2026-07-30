@@ -9,6 +9,8 @@ that cannot be proven reliably in CI.
 Run from repository root on clean `main`:
 
 ```bash
+./test/test-regression-impact.sh
+python3 ./test/test-regression-impact.py --base HEAD^
 python3 ./test/test-regression-contracts.py
 cd agent && swift test
 cd ../vendor/claude-command-capture && node --test
@@ -53,6 +55,8 @@ With Parakeet models cached on release Mac:
 ```
 
 `release.sh --publish` runs this Parakeet probe automatically and refuses `--skip-checks`. Known critical failures and required proof are tracked in [`test/regression-contracts.json`](test/regression-contracts.json); `test-regression-contracts.py` fails when evidence or release wiring disappears.
+
+[`test/regression-impact.json`](test/regression-impact.json) owns every runtime Swift, JavaScript, and shell file. CI compares full pushed or pull-request range and fails when touched runtime areas lack matching test changes. Release preflight repeats impact audit across every change since latest version tag.
 
 Before release-candidate packaging, run memory and data-race instrumentation in isolated build
 directories so sanitizer flags never contaminate normal products:
