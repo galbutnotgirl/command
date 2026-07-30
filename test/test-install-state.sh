@@ -26,7 +26,11 @@ assert_true() {
 
 assert_contains() {
   local name="$1" needle="$2" haystack="$3"
-  if [[ "$haystack" == *"$needle"* ]]; then ok "$name"; else not_ok "$name" "missing '$needle'"; fi
+  if [[ "$haystack" == *"$needle"* ]]; then
+    ok "$name"
+  else
+    not_ok "$name" "missing '$needle'; output: ${haystack}"
+  fi
 }
 
 assert_not_contains() {

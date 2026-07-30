@@ -82,12 +82,27 @@ rm -f "$SOCKET"
 # Restore bundle contents without replacing top-level .app directory. Keeping
 # that directory at same path/inode helps macOS retain TCC grants while ditto
 # preserves bundle metadata consistently across supported macOS versions.
+RESTORE_FAILURE_DETAIL=""
 restore_backup_bundle() {
-    [ -n "$BACKUP_APP" ] && [ -d "$BACKUP_APP" ] || return 1
-    mkdir -p "$APP" || return 1
-    /usr/bin/find "$APP" -mindepth 1 -maxdepth 1 -exec rm -rf {} + || return 1
-    /usr/bin/ditto "$BACKUP_APP" "$APP" || return 1
-    /usr/bin/codesign --verify --deep --strict "$APP" >/dev/null 2>&1
+    RESTORE_FAILURE_DETAIL=""
+    [ -n "$BACKUP_APP" ] && [ -d "$BACKUP_APP" ] || {
+        RESTORE_FAILURE_DETAIL="backup app is missing"
+        return 1
+    }
+    mkdir -p "$APP" || {
+        RESTORE_FAILURE_DETAIL="app directory could not be created"
+        return 1
+    }
+    /usr/bin/find "$APP" -mindepth 1 -maxdepth 1 -exec rm -rf {} + || {
+        RESTORE_FAILURE_DETAIL="updated bundle contents could not be cleared"
+        return 1
+    }
+    /usr/bin/ditto "$BACKUP_APP" "$APP" || {
+        RESTORE_FAILURE_DETAIL="backup bundle copy failed"
+        return 1
+    }
+    RESTORE_FAILURE_DETAIL="$(/usr/bin/codesign --verify --deep --strict --verbose=2 "$APP" 2>&1)" || return 1
+    RESTORE_FAILURE_DETAIL=""
 }
 
 if [ -d "$APP" ]; then
@@ -105,7 +120,7 @@ if [ -d "$APP" ]; then
     restore_previous_app() {
         local reason="$1"
         if ! restore_backup_bundle; then
-            print -- "[agent] ERROR update failed (${reason}) and previous app could not be restored"
+            print -- "[agent] ERROR update failed (${reason}) and previous app could not be restored: ${RESTORE_FAILURE_DETAIL:-unknown verification error}"
             rm -rf "$BACKUP_ROOT"
             exit 1
         fi
@@ -196,7 +211,7 @@ restore_after_readiness_failure() {
             print -u2 -- "[agent] ERROR ${reason}; previous app restored"
             exit 1
         fi
-        print -u2 -- "[agent] ERROR ${reason}; previous app could not be restored"
+        print -u2 -- "[agent] ERROR ${reason}; previous app could not be restored: ${RESTORE_FAILURE_DETAIL:-unknown verification error}"
         exit 1
     fi
     rm -rf "$APP"
