@@ -259,6 +259,7 @@ DICTATION_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/Dictation
 DICTATION_PROBE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationCaptureProbe.swift")"
 DICTATION_LIFECYCLE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationLifecycleProbe.swift")"
 DICTATION_RECOVERY_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationRecoveryProbe.swift")"
+VOICE_DISPATCH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/VoiceDispatchProbe.swift")"
 HOTKEY_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/HotkeyHealthProbe.swift")"
 DICTATION_TRIGGER_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationTriggerCoordinator.swift")"
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
@@ -287,12 +288,17 @@ assert_contains "installed production lifecycle probe is reachable through owner
   'case "dictationlifecycleprobe": return runInstalledDictationLifecycleProbe()'
 assert_contains "installed dictation recovery probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "dictationrecoveryprobe": return runInstalledDictationRecoveryProbe()'
+assert_contains "installed voice dispatch probe is reachable through owner-only socket" "$AGENT_SOURCE" \
+  'case "voicedispatchprobe": return runInstalledVoiceDispatchProbe()'
 assert_contains "installed hotkey health probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "hotkeyhealthprobe":'
 assert_contains "installed hotkey health probe posts tagged HID events" "$AGENT_SOURCE" \
   'event.post(tap: .cghidEventTap)'
-assert_contains "event tap acknowledges health events before dispatch" "$AGENT_SOURCE" \
-  'if acknowledgeHotkeyProbeEvent(event) { return nil }'
+assert_before "event tap classifies probe events before dispatch" "$AGENT_SOURCE" \
+  'let probeDisposition = hotkeyProbeDisposition(event)' \
+  'let passthrough = Unmanaged.passUnretained(event)'
+assert_contains "health probe events remain swallowed before dispatch" "$AGENT_SOURCE" \
+  'if probeDisposition == .swallow { return nil }'
 assert_contains "event tap passthrough does not retain borrowed events" "$AGENT_SOURCE" \
   'let passthrough = Unmanaged.passUnretained(event)'
 assert_not_contains "event tap no longer leaks retained passthrough events" 'Unmanaged.passRetained(event)' "$AGENT_SOURCE"
@@ -322,14 +328,28 @@ assert_contains "production lifecycle probe returns typed metrics" "$DICTATION_L
   'public struct DictationLifecycleProbeResult'
 assert_contains "dictation recovery probe returns typed cleanup metrics" "$DICTATION_RECOVERY_SOURCE" \
   'public struct DictationCaptureResourceSnapshot'
+assert_contains "voice dispatch probe returns typed event and capture metrics" "$VOICE_DISPATCH_SOURCE" \
+  'public struct VoiceDispatchProbeResult'
 assert_contains "installed dictation check executes production lifecycle" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   "printf 'dictationlifecycleprobe\\n'"
 assert_contains "installed dictation check injects live capture failure" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   "printf 'dictationrecoveryprobe\\n'"
+assert_contains "installed dictation check drives tagged voice events through action routing" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  "printf 'voicedispatchprobe\\n'"
+assert_contains "tagged voice events continue through installed event callback" "$AGENT_SOURCE" \
+  'let isVoiceDispatchProbe = probeDisposition == .voiceDispatch'
+assert_contains "voice dispatch probe overrides only tagged event target" "$AGENT_SOURCE" \
+  'VoiceHotkeyTarget.builtIn(.diagnostic)'
+assert_contains "installed dictation check repeats failure recovery" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  'RECOVERY_RUNS="${COMMAND_DICTATION_RECOVERY_RUNS:-3}"'
+assert_contains "installed recovery cycles require increasing sessions" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  'recovery_retry_session <= recovery_injected_session'
 assert_contains "dictation failure synchronously releases capture resources" "$RECORDER_SOURCE" \
   'releaseCaptureResources(finishManager: true)'
 assert_contains "successful dictation releases startup ownership" "$RECORDER_SOURCE" \
   'self.captureStartupBegan = false'
+assert_contains "failed installed probes reset dictation trigger state" "$AGENT_SOURCE" \
+  'resetDictTrigMode()'
 assert_contains "dictation recovery waits for asynchronous resource teardown" "$RECORDER_SOURCE" \
   'activeManagerCleanupTaskCount'
 assert_contains "dictation recovery injects only after live buffers" "$RECORDER_SOURCE" \

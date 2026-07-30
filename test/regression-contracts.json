@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
   "coverageRequirements": {
-    "app-runtime": 4,
-    "dictation": 9,
-    "shortcuts-and-input": 2,
+    "app-runtime": 5,
+    "dictation": 10,
+    "shortcuts-and-input": 3,
     "assistant-routing": 1,
     "clipboard-history": 1,
     "settings-and-import": 1,
@@ -186,6 +186,34 @@
         }
       ],
       "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must inject failure after two live microphone buffers, prove every capture resource is released with stable PID and unchanged history, then immediately complete a second production dictation lifecycle without restarting Command."
+    },
+    {
+      "id": "DICT-010",
+      "areas": [
+        "dictation",
+        "shortcuts-and-input",
+        "app-runtime"
+      ],
+      "risk": "Hotkey registration and direct recorder probes pass independently while installed event-tap voice key-down or key-up never reaches dictation trigger state, or repeated capture failures accumulate stale state until later dictation stops working.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/VoiceDispatchProbeTests.swift",
+          "contains": "testPassedProbeRequiresExplicitPassedStatus"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationTriggerCoordinatorTests.swift",
+          "contains": "testEverySixStepTriggerSequencePreservesActionStateInvariants"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "installed dictation check drives tagged voice events through action routing"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "installed dictation check repeats failure recovery"
+        }
+      ],
+      "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must send swallowed tagged Fn key-down and key-up through the installed HID event-tap action path, capture four or more live buffers, reach clean terminal health with every resource released, then pass three consecutive injected-failure and immediate-retry cycles with increasing session IDs, stable PID, and unchanged history."
     },
     {
       "id": "APP-001",

@@ -56,8 +56,9 @@ trusted enabled event tap, and injects tagged HID events that callback swallows 
 Running before and after restart catches dead input hooks without firing user actions.
 Installed dictation test performs repeated raw microphone-buffer captures and one production
 lifecycle through trigger, model stream, recorder, stop-tail drain, ASR finish, and clean terminal
-health without changing history. It then injects failure after live microphone buffers, verifies
-every capture resource is released, and requires an immediate production retry without restarting.
+health without changing history. Tagged Fn down/up next travels through installed HID event tap and
+voice action routing into diagnostic capture. It then runs three failure/retry cycles after live
+microphone buffers, verifying every capture resource releases and session IDs keep increasing.
 Run on both sides of restart to catch process-local state bugs.
 Physical-key dispatch remains a manual check; cached final-word fixtures cover spoken-tail output.
 
@@ -167,11 +168,11 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-30)
 
-- Automated local suites: 206 Swift, 58 Node, 142 shell, 15 build-transaction,
+- Automated local suites: 210 Swift, 58 Node, 151 shell, 15 build-transaction,
   17 release-transaction, 30 install-state, 12 updater, 9 restart-handoff,
   9 release-policy, 87 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
-- Nine critical dictation regressions have stable IDs, 25 source/test evidence links, runtime
+- Ten critical dictation regressions have stable IDs, 29 source/test evidence links, runtime
   evidence contracts, CI enforcement, and public-release enforcement. Latest session health is
   persisted through start, model load, listening, first buffer, finish, and terminal outcome.
 - Settings pickers and toggles have explicit hidden accessibility labels, and static analysis
@@ -181,8 +182,9 @@ Preserve user settings for incremental tests. Use clean install only for onboard
   files; an ad-hoc success run replaced the staged build cleanly with no leftovers.
 - Release zip and checksum are also staged and committed as a pair only after validation and
   optional notarization complete; interrupted or failed packaging restores prior assets.
-- AddressSanitizer and ThreadSanitizer passed all 206 Swift tests after latest recorder and async
-  stream changes; rerun both after future recorder, async stream, or shared-state changes.
+- AddressSanitizer and ThreadSanitizer passed all 210 Swift tests after latest recorder, async
+  stream, and event-dispatch changes; rerun both after future recorder, async stream, or
+  shared-state changes.
 - Current accessibility-label build passes a 60-second launchd/socket runtime soak with stable
   PID, 61/61 socket pings, flat 50 open descriptors, declining RSS, no new crashes, and no newly
   emitted critical diagnostics.

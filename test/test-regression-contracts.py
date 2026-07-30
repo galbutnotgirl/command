@@ -13,9 +13,9 @@ ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "test" / "regression-contracts.json"
 IMPACT_CONFIG = ROOT / "test" / "regression-impact.json"
 BASELINE_AREA_MINIMUMS = {
-    "app-runtime": 4,
-    "dictation": 9,
-    "shortcuts-and-input": 2,
+    "app-runtime": 5,
+    "dictation": 10,
+    "shortcuts-and-input": 3,
     "assistant-routing": 1,
     "clipboard-history": 1,
     "settings-and-import": 1,

@@ -34,6 +34,7 @@
         "agent/Sources/ClaudeCommandCore/DictationCaptureProbe.swift",
         "agent/Sources/ClaudeCommandCore/DictationLifecycleProbe.swift",
         "agent/Sources/ClaudeCommandCore/DictationRecoveryProbe.swift",
+        "agent/Sources/ClaudeCommandCore/VoiceDispatchProbe.swift",
         "agent/Sources/ClaudeCommandCore/DictationSessionHealth.swift",
         "agent/Sources/ClaudeCommandCore/DictationTriggerCoordinator.swift",
         "agent/Tools/DictationModelProbe/main.swift"
@@ -43,6 +44,7 @@
         "agent/Tests/ClaudeCommandCoreTests/DictationCaptureProbeTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/DictationLifecycleProbeTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/DictationRecoveryProbeTests.swift",
+        "agent/Tests/ClaudeCommandCoreTests/VoiceDispatchProbeTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/DictationSessionHealthTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/DictationTriggerCoordinatorTests.swift",
         "test/test-dictation-model.sh",
@@ -57,11 +59,13 @@
         "agent/SettingsWindow.swift",
         "agent/Sources/ClaudeCommandCore/ActionModels.swift",
         "agent/Sources/ClaudeCommandCore/HotkeyHealthProbe.swift",
+        "agent/Sources/ClaudeCommandCore/VoiceDispatchProbe.swift",
         "agent/Sources/ClaudeCommandCore/KeyCodes.swift"
       ],
       "evidence": [
         "agent/Tests/ClaudeCommandCoreTests/ActionModelsTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/HotkeyHealthProbeTests.swift",
+        "agent/Tests/ClaudeCommandCoreTests/VoiceDispatchProbeTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/KeyCodesTests.swift",
         "test/test-shell.sh",
         "test/regression-contracts.json"

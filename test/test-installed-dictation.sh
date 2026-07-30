@@ -3,12 +3,17 @@ emulate -L zsh
 set -euo pipefail
 
 RUNS="${COMMAND_DICTATION_PROBE_RUNS:-3}"
+RECOVERY_RUNS="${COMMAND_DICTATION_RECOVERY_RUNS:-3}"
 SOCKET="${HOME}/.claude/state/command-agent.sock"
 HISTORY="${HOME}/Library/Application Support/DictationLab/history.json"
 DOMAIN="gui/$(id -u)/com.claudecommand"
 
 if [[ ! "$RUNS" == <-> ]] || (( RUNS < 1 || RUNS > 20 )); then
   print -u2 -- "COMMAND_DICTATION_PROBE_RUNS must be between 1 and 20"
+  exit 2
+fi
+if [[ ! "$RECOVERY_RUNS" == <-> ]] || (( RECOVERY_RUNS < 1 || RECOVERY_RUNS > 10 )); then
+  print -u2 -- "COMMAND_DICTATION_RECOVERY_RUNS must be between 1 and 10"
   exit 2
 fi
 
@@ -162,9 +167,68 @@ if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/nul
   exit 1
 fi
 
+voice_reply="$(printf 'voicedispatchprobe\n' | nc -U -w 40 "$SOCKET" 2>/dev/null || true)"
+if [[ -z "$voice_reply" ]]; then
+  print -u2 -- "FAIL: event-tap voice dispatch probe returned no response"
+  exit 1
+fi
+voice_summary="$(python3 -c '
+import json, sys
+result = json.loads(sys.argv[1])
+required = {
+    "ok", "status", "eventTapDeliveredEvents", "configuredVoiceAliases",
+    "sessionID", "capturedBuffers", "terminalStage", "capturePhase",
+    "resourcesReleased", "durationMilliseconds",
+}
+missing = required.difference(result)
+if missing:
+    raise SystemExit("missing fields: " + ", ".join(sorted(missing)))
+if result["ok"] is not True or result["status"] != "passed":
+    raise SystemExit(result.get("failure") or f"voice dispatch probe failed: {result}")
+if result["eventTapDeliveredEvents"] != 2:
+    raise SystemExit("event-tap voice dispatch did not deliver key-down and key-up")
+if result["capturePhase"] != "idle" or result["terminalStage"] not in {"completed", "empty"}:
+    raise SystemExit("event-tap voice dispatch did not finish cleanly")
+if result["resourcesReleased"] is not True:
+    raise SystemExit("event-tap voice dispatch left capture resources active")
+for field in ("sessionID", "capturedBuffers", "configuredVoiceAliases", "durationMilliseconds"):
+    if not isinstance(result[field], int) or result[field] < 0:
+        raise SystemExit(f"invalid voice dispatch metric: {field}")
+if result["sessionID"] < 1 or result["capturedBuffers"] < 4 or result["durationMilliseconds"] < 1:
+    raise SystemExit("event-tap voice dispatch lacks live capture evidence")
+print("{}\t{}\t{}\t{}\t{}".format(
+    result["sessionID"],
+    result["capturedBuffers"],
+    result["terminalStage"],
+    result["configuredVoiceAliases"],
+    result["durationMilliseconds"],
+))
+' "$voice_reply")" || {
+  print -u2 -- "FAIL: event-tap voice dispatch probe: ${voice_summary:-invalid response}"
+  print -u2 -- "$voice_reply"
+  exit 1
+}
+voice_session="${voice_summary%%$'\t'*}"
+voice_remainder="${voice_summary#*$'\t'}"
+voice_buffers="${voice_remainder%%$'\t'*}"
+voice_remainder="${voice_remainder#*$'\t'}"
+voice_stage="${voice_remainder%%$'\t'*}"
+voice_remainder="${voice_remainder#*$'\t'}"
+voice_aliases="${voice_remainder%%$'\t'*}"
+voice_duration="${voice_remainder##*$'\t'}"
+
+current_pid="$(job_pid)"
+if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/null; then
+  print -u2 -- "FAIL: Command restarted during event-tap voice dispatch probe"
+  exit 1
+fi
+
+previous_recovery_session="$voice_session"
+recovery_total_duration=0
+for (( recovery_run = 1; recovery_run <= RECOVERY_RUNS; recovery_run++ )); do
 recovery_reply="$(printf 'dictationrecoveryprobe\n' | nc -U -w 50 "$SOCKET" 2>/dev/null || true)"
 if [[ -z "$recovery_reply" ]]; then
-  print -u2 -- "FAIL: dictation failure-recovery probe returned no response"
+  print -u2 -- "FAIL: dictation failure-recovery probe ${recovery_run}/${RECOVERY_RUNS} returned no response"
   exit 1
 fi
 recovery_summary="$(python3 -c '
@@ -181,6 +245,9 @@ if result["ok"] is not True or result["status"] != "passed":
     raise SystemExit(result.get("failure") or f"recovery probe failed: {result}")
 if result["injectedTerminalStage"] != "failed" or result["injectedBuffers"] < 2:
     raise SystemExit("probe did not inject failure after live microphone buffers")
+for field in ("injectedSessionID", "injectedBuffers", "durationMilliseconds"):
+    if not isinstance(result[field], int) or result[field] < 0:
+        raise SystemExit(f"invalid failure-recovery metric: {field}")
 cleanup = result["cleanup"]
 cleanup_fields = {
     "capturePhase", "overlayVisible", "captureStartupBegan", "audioEngineActive", "audioTapActive",
@@ -198,6 +265,8 @@ for field in cleanup_fields - {"capturePhase", "fullyReleased"}:
 retry = result["recovery"]
 if not isinstance(retry, dict) or retry.get("ok") is not True or retry.get("status") != "passed":
     raise SystemExit("immediate production retry did not pass")
+if not isinstance(retry.get("sessionID"), int) or retry["sessionID"] < 1:
+    raise SystemExit("immediate production retry has invalid session ID")
 if retry.get("capturePhase") != "idle" or retry.get("terminalStage") not in {"completed", "empty"}:
     raise SystemExit("immediate production retry did not finish cleanly")
 if not isinstance(retry.get("capturedBuffers"), int) or retry["capturedBuffers"] < 4:
@@ -212,7 +281,7 @@ print("{}\t{}\t{}\t{}\t{}\t{}\t{}".format(
     result["durationMilliseconds"],
 ))
 ' "$recovery_reply")" || {
-  print -u2 -- "FAIL: dictation failure-recovery probe: ${recovery_summary:-invalid response}"
+  print -u2 -- "FAIL: dictation failure-recovery probe ${recovery_run}/${RECOVERY_RUNS}: ${recovery_summary:-invalid response}"
   print -u2 -- "$recovery_reply"
   exit 1
 }
@@ -229,11 +298,20 @@ recovery_remainder="${recovery_remainder#*$'\t'}"
 recovery_retry_stage="${recovery_remainder%%$'\t'*}"
 recovery_duration="${recovery_remainder##*$'\t'}"
 
-current_pid="$(job_pid)"
-if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/null; then
-  print -u2 -- "FAIL: Command restarted during dictation failure-recovery probe"
+if (( recovery_injected_session <= previous_recovery_session || recovery_retry_session <= recovery_injected_session )); then
+  print -u2 -- "FAIL: dictation recovery session IDs did not increase on cycle ${recovery_run}/${RECOVERY_RUNS}"
   exit 1
 fi
+previous_recovery_session="$recovery_retry_session"
+(( recovery_total_duration += recovery_duration ))
+print -- "  recovery ${recovery_run}/${RECOVERY_RUNS}: session ${recovery_injected_session} failed after ${recovery_injected_buffers} buffers; retry ${recovery_retry_session} captured ${recovery_retry_buffers} and finished ${recovery_retry_stage}"
+
+current_pid="$(job_pid)"
+if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/null; then
+  print -u2 -- "FAIL: Command restarted during dictation failure-recovery cycle ${recovery_run}/${RECOVERY_RUNS}"
+  exit 1
+fi
+done
 
 history_after="$(history_digest)"
 if [[ "$history_after" != "$history_before" ]]; then
@@ -246,5 +324,6 @@ print -- "  pid: ${initial_pid} (stable)"
 print -- "  probes: ${RUNS}/${RUNS}"
 print -- "  audio buffers: ${total_buffers} total"
 print -- "  production lifecycle: session ${lifecycle_session}, ${lifecycle_buffers} buffers, ${lifecycle_updates} updates, ${lifecycle_stage}, ${lifecycle_duration} ms"
-print -- "  failure recovery: session ${recovery_injected_session} failed after ${recovery_injected_buffers} buffers, cleanup ${recovery_cleanup_phase}; retry session ${recovery_retry_session} captured ${recovery_retry_buffers} buffers and finished ${recovery_retry_stage}, ${recovery_duration} ms"
+print -- "  event-tap voice dispatch: 2/2 tagged events, session ${voice_session}, ${voice_buffers} buffers, ${voice_stage}, ${voice_duration} ms, ${voice_aliases} configured aliases"
+print -- "  failure recovery: ${RECOVERY_RUNS}/${RECOVERY_RUNS} cycles, final cleanup ${recovery_cleanup_phase}, ${recovery_total_duration} ms total"
 print -- "  dictation history: unchanged"

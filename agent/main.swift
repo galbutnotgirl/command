@@ -1436,6 +1436,7 @@ private var _mediaEventTap: CFMachPort?
 private var _mediaHookRetryScheduled = false
 private var _mediaHookWaitingForAccessibility = false
 private let HOTKEY_EVENT_PROBE_PREFIX: Int64 = 0x434D000000000000 // "CM" + random payload
+private let VOICE_DISPATCH_EVENT_PROBE_PREFIX: Int64 = 0x434E000000000000 // "CN" + random payload
 private let HOTKEY_EVENT_PROBE_MASK = Int64(bitPattern: 0xFFFF000000000000)
 
 private final class HotkeyEventProbeBox: @unchecked Sendable {
@@ -1464,15 +1465,30 @@ private final class HotkeyEventProbeBox: @unchecked Sendable {
 
 private let _hotkeyEventProbeLock = NSLock()
 private var _activeHotkeyEventProbe: HotkeyEventProbeBox?
+private var _activeVoiceDispatchEventProbe: HotkeyEventProbeBox?
 
-private func acknowledgeHotkeyProbeEvent(_ event: CGEvent) -> Bool {
+private enum HotkeyProbeDisposition: Equatable {
+    case none
+    case swallow
+    case voiceDispatch
+}
+
+private func hotkeyProbeDisposition(_ event: CGEvent) -> HotkeyProbeDisposition {
     let marker = event.getIntegerValueField(.eventSourceUserData)
-    guard marker & HOTKEY_EVENT_PROBE_MASK == HOTKEY_EVENT_PROBE_PREFIX else { return false }
+    let prefix = marker & HOTKEY_EVENT_PROBE_MASK
+    guard prefix == HOTKEY_EVENT_PROBE_PREFIX || prefix == VOICE_DISPATCH_EVENT_PROBE_PREFIX else {
+        return .none
+    }
     _hotkeyEventProbeLock.lock()
-    let probe = _activeHotkeyEventProbe
+    let probe = prefix == HOTKEY_EVENT_PROBE_PREFIX
+        ? _activeHotkeyEventProbe
+        : _activeVoiceDispatchEventProbe
     _hotkeyEventProbeLock.unlock()
     if probe?.marker == marker { probe?.recordDelivery() }
-    return true
+    if prefix == VOICE_DISPATCH_EVENT_PROBE_PREFIX, probe?.marker == marker {
+        return .voiceDispatch
+    }
+    return .swallow
 }
 // NX_SYSDEFINED events fire repeating isDown=true while held (no autorepeat flag).
 // Track held state per keyCode to swallow repeats without breaking double-tap detection.
@@ -1749,7 +1765,9 @@ func startMediaKeyHook() {
     guard let tap = CGEvent.tapCreate(tap: .cghidEventTap, place: .headInsertEventTap,
                                       options: .defaultTap, eventsOfInterest: eventMask,
         callback: { _, type, event, _ -> Unmanaged<CGEvent>? in
-            if acknowledgeHotkeyProbeEvent(event) { return nil }
+            let probeDisposition = hotkeyProbeDisposition(event)
+            if probeDisposition == .swallow { return nil }
+            let isVoiceDispatchProbe = probeDisposition == .voiceDispatch
             let passthrough = Unmanaged.passUnretained(event)
 
             // --- media-key mode (NX_SYSDEFINED subtype 8) ---
@@ -1871,9 +1889,13 @@ func startMediaKeyHook() {
                    _voiceHeldKeycodes.contains(kc) {
                     return nil
                 }
-                if eventTapOwnsVoiceHotkey(keycode: kc),
-                   let voiceTarget = voiceHotkeyTarget(keycode: kc, mods: cm) {
-                    guard type == .keyDown else { return passthrough }
+                let voiceTarget = isVoiceDispatchProbe
+                    ? VoiceHotkeyTarget.builtIn(.diagnostic)
+                    : voiceHotkeyTarget(keycode: kc, mods: cm)
+                if eventTapOwnsVoiceHotkey(keycode: kc), let voiceTarget {
+                    guard type == .keyDown else {
+                        return isVoiceDispatchProbe ? nil : passthrough
+                    }
                     if _voiceHeldKeycodes.contains(kc) { return nil }
                     let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
                     guard !isRepeat else { return nil }
@@ -2102,6 +2124,7 @@ private func cancelInstalledDictationLifecycleProbe() {
     DispatchQueue.main.sync {
         recorder.cancel()
         DictationOverlay.shared.hide()
+        resetDictTrigMode()
     }
 }
 
@@ -2400,6 +2423,270 @@ func runInstalledDictationRecoveryProbe() -> String {
     )
 }
 
+private func encodeVoiceDispatchProbeResult(_ result: VoiceDispatchProbeResult) -> String {
+    guard let data = try? VoiceDispatchProbeCoding.encode(result) else {
+        return #"{"ok":false,"status":"eventCreationFailed","failure":"Could not encode voice dispatch probe result."}"#
+    }
+    return String(decoding: data, as: UTF8.self)
+}
+
+private func makeVoiceDispatchProbeResult(
+    status: VoiceDispatchProbeStatus,
+    startedAt: Date,
+    hotkeyRuntime: InstalledHotkeyRuntimeSnapshot,
+    dictationRuntime: DictationLifecycleRuntimeSnapshot,
+    deliveredEvents: Int = 0,
+    health: DictationSessionHealth? = nil,
+    resourcesReleased: Bool = false,
+    failure: String? = nil
+) -> String {
+    encodeVoiceDispatchProbeResult(VoiceDispatchProbeResult(
+        status: status,
+        eventTapDeliveredEvents: deliveredEvents,
+        configuredVoiceAliases: hotkeyRuntime.registrations.configuredVoiceAliases,
+        sessionID: health?.sessionID ?? 0,
+        capturedBuffers: health?.capturedBuffers ?? dictationRuntime.capturedBuffers,
+        terminalStage: health?.stage.rawValue ?? "none",
+        capturePhase: dictationRuntime.capturePhase,
+        resourcesReleased: resourcesReleased,
+        durationMilliseconds: Int(Date().timeIntervalSince(startedAt) * 1_000),
+        failure: failure ?? health?.failure
+    ))
+}
+
+func runInstalledVoiceDispatchProbe() -> String {
+    dispatchPrecondition(condition: .notOnQueue(.main))
+    let startedAt = Date()
+    let initialHotkey = installedHotkeyRuntimeSnapshot()
+    let initialDictation = dictationLifecycleRuntimeSnapshot()
+    guard initialHotkey.accessibilityTrusted else {
+        return makeVoiceDispatchProbeResult(
+            status: .accessibilityUnavailable,
+            startedAt: startedAt,
+            hotkeyRuntime: initialHotkey,
+            dictationRuntime: initialDictation,
+            failure: "Accessibility is not trusted."
+        )
+    }
+    guard initialHotkey.eventTapInstalled else {
+        return makeVoiceDispatchProbeResult(
+            status: .eventTapMissing,
+            startedAt: startedAt,
+            hotkeyRuntime: initialHotkey,
+            dictationRuntime: initialDictation,
+            failure: "Media and voice event tap is not installed."
+        )
+    }
+    guard initialHotkey.eventTapEnabled else {
+        return makeVoiceDispatchProbeResult(
+            status: .eventTapDisabled,
+            startedAt: startedAt,
+            hotkeyRuntime: initialHotkey,
+            dictationRuntime: initialDictation,
+            failure: "Media and voice event tap is disabled."
+        )
+    }
+    guard initialDictation.modelReady else {
+        return makeVoiceDispatchProbeResult(
+            status: .modelUnavailable,
+            startedAt: startedAt,
+            hotkeyRuntime: initialHotkey,
+            dictationRuntime: initialDictation,
+            failure: "Parakeet model is not ready."
+        )
+    }
+    guard [DictationCapturePhase.idle.rawValue, DictationCapturePhase.error.rawValue]
+            .contains(initialDictation.capturePhase),
+          !initialDictation.overlayVisible,
+          dictationCaptureResourceSnapshot().fullyReleased else {
+        return makeVoiceDispatchProbeResult(
+            status: .recorderBusy,
+            startedAt: startedAt,
+            hotkeyRuntime: initialHotkey,
+            dictationRuntime: initialDictation,
+            failure: "Dictation recorder is busy before voice dispatch probe."
+        )
+    }
+
+    let marker = VOICE_DISPATCH_EVENT_PROBE_PREFIX | Int64.random(in: 1..<(1 << 48))
+    let probe = HotkeyEventProbeBox(marker: marker)
+    _hotkeyEventProbeLock.lock()
+    guard _activeHotkeyEventProbe == nil, _activeVoiceDispatchEventProbe == nil else {
+        _hotkeyEventProbeLock.unlock()
+        return makeVoiceDispatchProbeResult(
+            status: .probeBusy,
+            startedAt: startedAt,
+            hotkeyRuntime: initialHotkey,
+            dictationRuntime: initialDictation,
+            failure: "Another hotkey probe is active."
+        )
+    }
+    _activeVoiceDispatchEventProbe = probe
+    _hotkeyEventProbeLock.unlock()
+    defer {
+        _hotkeyEventProbeLock.lock()
+        if _activeVoiceDispatchEventProbe === probe { _activeVoiceDispatchEventProbe = nil }
+        _hotkeyEventProbeLock.unlock()
+    }
+
+    guard let source = CGEventSource(stateID: .combinedSessionState) else {
+        return makeVoiceDispatchProbeResult(
+            status: .eventCreationFailed,
+            startedAt: startedAt,
+            hotkeyRuntime: initialHotkey,
+            dictationRuntime: initialDictation,
+            failure: "Could not create voice dispatch event source."
+        )
+    }
+    func postVoiceEvent(keyDown: Bool) -> Bool {
+        guard let event = CGEvent(
+            keyboardEventSource: source,
+            virtualKey: 63,
+            keyDown: keyDown
+        ) else { return false }
+        event.setIntegerValueField(.eventSourceUserData, value: marker)
+        event.post(tap: .cghidEventTap)
+        return true
+    }
+
+    let previousHealth = latestDictationSessionHealth()
+    guard postVoiceEvent(keyDown: true) else {
+        return makeVoiceDispatchProbeResult(
+            status: .eventCreationFailed,
+            startedAt: startedAt,
+            hotkeyRuntime: initialHotkey,
+            dictationRuntime: initialDictation,
+            failure: "Could not create tagged voice key-down event."
+        )
+    }
+
+    let captureDeadline = Date().addingTimeInterval(12)
+    var probeHealth: DictationSessionHealth?
+    while Date() < captureDeadline {
+        let runtime = dictationLifecycleRuntimeSnapshot()
+        if let health = latestDictationSessionHealth(),
+           health.mode == String(describing: DictMode.diagnostic),
+           health != previousHealth {
+            probeHealth = health
+            if health.stage == .failed || health.stage == .cancelled {
+                cancelInstalledDictationLifecycleProbe()
+                return makeVoiceDispatchProbeResult(
+                    status: .failed,
+                    startedAt: startedAt,
+                    hotkeyRuntime: installedHotkeyRuntimeSnapshot(),
+                    dictationRuntime: runtime,
+                    deliveredEvents: probe.count(),
+                    health: health,
+                    failure: health.failure ?? "Voice dispatch capture failed before release."
+                )
+            }
+            if probe.count() >= 1, runtime.capturedBuffers >= 4 { break }
+        }
+        usleep(50_000)
+    }
+
+    guard probe.count() >= 1 else {
+        cancelInstalledDictationLifecycleProbe()
+        return makeVoiceDispatchProbeResult(
+            status: .eventDeliveryTimedOut,
+            startedAt: startedAt,
+            hotkeyRuntime: installedHotkeyRuntimeSnapshot(),
+            dictationRuntime: dictationLifecycleRuntimeSnapshot(),
+            deliveredEvents: probe.count(),
+            health: probeHealth,
+            failure: "Tagged voice key-down did not reach event-tap callback."
+        )
+    }
+    guard let capturedHealth = probeHealth else {
+        cancelInstalledDictationLifecycleProbe()
+        return makeVoiceDispatchProbeResult(
+            status: .startRejected,
+            startedAt: startedAt,
+            hotkeyRuntime: installedHotkeyRuntimeSnapshot(),
+            dictationRuntime: dictationLifecycleRuntimeSnapshot(),
+            deliveredEvents: probe.count(),
+            failure: "Event-tap voice dispatch did not create a dictation session."
+        )
+    }
+    guard dictationLifecycleRuntimeSnapshot().capturedBuffers >= 4 else {
+        cancelInstalledDictationLifecycleProbe()
+        return makeVoiceDispatchProbeResult(
+            status: .captureTimedOut,
+            startedAt: startedAt,
+            hotkeyRuntime: installedHotkeyRuntimeSnapshot(),
+            dictationRuntime: dictationLifecycleRuntimeSnapshot(),
+            deliveredEvents: probe.count(),
+            health: capturedHealth,
+            failure: "Event-tap voice dispatch did not capture four audio buffers."
+        )
+    }
+    guard postVoiceEvent(keyDown: false) else {
+        cancelInstalledDictationLifecycleProbe()
+        return makeVoiceDispatchProbeResult(
+            status: .eventCreationFailed,
+            startedAt: startedAt,
+            hotkeyRuntime: installedHotkeyRuntimeSnapshot(),
+            dictationRuntime: dictationLifecycleRuntimeSnapshot(),
+            deliveredEvents: probe.count(),
+            health: capturedHealth,
+            failure: "Could not create tagged voice key-up event."
+        )
+    }
+
+    let finishDeadline = Date().addingTimeInterval(15)
+    while Date() < finishDeadline {
+        let runtime = dictationLifecycleRuntimeSnapshot()
+        if let health = latestDictationSessionHealth(), health.sessionID == capturedHealth.sessionID {
+            probeHealth = health
+            if health.stage == .failed || health.stage == .cancelled {
+                cancelInstalledDictationLifecycleProbe()
+                return makeVoiceDispatchProbeResult(
+                    status: .failed,
+                    startedAt: startedAt,
+                    hotkeyRuntime: installedHotkeyRuntimeSnapshot(),
+                    dictationRuntime: runtime,
+                    deliveredEvents: probe.count(),
+                    health: health,
+                    failure: health.failure ?? "Voice dispatch capture failed while finishing."
+                )
+            }
+            let resources = dictationCaptureResourceSnapshot()
+            if probe.count() >= 2,
+               (health.stage == .completed || health.stage == .empty),
+               runtime.capturePhase == DictationCapturePhase.idle.rawValue,
+               !runtime.overlayVisible,
+               resources.fullyReleased {
+                appendLog("[dictation-probe] voice dispatch passed events=\(probe.count()) \(health.diagnosticSummary)")
+                return makeVoiceDispatchProbeResult(
+                    status: .passed,
+                    startedAt: startedAt,
+                    hotkeyRuntime: installedHotkeyRuntimeSnapshot(),
+                    dictationRuntime: runtime,
+                    deliveredEvents: probe.count(),
+                    health: health,
+                    resourcesReleased: true
+                )
+            }
+        }
+        usleep(50_000)
+    }
+
+    let finalRuntime = dictationLifecycleRuntimeSnapshot()
+    let deliveredEvents = probe.count()
+    cancelInstalledDictationLifecycleProbe()
+    return makeVoiceDispatchProbeResult(
+        status: deliveredEvents < 2 ? .eventDeliveryTimedOut : .finishTimedOut,
+        startedAt: startedAt,
+        hotkeyRuntime: installedHotkeyRuntimeSnapshot(),
+        dictationRuntime: finalRuntime,
+        deliveredEvents: deliveredEvents,
+        health: probeHealth,
+        failure: deliveredEvents < 2
+            ? "Tagged voice key-up did not reach event-tap callback."
+            : "Event-tap voice dispatch did not reach clean terminal state."
+    )
+}
+
 private struct InstalledHotkeyRuntimeSnapshot {
     let accessibilityTrusted: Bool
     let eventTapInstalled: Bool
@@ -2505,7 +2792,7 @@ func runInstalledHotkeyHealthProbe(requestedEvents: Int) -> String {
     let marker = HOTKEY_EVENT_PROBE_PREFIX | Int64.random(in: 1..<(1 << 48))
     let probe = HotkeyEventProbeBox(marker: marker)
     _hotkeyEventProbeLock.lock()
-    guard _activeHotkeyEventProbe == nil else {
+    guard _activeHotkeyEventProbe == nil, _activeVoiceDispatchEventProbe == nil else {
         _hotkeyEventProbeLock.unlock()
         return makeHotkeyHealthProbeResult(
             status: .probeBusy,
@@ -2647,6 +2934,7 @@ func handle(_ line: String) -> String {
     case "dictationprobe": return runInstalledDictationProbe()
     case "dictationlifecycleprobe": return runInstalledDictationLifecycleProbe()
     case "dictationrecoveryprobe": return runInstalledDictationRecoveryProbe()
+    case "voicedispatchprobe": return runInstalledVoiceDispatchProbe()
     case "hotkeyhealthprobe":
         let requested = Int(parts.count > 1 ? parts[1] : "") ?? 20
         return runInstalledHotkeyHealthProbe(requestedEvents: requested)

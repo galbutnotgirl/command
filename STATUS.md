@@ -15,8 +15,9 @@ recent change if something in there needs undoing).
   report is stale, edited, mismatched, incomplete, or from clean install.
 - Installed dictation checks run before and after restart: repeated raw microphone captures plus
   production trigger, model stream, recorder, stop-tail, ASR finish, and terminal cleanup. Each
-  side also injects failure after live buffers, proves engine/tap/stream/queue/manager/timer
-  release, and requires immediate production retry without restarting Command.
+  side also sends tagged Fn down/up through installed event-tap voice dispatch, then runs three
+  injected-failure/retry cycles with increasing session IDs. Every cycle proves engine/tap/stream/
+  queue/manager/timer release without restarting Command or changing history.
 - Installed hotkey checks run before and after restart: Accessibility trust, enabled HID event tap,
   expected versus successful Carbon registrations, and tagged event delivery through callback.
   Probe events are swallowed before configured actions, clipboard writes, or assistant routing.
@@ -27,7 +28,8 @@ recent change if something in there needs undoing).
   and after restart, stable runtime soak, and three final-word fixtures.
 - Rollback checkpoints: `checkpoint/2026-07-30-0114-dictation-lifecycle-probe`,
   `checkpoint/2026-07-30-0138-installed-hotkey-health`, and
-  `checkpoint/2026-07-30-0205-dictation-fault-recovery`.
+  `checkpoint/2026-07-30-0205-dictation-fault-recovery`, and
+  `checkpoint/2026-07-30-0236-voice-dispatch-endurance`.
 
 ## Modifier chords and uninstaller (2026-07-28)
 

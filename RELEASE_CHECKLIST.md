@@ -49,8 +49,9 @@ and all tagged HID events must reach callback without firing configured actions 
 Run `./test/test-installed-dictation.sh` before and after restart. It performs repeated raw
 microphone-buffer probes, then drives production trigger and release paths through model
 streaming, recorder buffers, stop-tail drain, ASR finish, and clean terminal health. Diagnostic
-mode then injects failure after live buffers, requires all capture resources to release, and
-immediately repeats production lifecycle without restarting. It must leave dictation history
+mode then drives tagged Fn down/up through installed HID event-tap voice dispatch, requires four
+live buffers and full cleanup, and runs three consecutive injected-failure/immediate-retry cycles
+without restarting. It must keep session IDs increasing, PID stable, and dictation history
 unchanged. This installed check does not prove physical-key
 dispatch or spoken-content accuracy; manual shortcut checks and cached final-word fixtures cover
 those boundaries.
