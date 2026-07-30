@@ -12,6 +12,27 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "test" / "regression-contracts.json"
 IMPACT_CONFIG = ROOT / "test" / "regression-impact.json"
+BASELINE_AREA_MINIMUMS = {
+    "app-runtime": 2,
+    "dictation": 6,
+    "shortcuts-and-input": 1,
+    "assistant-routing": 1,
+    "clipboard-history": 1,
+    "settings-and-import": 1,
+    "background-actions": 1,
+    "install-update-release": 1,
+    "hotkey-configuration": 1,
+}
+MANDATORY_GATES = {
+    (".github/workflows/test.yml", "python3 ./test/test-regression-contracts.py"),
+    (".github/workflows/test.yml", "python3 ./test/test-regression-contracts-tests.py"),
+    (".github/workflows/test.yml", "python3 ./test/test-regression-impact.py --base"),
+    ("release.sh", 'python3 "${DIR}/test/test-regression-contracts.py"'),
+    ("release.sh", 'python3 "${DIR}/test/test-regression-contracts-tests.py"'),
+    ("release.sh", '"${DIR}/test/test-regression-impact.sh"'),
+    ("release.sh", '"${DIR}/test/test-dictation-model.sh"'),
+    ("release.sh", "--skip-checks cannot be used with --publish"),
+}
 
 
 def fail(message: str) -> None:
@@ -72,6 +93,10 @@ def validate_contracts(document: dict, impact: dict, root: Path = ROOT) -> tuple
     for area, minimum in requirements.items():
         if not isinstance(minimum, int) or isinstance(minimum, bool) or minimum < 1:
             failures.append(f"invalid minimum contract count for {area}: {minimum}")
+    for area, baseline in BASELINE_AREA_MINIMUMS.items():
+        minimum = requirements.get(area, 0)
+        if not isinstance(minimum, int) or isinstance(minimum, bool) or minimum < baseline:
+            failures.append(f"feature area minimum for {area} cannot drop below {baseline}")
     if any(not identifier for identifier in ids) or len(ids) != len(set(ids)):
         failures.append("regression IDs must be present and unique")
 
@@ -155,6 +180,13 @@ def validate_contracts(document: dict, impact: dict, root: Path = ROOT) -> tuple
     if not isinstance(raw_gates, list):
         failures.append("requiredGates must be a list")
         raw_gates = []
+    declared_gates = {
+        (gate.get("file", ""), gate.get("contains", ""))
+        for gate in raw_gates
+        if isinstance(gate, dict)
+    }
+    for relative, marker in sorted(MANDATORY_GATES - declared_gates):
+        failures.append(f"mandatory release gate declaration missing: {relative}: {marker}")
     for gate in raw_gates:
         if not isinstance(gate, dict):
             failures.append("release gate must be an object")

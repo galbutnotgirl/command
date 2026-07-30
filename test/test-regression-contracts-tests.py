@@ -91,6 +91,16 @@ class RegressionContractValidatorTests(unittest.TestCase):
             ["regression manifest must be an object"],
         )
 
+    def testAreaMinimumCannotBeLowered(self) -> None:
+        document = copy.deepcopy(self.document)
+        document["coverageRequirements"]["dictation"] = 1
+        self.assertTrue(any("cannot drop below 6" in item for item in self.failures(document)))
+
+    def testMandatoryGateDeclarationCannotBeRemoved(self) -> None:
+        document = copy.deepcopy(self.document)
+        document["requiredGates"] = []
+        self.assertTrue(any("mandatory release gate declaration missing" in item for item in self.failures(document)))
+
 
 if __name__ == "__main__":
     unittest.main()
