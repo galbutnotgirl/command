@@ -57,6 +57,20 @@ assert_not_contains() {  # $1 = label, $2 = actual, $3 = forbidden substring
   fi
 }
 
+assert_before() {  # $1 = label, $2 = actual, $3 = earlier substring, $4 = later substring
+  local earlier_line later_line
+  earlier_line="$(print -r -- "$2" | grep -nF -- "$3" | head -1 | cut -d: -f1)"
+  later_line="$(print -r -- "$2" | grep -nF -- "$4" | head -1 | cut -d: -f1)"
+  if [[ "$earlier_line" == <-> && "$later_line" == <-> ]] && (( earlier_line < later_line )); then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    print -r -- "FAIL: $1"
+    print -r -- "  expected before: $3"
+    print -r -- "  expected after:  $4"
+  fi
+}
+
 # ---- expand_template ---------------------------------------------------------
 # expand_template reads CONTEXT_LINE / URL / SOURCE_LINE from the caller's
 # scope (see send-to-claude-lib.sh's header comment) — set them per case.
@@ -347,6 +361,8 @@ assert_contains "installer compares signed bundle content instead of timestamps"
 assert_contains "installer rolls back app when fresh process is not ready" "$INSTALL_SOURCE" \
   'restore_after_readiness_failure "new Command process did not answer ping"'
 QUALIFICATION_SOURCE="$(cat "${DIR}/qualify-installed-build.sh")"
+QUALIFICATION_VERIFIER_SOURCE="$(cat "${DIR}/verify-installed-qualification.py")"
+RELEASE_SOURCE="$(cat "${DIR}/release.sh")"
 assert_contains "installed qualification forbids clean install" "$QUALIFICATION_SOURCE" \
   'clean install is forbidden during qualification'
 assert_contains "installed qualification verifies microphone before restart" "$QUALIFICATION_SOURCE" \
@@ -355,6 +371,18 @@ assert_contains "installed qualification verifies microphone after restart" "$QU
   'run_step "Microphone capture after restart"'
 assert_contains "installed qualification records exact commit" "$QUALIFICATION_SOURCE" \
   '"commit": commit'
+assert_contains "qualification verifier requires eight ordered checks" "$QUALIFICATION_VERIFIER_SOURCE" \
+  'if names != EXPECTED_STEPS:'
+assert_contains "public release verifies installed qualification before gates" "$RELEASE_SOURCE" \
+  'public release requires a recent installed qualification for this exact commit'
+assert_contains "public release rechecks qualification before tagging" "$RELEASE_SOURCE" \
+  'installed qualification changed or expired during release'
+assert_before "public release qualification runs before regression gates" "$RELEASE_SOURCE" \
+  'public release requires a recent installed qualification for this exact commit' \
+  'regression impact self-tests failed'
+assert_before "public release qualification reruns before tag creation" "$RELEASE_SOURCE" \
+  'installed qualification changed or expired during release' \
+  'print -- "[release] tagging ${TAG}'
 
 DOCTOR_SOURCE="$(cat "${DIR}/doctor.sh")"
 assert_contains "doctor accepts built-in shortcuts without override file" "$DOCTOR_SOURCE" \

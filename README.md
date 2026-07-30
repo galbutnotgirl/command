@@ -202,6 +202,10 @@ Release:
 ./release.sh --publish --notarize  # Developer ID sign, notarize, staple, Gatekeeper-check, publish
 ```
 
+Public releases require a successful `time ./qualify-installed-build.sh` run
+from same commit within prior 24 hours. Release script verifies its report
+before building and again immediately before tagging.
+
 ## License
 
 [MIT](LICENSE)

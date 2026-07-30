@@ -37,6 +37,8 @@ PACKAGE_SWAP_STARTED=0
 PACKAGE_COMMITTED=0
 PREVIOUS_ZIP=""
 PREVIOUS_SHA256=""
+QUALIFICATION_REPORT="${COMMAND_QUALIFICATION_REPORT:-${DIST}/installed-qualification.json}"
+RELEASE_COMMIT=""
 
 cleanup_package_staging() {
   if [ "$PACKAGE_SWAP_STARTED" = "1" ] && [ "$PACKAGE_COMMITTED" = "0" ]; then
@@ -115,6 +117,12 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   command -v swift >/dev/null 2>&1 || fail "swift not found — needed for app tests (--skip-checks to override)."
   command -v node >/dev/null 2>&1 || fail "node not found — needed for background runner tests (--skip-checks to override)."
   command -v python3 >/dev/null 2>&1 || fail "python3 not found — needed for docs validation (--skip-checks to override)."
+  if [ "$PUBLISH" = "1" ]; then
+    RELEASE_COMMIT="$(git -C "$DIR" rev-parse HEAD 2>/dev/null)"
+    python3 "${DIR}/verify-installed-qualification.py" \
+      --repo "$DIR" --report "$QUALIFICATION_REPORT" --version-file "${DIR}/VERSION" \
+      || fail "public release requires a recent installed qualification for this exact commit. Run time ./qualify-installed-build.sh, then retry."
+  fi
   "${DIR}/test/test-regression-impact.sh" || fail "regression impact self-tests failed — fix change-to-test enforcement before release."
   LATEST_VERSION_TAG="$(git -C "$DIR" tag --list 'v*' --sort=-version:refname | head -1)"
   if [ -n "$LATEST_VERSION_TAG" ]; then
@@ -137,6 +145,7 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   "${DIR}/test/test-restart-app.sh" || fail "restart handoff tests failed — fix relaunch behavior before release."
   "${DIR}/test/test-release-policy.sh" || fail "release policy tests failed — fix signing/notarization guards before release."
   "${DIR}/test/test-qualification-orchestration.sh" || fail "installed qualification orchestration tests failed — fix local runtime qualification before release."
+  python3 "${DIR}/test/test-installed-qualification-report.py" || fail "installed qualification report verifier tests failed — fix publication attestation before release."
   "${DIR}/test/test-static-analysis.sh" || fail "static analysis failed — fix script or configuration syntax before release."
   python3 "${DIR}/test/test-docs.py" || fail "docs validation failed — fix docs links/metadata/packaging guards before release."
   python3 "${DIR}/test/test-pages.py" || fail "Pages validation failed — fix deploy assets and install recovery before release."
@@ -280,6 +289,17 @@ if [ "$PUBLISH" = "0" ]; then
 fi
 
 command -v gh >/dev/null 2>&1 || fail "--publish needs the gh CLI on PATH."
+
+# Notarization and packaging can take minutes. Refuse to tag if source or its
+# installed-runtime attestation changed after preflight.
+CURRENT_RELEASE_COMMIT="$(git -C "$DIR" rev-parse HEAD 2>/dev/null)"
+[ "$CURRENT_RELEASE_COMMIT" = "$RELEASE_COMMIT" ] \
+  || fail "HEAD changed during release (${RELEASE_COMMIT[1,7]} -> ${CURRENT_RELEASE_COMMIT[1,7]}); rebuild and re-qualify before publishing."
+[ -z "$(git -C "$DIR" status --porcelain 2>/dev/null)" ] \
+  || fail "working tree changed during release; rebuild and re-qualify before publishing."
+python3 "${DIR}/verify-installed-qualification.py" \
+  --repo "$DIR" --report "$QUALIFICATION_REPORT" --version-file "${DIR}/VERSION" \
+  || fail "installed qualification changed or expired during release; re-qualify before publishing."
 
 # Only alpha/beta tags are marked pre-release — a plain "vX.Y.Z" is a real
 # stable release (see PROD_AVAILABLE in Updater.swift, which gates this).

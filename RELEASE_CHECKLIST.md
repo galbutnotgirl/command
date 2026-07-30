@@ -59,6 +59,11 @@ Optional local packaging check:
 
 Review `test/regression-contracts.json` for behavior touched by this release. `./release.sh --publish --notarize` requires full gates and runs cached Parakeet final-word fixtures automatically; `--skip-checks` cannot publish.
 
+Run `time ./qualify-installed-build.sh` on exact clean release commit no more
+than 24 hours before publishing. `release.sh --publish` verifies all eight
+installed checks before gates and again before tagging; stale, mismatched,
+failed, clean-install, or edited reports stop publication.
+
 Run `./test/test-regression-impact.sh` and review `test/regression-impact.json`. Every changed runtime area since latest `v*` tag must include matching automated evidence before release preflight can pass.
 
 That builds `dist/Command-<version>.zip`, writes `dist/Command-<version>.zip.sha256`, and verifies `Command.app` is at the zip top level, the embedded version matches `VERSION`, the bundle identifier is `com.claudecommand`, the minimum macOS metadata is `14.0`, the packaged executable exists and is executable, codesign metadata identifies `com.claudecommand`, every shareable bundled docs asset plus the bundled README is present and byte-for-byte current with source, including `PRIVACY.md` and `SECURITY.md`, required runtime resources (`send-to-claude.sh`, Clipboard History, restart/update helpers, and background vendor core) are present, internal `STATUS.md` is absent, and AppleDouble `._*` metadata files are absent. Those checks match what updater install, restart, shortcut dispatch, Clipboard History, background actions, and About -> Documentation expect.

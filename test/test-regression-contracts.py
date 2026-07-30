@@ -20,7 +20,7 @@ BASELINE_AREA_MINIMUMS = {
     "clipboard-history": 1,
     "settings-and-import": 1,
     "background-actions": 1,
-    "install-update-release": 2,
+    "install-update-release": 3,
     "hotkey-configuration": 1,
 }
 MANDATORY_GATES = {
@@ -28,10 +28,13 @@ MANDATORY_GATES = {
     (".github/workflows/test.yml", "python3 ./test/test-regression-contracts-tests.py"),
     (".github/workflows/test.yml", "python3 ./test/test-regression-impact.py --base"),
     (".github/workflows/test.yml", "./test/test-qualification-orchestration.sh"),
+    (".github/workflows/test.yml", "python3 ./test/test-installed-qualification-report.py"),
     ("release.sh", 'python3 "${DIR}/test/test-regression-contracts.py"'),
     ("release.sh", 'python3 "${DIR}/test/test-regression-contracts-tests.py"'),
     ("release.sh", '"${DIR}/test/test-regression-impact.sh"'),
     ("release.sh", '"${DIR}/test/test-qualification-orchestration.sh"'),
+    ("release.sh", 'python3 "${DIR}/test/test-installed-qualification-report.py"'),
+    ("release.sh", "verify-installed-qualification.py"),
     ("release.sh", '"${DIR}/test/test-dictation-model.sh"'),
     ("release.sh", "--skip-checks cannot be used with --publish"),
 }
@@ -49,8 +52,8 @@ def release_executes_evidence(relative: str, release_source: str) -> bool:
         return "node --test" in release_source
     if relative.startswith("test/test-") and relative.endswith(".sh"):
         return f'/test/{Path(relative).name}' in release_source
-    if relative == "test/test-regression-contracts.py":
-        return "/test/test-regression-contracts.py" in release_source
+    if relative.startswith("test/test-") and relative.endswith(".py"):
+        return f'/test/{Path(relative).name}' in release_source
     return False
 
 

@@ -8,7 +8,7 @@
     "clipboard-history": 1,
     "settings-and-import": 1,
     "background-actions": 1,
-    "install-update-release": 2,
+    "install-update-release": 3,
     "hotkey-configuration": 1
   },
   "regressions": [
@@ -305,6 +305,30 @@
       "runtimeEvidence": "dist/installed-qualification.json must report passed, exact current commit, incremental install, and eight successful qualification steps."
     },
     {
+      "id": "INSTALL-003",
+      "areas": ["install-update-release"],
+      "risk": "A public release can publish a commit without recent exact installed-runtime qualification, or source can change after preflight before tagging.",
+      "automatedEvidence": [
+        {
+          "file": "test/test-installed-qualification-report.py",
+          "contains": "test_accepts_exact_recent_eight_step_report"
+        },
+        {
+          "file": "test/test-installed-qualification-report.py",
+          "contains": "test_rejects_stale_commit"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "public release verifies installed qualification before gates"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "public release rechecks qualification before tagging"
+        }
+      ],
+      "runtimeEvidence": "release.sh --publish fails unless a recent report matches exact HEAD, branch, and version with all eight incremental installed checks passed; the gate reruns immediately before tagging."
+    },
+    {
       "id": "HOTKEY-001",
       "areas": ["hotkey-configuration"],
       "risk": "Generated default hotkeys collide, reference missing actions, or overwrite user-customized bindings.",
@@ -339,6 +363,10 @@
       "contains": "./test/test-qualification-orchestration.sh"
     },
     {
+      "file": ".github/workflows/test.yml",
+      "contains": "python3 ./test/test-installed-qualification-report.py"
+    },
+    {
       "file": "release.sh",
       "contains": "python3 \"${DIR}/test/test-regression-contracts.py\""
     },
@@ -353,6 +381,14 @@
     {
       "file": "release.sh",
       "contains": "\"${DIR}/test/test-qualification-orchestration.sh\""
+    },
+    {
+      "file": "release.sh",
+      "contains": "python3 \"${DIR}/test/test-installed-qualification-report.py\""
+    },
+    {
+      "file": "release.sh",
+      "contains": "verify-installed-qualification.py"
     },
     {
       "file": "release.sh",
