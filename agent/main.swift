@@ -2119,6 +2119,48 @@ private final class InstalledDictationInsertProbeHarness {
         response: DictationInsertProbeResponseBox,
         completed: DispatchSemaphore
     ) {
+        activateReceiverThenStart(
+            rawText: rawText,
+            response: response,
+            completed: completed,
+            attemptsRemaining: 120
+        )
+    }
+
+    private func activateReceiverThenStart(
+        rawText: String,
+        response: DictationInsertProbeResponseBox,
+        completed: DispatchSemaphore,
+        attemptsRemaining: Int
+    ) {
+        NSApp.activate(ignoringOtherApps: true)
+        panel.orderFrontRegardless()
+        panel.makeKey()
+        panel.makeFirstResponder(textView)
+
+        guard NSApp.isActive, panel.isKeyWindow, textView.window?.firstResponder === textView else {
+            guard attemptsRemaining > 1 else {
+                Task { @MainActor in
+                    let execution = await DictationOverlay.shared.runInstalledInsertDeliveryProbe(
+                        rawText: rawText,
+                        targetBundle: targetBundle
+                    )
+                    response.store(execution)
+                    completed.signal()
+                }
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [self] in
+                activateReceiverThenStart(
+                    rawText: rawText,
+                    response: response,
+                    completed: completed,
+                    attemptsRemaining: attemptsRemaining - 1
+                )
+            }
+            return
+        }
+
         Task { @MainActor in
             let execution = await DictationOverlay.shared.runInstalledInsertDeliveryProbe(
                 rawText: rawText,
@@ -3551,7 +3593,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if _installedDictationInsertProbeIsActive { return true }
+        if _installedDictationInsertProbeIsActive { return false }
         openLastSettingsTab()
         return true
     }

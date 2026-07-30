@@ -374,8 +374,14 @@ assert_contains "dictation never claims paste after failed activation" "$DICTATI
   'let pasted = targetActive && postKey(kV, cmd: true, to: targetBundle)'
 assert_contains "target activation tolerates busy LaunchServices" "$AGENT_SOURCE" \
   'func waitForActive(_ bundle: String, attempts: Int = 120) -> Bool'
+assert_contains "installed paste probe activates receiver without blocking main run loop" "$AGENT_SOURCE" \
+  'activateReceiverThenStart('
+assert_contains "installed paste probe requests foreground activation" "$AGENT_SOURCE" \
+  'NSApp.activate(ignoringOtherApps: true)'
+assert_contains "installed paste probe brings receiver forward" "$AGENT_SOURCE" \
+  'panel.orderFrontRegardless()'
 assert_contains "installed paste probe cannot reopen settings over receiver" "$AGENT_SOURCE" \
-  'if _installedDictationInsertProbeIsActive { return true }'
+  'if _installedDictationInsertProbeIsActive { return false }'
 assert_contains "tagged voice events continue through installed event callback" "$AGENT_SOURCE" \
   'let isVoiceDispatchProbe = probeDisposition == .voiceDispatch'
 assert_contains "voice dispatch probe overrides only tagged event target" "$AGENT_SOURCE" \
