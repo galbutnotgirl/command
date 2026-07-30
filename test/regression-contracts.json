@@ -276,6 +276,10 @@
         {
           "file": "test/test-updater-swap.sh",
           "contains": "signature mismatch restores prior app"
+        },
+        {
+          "file": "test/test-install-state.sh",
+          "contains": "startup readiness failure restores previous app"
         }
       ],
       "runtimeEvidence": "Installed bundle keeps designated requirement and path; pre/post state sentinels remain; failed swap restores valid prior signature."

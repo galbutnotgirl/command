@@ -16,7 +16,10 @@ OLD_APP="${INSTALL_DIR}/ClaudeCommand.app"
 BIN="${APP}/Contents/MacOS/Command"
 PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
 OLD_CLIPWATCH="${HOME}/Library/LaunchAgents/com.claudecommand.clipwatch.plist"
+SOCKET="${HOME}/.claude/state/command-agent.sock"
 UID_NUM="$(id -u)"
+BACKUP_ROOT=""
+BACKUP_APP=""
 
 [ -x "${SRC_APP}/Contents/MacOS/Command" ] || { print -- "[agent] missing Command.app — run ./build-agent.sh first"; exit 1; }
 /usr/bin/codesign --verify --deep --strict "$SRC_APP" >/dev/null 2>&1 || {
@@ -72,6 +75,9 @@ if pgrep -x Command >/dev/null 2>&1 || pgrep -x ClaudeCommand >/dev/null 2>&1; t
     print -- "[agent] ERROR Command did not stop; install canceled before changing the app bundle"
     exit 1
 fi
+# A killed process can leave its Unix socket inode behind. Readiness must come
+# from new process answering ping, never old path merely existing.
+rm -f "$SOCKET"
 
 if [ -d "$APP" ]; then
     BACKUP_ROOT="$(mktemp -d "${INSTALL_DIR}/.command-update-backup.XXXXXX")" || {
@@ -104,7 +110,6 @@ if [ -d "$APP" ]; then
     rsync -a --delete "${SRC_APP}/" "${APP}/" || restore_previous_app "copy failed"
     /usr/bin/codesign --verify --deep --strict "$APP" >/dev/null 2>&1 \
         || restore_previous_app "installed signature invalid"
-    rm -rf "$BACKUP_ROOT"
     if [ -d "$OLD_APP" ]; then
         rm -rf "$OLD_APP"
         print -- "[agent] removed old ClaudeCommand.app bundle"
@@ -160,20 +165,58 @@ print -- "[agent] wrote ${PLIST}"
 launchctl bootstrap "gui/${UID_NUM}" "$PLIST"
 launchctl kickstart "gui/${UID_NUM}/${LABEL}"
 
-# Wait for socket (launchd-started instance binds it on startup). Tests can set
-# zero attempts while exercising install-state logic in an isolated HOME.
-SOCKET_WAIT_ATTEMPTS="${COMMAND_SOCKET_WAIT_ATTEMPTS:-15}"
-for (( _i = 0; _i < SOCKET_WAIT_ATTEMPTS; _i++ )); do
-    [ -S "${HOME}/.claude/state/command-agent.sock" ] && break
-    sleep 0.2
-done
+socket_ready() {
+    [ -S "$SOCKET" ] || return 1
+    local reply
+    reply="$(printf 'ping\n' | nc -U -w 1 "$SOCKET" 2>/dev/null || true)"
+    [ "$reply" = "pong" ]
+}
 
-if [ -S "${HOME}/.claude/state/command-agent.sock" ]; then
+restore_after_readiness_failure() {
+    local reason="$1"
+    launchctl bootout "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
+    pkill -x Command 2>/dev/null || true
+    rm -f "$SOCKET"
+    if [ -n "$BACKUP_APP" ] && [ -d "$BACKUP_APP" ]; then
+        if rsync -a --delete "${BACKUP_APP}/" "${APP}/" \
+            && /usr/bin/codesign --verify --deep --strict "$APP" >/dev/null 2>&1; then
+            rm -rf "$BACKUP_ROOT"
+            launchctl bootstrap "gui/${UID_NUM}" "$PLIST" 2>/dev/null || true
+            launchctl kickstart "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
+            print -u2 -- "[agent] ERROR ${reason}; previous app restored"
+            exit 1
+        fi
+        print -u2 -- "[agent] ERROR ${reason}; previous app could not be restored"
+        exit 1
+    fi
+    rm -rf "$APP"
+    rm -f "$PLIST"
+    print -u2 -- "[agent] ERROR ${reason}; no previous app was available"
+    exit 1
+}
+
+# Wait for new process to bind socket and answer ping. Tests can set zero
+# attempts while exercising install-state logic in isolated HOME.
+SOCKET_WAIT_ATTEMPTS="${COMMAND_SOCKET_WAIT_ATTEMPTS:-15}"
+if (( SOCKET_WAIT_ATTEMPTS == 0 )); then
+    print -- "[agent] socket verification skipped"
+elif socket_ready; then
     print -- "[agent] ✓ running under launchd — restart-on-exit active"
     print -- "[agent] Login Item: System Settings → General → Login Items"
 else
-    print -- "[agent] ⚠ socket not up yet — check ~/.claude/logs/command-agent.err"
+    for (( _i = 0; _i < SOCKET_WAIT_ATTEMPTS; _i++ )); do
+        sleep 0.2
+        socket_ready && break
+    done
+    if socket_ready; then
+        print -- "[agent] ✓ running under launchd — restart-on-exit active"
+        print -- "[agent] Login Item: System Settings → General → Login Items"
+    else
+        restore_after_readiness_failure "new Command process did not answer ping"
+    fi
 fi
+
+[ -n "$BACKUP_ROOT" ] && rm -rf "$BACKUP_ROOT"
 
 # Clipboard History is opt-in during onboarding. Never turn it on during install.
 if ! defaults read com.claudecommand cliphistoryEnabled >/dev/null 2>&1; then

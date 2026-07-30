@@ -92,13 +92,13 @@ run_install() {
   PATH="$FAKE_BIN:/usr/bin:/bin:/usr/sbin:/sbin" \
   COMMAND_SOURCE_APP="$SOURCE_APP" \
   COMMAND_SKIP_LSREGISTER=1 \
-  COMMAND_SOCKET_WAIT_ATTEMPTS=0 \
   COMMAND_TEST_DEFAULTS_LOG="$DEFAULTS_LOG" \
   COMMAND_TEST_LIFECYCLE_LOG="$LIFECYCLE_LOG" \
   COMMAND_TEST_PGREP_RUNNING="${2:-0}" \
   COMMAND_TEST_RSYNC_FAIL="${3:-0}" \
   COMMAND_TEST_RSYNC_STATE="$RSYNC_STATE" \
   COMMAND_STOP_WAIT_ATTEMPTS=0 \
+  COMMAND_SOCKET_WAIT_ATTEMPTS="${6:-0}" \
   COMMAND_ALLOW_TCC_IDENTITY_CHANGE="${4:-0}" \
   COMMAND_CLEAN_INSTALL="${5:-0}" \
   COMMAND_TEST_DEFAULTS_EXIST="${1:-0}" \
@@ -150,6 +150,24 @@ LIFECYCLE_ORDER="$(print -r -- "$INCREMENTAL_LIFECYCLE" | awk '
 ')"
 assert_true "incremental install stops launchd and Command before bundle sync" \
   zsh -c 'IFS=: read -r bootout pkill rsync <<< "$1"; (( bootout > 0 && pkill > bootout && rsync > pkill ))' _ "$LIFECYCLE_ORDER"
+
+/usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 9.9.10-test' "$SOURCE_APP/Contents/Info.plist"
+codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/null 2>&1
+mkdir -p "$FAKE_HOME/.claude/state"
+print -- "stale socket marker" > "$FAKE_HOME/.claude/state/command-agent.sock"
+: > "$LIFECYCLE_LOG"
+# Ad-hoc fixture signatures include content hash, so permit identity change only
+# inside this isolated test. Real qualification forbids this override.
+READINESS_OUTPUT="$(run_install 1 0 0 1 1 1)"
+READINESS_STATUS=$?
+assert_true "startup readiness failure returns nonzero" test "$READINESS_STATUS" -ne 0
+assert_contains "startup readiness failure restores previous app" \
+  "new Command process did not answer ping; previous app restored" "$READINESS_OUTPUT"
+READINESS_RESTORED_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$FAKE_HOME/Applications/Command.app/Contents/Info.plist")"
+assert_true "startup readiness rollback restores previous version" test "$READINESS_RESTORED_VERSION" = "9.9.9-test"
+assert_true "installer removes stale socket before launch" test ! -e "$FAKE_HOME/.claude/state/command-agent.sock"
+rm -rf "$SOURCE_APP"
+/usr/bin/ditto "$FAKE_HOME/Applications/Command.app" "$SOURCE_APP"
 
 : > "$LIFECYCLE_LOG"
 STUCK_OUTPUT="$(run_install 1 1)"

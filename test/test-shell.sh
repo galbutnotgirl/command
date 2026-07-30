@@ -324,6 +324,12 @@ assert_not_contains "paste fallback no longer rejects non-settable AXValue" "$SE
 INSTALL_SOURCE="$(cat "${DIR}/install-agent.sh")"
 assert_contains "fresh install keeps Clipboard History opt-in" "$INSTALL_SOURCE" \
   'defaults write com.claudecommand cliphistoryEnabled -bool false'
+assert_contains "installer removes stale dispatch socket before launch" "$INSTALL_SOURCE" \
+  'rm -f "$SOCKET"'
+assert_contains "installer readiness requires ping response" "$INSTALL_SOURCE" \
+  '[ "$reply" = "pong" ]'
+assert_contains "installer rolls back app when fresh process is not ready" "$INSTALL_SOURCE" \
+  'restore_after_readiness_failure "new Command process did not answer ping"'
 QUALIFICATION_SOURCE="$(cat "${DIR}/qualify-installed-build.sh")"
 assert_contains "installed qualification forbids clean install" "$QUALIFICATION_SOURCE" \
   'clean install is forbidden during qualification'
