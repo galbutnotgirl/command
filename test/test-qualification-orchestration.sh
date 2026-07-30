@@ -95,6 +95,7 @@ run_qualifier() {
   COMMAND_QUALIFY_MODEL_SCRIPT="$FAKE_BIN/model" \
   COMMAND_QUALIFY_STATE_SCRIPT="$FAKE_BIN/state" \
   COMMAND_QUALIFY_STATE_POLICY="$ROOT/test/installed-state-policy.json" \
+  COMMAND_TEST_GUI_SESSION="${COMMAND_TEST_GUI_SESSION:-unlocked}" \
   COMMAND_TEST_STEP_LOG="$LOG" \
   COMMAND_TEST_FAIL_STEP="${1:-}" \
   zsh "$FIXTURE/qualify-installed-build.sh" 2>&1
@@ -152,6 +153,16 @@ assert_true "qualification rejects unqualified install override" test "$UNQUALIF
 assert_contains "unqualified override rejection is actionable" \
   "unqualified install override is forbidden" "$UNQUALIFIED_OUTPUT"
 assert_true "unqualified override rejection occurs before any command" test ! -s "$LOG"
+
+: > "$LOG"
+set +e
+LOCKED_OUTPUT="$(COMMAND_TEST_GUI_SESSION=locked run_qualifier)"
+LOCKED_STATUS=$?
+set -e
+assert_true "qualification rejects locked GUI session" test "$LOCKED_STATUS" -ne 0
+assert_contains "locked GUI failure explains focus limitation" \
+  "focus and paste delivery cannot run behind loginwindow" "$LOCKED_OUTPUT"
+assert_true "locked GUI rejection occurs before any command" test ! -s "$LOG"
 
 print -- "dirty" >> "$FIXTURE/VERSION"
 : > "$LOG"

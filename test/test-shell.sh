@@ -295,7 +295,7 @@ assert_contains "installed dictation recovery probe is reachable through owner-o
 assert_contains "installed dictation watchdog probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "dictationwatchdogprobe": return runInstalledDictationWatchdogProbe()'
 assert_contains "installed dictation insert probe is reachable through owner-only socket" "$AGENT_SOURCE" \
-  'case "dictationinsertprobe": return runInstalledDictationInsertProbe()'
+  'case "dictationinsertprobe":'
 assert_contains "installed voice dispatch probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "voicedispatchprobe": return runInstalledVoiceDispatchProbe()'
 assert_contains "installed hotkey health probe is reachable through owner-only socket" "$AGENT_SOURCE" \
@@ -365,25 +365,25 @@ assert_contains "installed midstream watchdog uses production recorder" "$AGENT_
 assert_contains "installed dictation check drives tagged voice events through action routing" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   "printf 'voicedispatchprobe\\n'"
 assert_contains "installed dictation check proves real paste delivery" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
-  "printf 'dictationinsertprobe\\n'"
+  "printf 'dictationinsertprobe %s\\t%s\\n'"
 assert_contains "installed dictation check requires exact receiver and state restoration" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   '"clipboardWritten", "targetActive", "pasteEventPosted", "receiverMatched",'
+assert_contains "installed dictation check launches external AppKit paste receiver" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  'PASTE_RECEIVER_BUNDLE="com.claudecommand.DictationPasteReceiver"'
+assert_contains "installed dictation check cleans external paste receiver" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  'trap cleanup_paste_receiver EXIT'
+assert_contains "installed dictation receiver reports PID for scoped cleanup" "$(cat "${DIR}/agent/Tools/DictationPasteReceiver/main.swift")" \
+  'ProcessInfo.processInfo.processIdentifier'
+assert_contains "installed qualification rejects locked GUI session" "$(cat "${DIR}/qualify-installed-build.sh")" \
+  'focus and paste delivery cannot run behind loginwindow'
 assert_contains "dictation paste waits for confirmed target activation" "$DICTATION_OVERLAY_SOURCE" \
   'let targetActive = waitForActive(targetBundle)'
 assert_contains "dictation never claims paste after failed activation" "$DICTATION_OVERLAY_SOURCE" \
   'let pasted = targetActive && postKey(kV, cmd: true, to: targetBundle)'
 assert_contains "target activation tolerates busy LaunchServices" "$AGENT_SOURCE" \
   'func waitForActive(_ bundle: String, attempts: Int = 120) -> Bool'
-assert_contains "installed paste probe activates receiver without blocking main run loop" "$AGENT_SOURCE" \
-  'activateReceiverThenStart('
-assert_contains "installed paste probe requests Launch Services activation before polling" "$AGENT_SOURCE" \
-  'activate(targetBundle)'
-assert_contains "installed paste probe requests foreground activation" "$AGENT_SOURCE" \
-  'NSApp.activate(ignoringOtherApps: true)'
-assert_contains "installed paste probe brings receiver forward" "$AGENT_SOURCE" \
-  'panel.orderFrontRegardless()'
-assert_contains "installed paste probe cannot reopen settings over receiver" "$AGENT_SOURCE" \
-  'if _installedDictationInsertProbeIsActive { return false }'
+assert_contains "installed paste probe reads exact external receiver output" "$AGENT_SOURCE" \
+  'Data(contentsOf: receiverURL)'
 assert_contains "tagged voice events continue through installed event callback" "$AGENT_SOURCE" \
   'let isVoiceDispatchProbe = probeDisposition == .voiceDispatch'
 assert_contains "voice dispatch probe overrides only tagged event target" "$AGENT_SOURCE" \

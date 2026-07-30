@@ -39,6 +39,10 @@ let package = Package(
             path: "Tools/DictationModelProbe"
         ),
         .executableTarget(
+            name: "DictationPasteReceiver",
+            path: "Tools/DictationPasteReceiver"
+        ),
+        .executableTarget(
             name: "CommandClipboardWatcher",
             path: "Tools/ClipboardWatcher"
         ),

@@ -289,7 +289,7 @@
           "contains": "installed dictation check requires exact receiver and state restoration"
         }
       ],
-      "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must pass a known non-empty transcript through the production final-text delivery handler, write it to the general pasteboard, activate a focused AppKit text receiver, post Command-V to the installed process, observe exact processed text in the receiver, restore prior clipboard contents and focused app, keep PID stable, and leave dictation and Clipboard History unchanged."
+      "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must launch a separate focused AppKit receiver, pass a known non-empty transcript through the production final-text delivery handler, write it to the general pasteboard, activate receiver by bundle ID, post Command-V to receiver process, observe exact processed text, restore prior clipboard contents and focused app, clean receiver process and files, keep Command PID stable, and leave dictation and Clipboard History unchanged."
     },
     {
       "id": "APP-001",

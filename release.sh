@@ -146,6 +146,8 @@ if [ "$SKIP_CHECKS" = "0" ]; then
     || fail "dictation watchdog tests failed — stalled microphone capture may remain active."
   (cd "${DIR}/agent" && swift build --product CommandClipboardWatcher) \
     || fail "native Clipboard History helper build failed."
+  (cd "${DIR}/agent" && swift build --product DictationPasteReceiver) \
+    || fail "installed dictation paste receiver build failed."
   "${DIR}/test/test-clipboard-watcher.sh" || fail "native Clipboard History helper smoke test failed."
   (cd "${DIR}/vendor/claude-command-capture" && node --test) || fail "Node tests failed — fix background runner tests before release."
   "${DIR}/test/test-assistant-contract.sh" || fail "installed Claude/ChatGPT compatibility contract failed."

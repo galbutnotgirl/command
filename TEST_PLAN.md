@@ -71,14 +71,16 @@ Installed dictation test performs repeated raw microphone-buffer captures and on
 lifecycle through trigger, model stream, recorder, stop-tail drain, ASR finish, and clean terminal
 health without changing history. Tagged Fn down/up next travels through installed HID event tap and
 voice action routing into diagnostic capture. A known transcript then passes through production
-final-text delivery into general pasteboard, activates a focused AppKit field, posts Command-V,
-and must arrive exactly; prior clipboard contents and app focus must be restored. Test then stalls
+final-text delivery into general pasteboard, activates a separate focused AppKit receiver by bundle
+ID, posts Command-V, and must arrive exactly; prior clipboard contents and app focus must be
+restored and receiver cleaned up. Test then stalls
 startup before its first audio buffer,
 releases the trigger while startup remains unresolved, and requires one warning, one automatic
 reset, complete resource cleanup, and an immediate production retry. Three later failure/retry
 cycles inject faults after live microphone buffers, verifying every capture resource releases and
 session IDs keep increasing.
-Run on both sides of restart to catch process-local state bugs.
+Run on both sides of restart to catch process-local state bugs. Qualification fails fast with an
+actionable message when macOS session is locked because focus delivery cannot be proven then.
 Physical-key dispatch remains a manual check. Focused delivery tests prove selected raw text reaches
 processing, history preparation, and dispatch exactly once; blank processor output falls back to raw
 speech. Cached final-word fixtures now pass model output through same decision and delivery code.
@@ -199,7 +201,7 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-30)
 
-- Automated local suites: 231 Swift, 58 Node, 192 shell, 17 build-transaction,
+- Automated local suites: 231 Swift, 58 Node, 196 shell, 17 build-transaction,
   17 release-transaction, 41 install-state, 14 updater, 9 restart-handoff,
   9 installed-state preservation, 9 release-policy, 94 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.

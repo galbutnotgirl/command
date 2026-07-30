@@ -13,8 +13,8 @@ recent change if something in there needs undoing).
 
 - Installed dictation delivery now has direct focused-field proof. Qualification sends a known
   transcript through same final-text handler used after ASR, writes general pasteboard, activates
-  a real AppKit text receiver, posts Command-V to installed process, and requires exact inserted
-  text. Probe restores prior clipboard and app focus, leaves histories unchanged, and runs before
+  a separate AppKit text receiver by bundle ID, posts Command-V to receiver process, and requires
+  exact inserted text. Probe restores prior clipboard and app focus, cleans receiver, leaves histories unchanged, and runs before
   and after restart. DICT-013 plus dedicated `dictation-insert` CI/release attestation gate prevent
   completion-sound-without-text regressions from hiding behind successful capture/model tests.
 - Dictation capture watchdog now starts when trigger is accepted instead of waiting indefinitely

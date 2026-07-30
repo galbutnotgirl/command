@@ -4,9 +4,69 @@ set -euo pipefail
 
 RUNS="${COMMAND_DICTATION_PROBE_RUNS:-3}"
 RECOVERY_RUNS="${COMMAND_DICTATION_RECOVERY_RUNS:-3}"
+DIR="${0:A:h}"
 SOCKET="${HOME}/.claude/state/command-agent.sock"
 HISTORY="${HOME}/Library/Application Support/DictationLab/history.json"
 DOMAIN="gui/$(id -u)/com.claudecommand"
+PASTE_RECEIVER_BUNDLE="com.claudecommand.DictationPasteReceiver"
+PASTE_RECEIVER_BINARY="${DIR:h}/agent/.build/debug/DictationPasteReceiver"
+paste_receiver_tmp=""
+paste_receiver_pid=""
+
+cleanup_paste_receiver() {
+  if [[ -n "$paste_receiver_pid" ]] && kill -0 "$paste_receiver_pid" 2>/dev/null; then
+    kill "$paste_receiver_pid" 2>/dev/null || true
+  fi
+  [[ -z "$paste_receiver_tmp" ]] || rm -rf "$paste_receiver_tmp"
+}
+trap cleanup_paste_receiver EXIT
+
+start_paste_receiver() {
+  if [[ ! -x "$PASTE_RECEIVER_BINARY" ]]; then
+    (cd "${DIR:h}/agent" && swift build --product DictationPasteReceiver) >/dev/null
+  fi
+
+  paste_receiver_tmp="$(mktemp -d "${TMPDIR:-/tmp}/command-paste-receiver.XXXXXX")"
+  local app="${paste_receiver_tmp}/DictationPasteReceiver.app"
+  local executable="${app}/Contents/MacOS/DictationPasteReceiver"
+  receiver_output="${paste_receiver_tmp}/received.txt"
+  receiver_ready="${paste_receiver_tmp}/ready"
+  mkdir -p "${app}/Contents/MacOS"
+  cp "$PASTE_RECEIVER_BINARY" "$executable"
+  chmod +x "$executable"
+  cat > "${app}/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleExecutable</key><string>DictationPasteReceiver</string>
+  <key>CFBundleIdentifier</key><string>${PASTE_RECEIVER_BUNDLE}</string>
+  <key>CFBundleName</key><string>Dictation Paste Receiver</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+</dict></plist>
+PLIST
+  codesign --force --sign - --timestamp=none "$app" >/dev/null 2>&1
+  open -n "$app" --args "$receiver_output" "$receiver_ready"
+
+  for (( attempt = 1; attempt <= 100; attempt++ )); do
+    [[ -f "$receiver_ready" ]] && break
+    sleep 0.02
+  done
+  [[ -f "$receiver_ready" ]] || {
+    print -u2 -- "FAIL: focused dictation paste receiver did not become ready"
+    return 1
+  }
+  paste_receiver_pid="$(tr -d '[:space:]' < "$receiver_ready")"
+  [[ "$paste_receiver_pid" == <-> ]] && kill -0 "$paste_receiver_pid" 2>/dev/null || {
+    print -u2 -- "FAIL: focused dictation paste receiver PID is invalid"
+    return 1
+  }
+
+  # Force production delivery to switch away from current app, then activate
+  # receiver by bundle ID before posting Command-V.
+  open -b com.apple.finder
+  sleep 0.2
+}
 
 if [[ ! "$RUNS" == <-> ]] || (( RUNS < 1 || RUNS > 20 )); then
   print -u2 -- "COMMAND_DICTATION_PROBE_RUNS must be between 1 and 20"
@@ -223,7 +283,8 @@ if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/nul
   exit 1
 fi
 
-insert_reply="$(printf 'dictationinsertprobe\n' | nc -U -w 15 "$SOCKET" 2>/dev/null || true)"
+start_paste_receiver
+insert_reply="$(printf 'dictationinsertprobe %s\t%s\n' "$PASTE_RECEIVER_BUNDLE" "$receiver_output" | nc -U -w 15 "$SOCKET" 2>/dev/null || true)"
 if [[ -z "$insert_reply" ]]; then
   print -u2 -- "FAIL: installed dictation insert probe returned no response"
   exit 1

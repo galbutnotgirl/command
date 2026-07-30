@@ -122,9 +122,19 @@ verify_durable_state() {
       --before "$STATE_BEFORE" --after "$STATE_AFTER"
 }
 
+gui_session_is_locked() {
+  case "${COMMAND_TEST_GUI_SESSION:-}" in
+    locked) return 0 ;;
+    unlocked) return 1 ;;
+  esac
+  ioreg -n Root -d1 2>/dev/null | grep -q '"CGSSessionScreenIsLocked"=Yes'
+}
+
 [[ "$COMMIT" != "unknown" ]] || fail "repository commit is unavailable"
 [[ -z "$(git -C "$DIR" status --porcelain 2>/dev/null)" ]] \
   || fail "working tree must be clean so report identifies exact source"
+gui_session_is_locked \
+  && fail "GUI session is locked; unlock Mac and rerun qualification because focus and paste delivery cannot run behind loginwindow"
 [[ "${COMMAND_CLEAN_INSTALL:-0}" == "0" ]] \
   || fail "clean install is forbidden during qualification"
 [[ "${COMMAND_ALLOW_TCC_IDENTITY_CHANGE:-0}" == "0" ]] \

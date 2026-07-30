@@ -2000,8 +2000,6 @@ private final class DictationProbeResponseBox: @unchecked Sendable {
     }
 }
 
-private var _installedDictationInsertProbeIsActive = false
-
 private final class DictationInsertProbeResponseBox: @unchecked Sendable {
     private let lock = NSLock()
     private var execution: DictationFinalDeliveryExecution?
@@ -2081,37 +2079,15 @@ private final class InstalledDictationInsertProbeHarness {
     let targetBundle: String
     let previousBundle: String
     private let pasteboardSnapshot: InstalledPasteboardSnapshot
-    private let panel: NSPanel
-    private let textView: NSTextView
+    private let receiverURL: URL
 
-    init?() {
-        guard let bundle = Bundle.main.bundleIdentifier, !bundle.isEmpty else { return nil }
-        targetBundle = bundle
+    init?(targetBundle: String, receiverPath: String) {
+        guard !targetBundle.isEmpty, !receiverPath.isEmpty else { return nil }
+        self.targetBundle = targetBundle
+        receiverURL = URL(fileURLWithPath: receiverPath)
         previousBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         pasteboardSnapshot = InstalledPasteboardSnapshot(.general)
         guard pasteboardSnapshot.isRestorable else { return nil }
-
-        panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 80),
-            styleMask: [.titled],
-            backing: .buffered,
-            defer: false
-        )
-        textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 320, height: 80))
-        textView.isEditable = true
-        textView.isSelectable = true
-        textView.string = ""
-        panel.contentView = textView
-        panel.title = "Command Dictation Delivery Check"
-        panel.isReleasedWhenClosed = false
-        panel.alphaValue = 0.01
-        panel.level = .floating
-
-        _installedDictationInsertProbeIsActive = true
-        _ = NSApp.setActivationPolicy(.regular)
-        panel.center()
-        panel.makeKeyAndOrderFront(nil)
-        panel.makeFirstResponder(textView)
     }
 
     func start(
@@ -2119,52 +2095,6 @@ private final class InstalledDictationInsertProbeHarness {
         response: DictationInsertProbeResponseBox,
         completed: DispatchSemaphore
     ) {
-        // Request Launch Services activation while the main run loop is free to
-        // receive the reopen event. Production dispatch can then verify focus
-        // synchronously without deadlocking this process on its own event.
-        activate(targetBundle)
-        activateReceiverThenStart(
-            rawText: rawText,
-            response: response,
-            completed: completed,
-            attemptsRemaining: 120
-        )
-    }
-
-    private func activateReceiverThenStart(
-        rawText: String,
-        response: DictationInsertProbeResponseBox,
-        completed: DispatchSemaphore,
-        attemptsRemaining: Int
-    ) {
-        NSApp.activate(ignoringOtherApps: true)
-        panel.orderFrontRegardless()
-        panel.makeKey()
-        panel.makeFirstResponder(textView)
-
-        guard NSApp.isActive, panel.isKeyWindow, textView.window?.firstResponder === textView else {
-            guard attemptsRemaining > 1 else {
-                Task { @MainActor in
-                    let execution = await DictationOverlay.shared.runInstalledInsertDeliveryProbe(
-                        rawText: rawText,
-                        targetBundle: targetBundle
-                    )
-                    response.store(execution)
-                    completed.signal()
-                }
-                return
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [self] in
-                activateReceiverThenStart(
-                    rawText: rawText,
-                    response: response,
-                    completed: completed,
-                    attemptsRemaining: attemptsRemaining - 1
-                )
-            }
-            return
-        }
-
         Task { @MainActor in
             let execution = await DictationOverlay.shared.runInstalledInsertDeliveryProbe(
                 rawText: rawText,
@@ -2176,11 +2106,11 @@ private final class InstalledDictationInsertProbeHarness {
     }
 
     func receiverContains(_ expected: String) -> Bool {
-        textView.string == expected
+        guard let data = try? Data(contentsOf: receiverURL) else { return false }
+        return String(decoding: data, as: UTF8.self) == expected
     }
 
     func finish() -> (clipboardRestored: Bool, previousAppRestored: Bool) {
-        panel.orderOut(nil)
         let pasteboard = NSPasteboard.general
         let restored = pasteboardSnapshot.restore(to: pasteboard)
         DictationOverlay.shared.stampClipboardSource(
@@ -2193,8 +2123,6 @@ private final class InstalledDictationInsertProbeHarness {
             activate(previousBundle)
             previousRestored = waitForActive(previousBundle)
         }
-        _installedDictationInsertProbeIsActive = false
-        applyDockPolicy()
         return (restored, previousRestored)
     }
 }
@@ -2206,7 +2134,7 @@ private func encodeDictationInsertProbeResult(_ result: DictationInsertProbeResu
     return String(decoding: data, as: UTF8.self)
 }
 
-func runInstalledDictationInsertProbe() -> String {
+func runInstalledDictationInsertProbe(targetBundle: String, receiverPath: String) -> String {
     dispatchPrecondition(condition: .notOnQueue(.main))
     let startedAt = Date()
     guard AXIsProcessTrusted() else {
@@ -2217,11 +2145,16 @@ func runInstalledDictationInsertProbe() -> String {
     }
 
     var harness: InstalledDictationInsertProbeHarness?
-    DispatchQueue.main.sync { harness = InstalledDictationInsertProbeHarness() }
+    DispatchQueue.main.sync {
+        harness = InstalledDictationInsertProbeHarness(
+            targetBundle: targetBundle,
+            receiverPath: receiverPath
+        )
+    }
     guard let harness else {
         return encodeDictationInsertProbeResult(DictationInsertProbeResult(
             status: .receiverUnavailable,
-            failure: "Could not create focused paste receiver or safely snapshot clipboard."
+            failure: "Could not connect to focused paste receiver or safely snapshot clipboard."
         ))
     }
 
@@ -3504,7 +3437,24 @@ func handle(_ line: String) -> String {
     case "dictationrecoveryprobe": return runInstalledDictationRecoveryProbe()
     case "dictationwatchdogprobe": return runInstalledDictationWatchdogProbe()
     case "dictationstreamwatchdogprobe": return runInstalledDictationWatchdogProbe(scenario: .midstream)
-    case "dictationinsertprobe": return runInstalledDictationInsertProbe()
+    case "dictationinsertprobe":
+        guard parts.count > 1 else {
+            return encodeDictationInsertProbeResult(DictationInsertProbeResult(
+                status: .receiverUnavailable,
+                failure: "Paste receiver bundle and output path are required."
+            ))
+        }
+        let probeArguments = parts[1].split(separator: "\t", maxSplits: 1).map(String.init)
+        guard probeArguments.count == 2 else {
+            return encodeDictationInsertProbeResult(DictationInsertProbeResult(
+                status: .receiverUnavailable,
+                failure: "Paste receiver arguments are malformed."
+            ))
+        }
+        return runInstalledDictationInsertProbe(
+            targetBundle: probeArguments[0],
+            receiverPath: probeArguments[1]
+        )
     case "voicedispatchprobe": return runInstalledVoiceDispatchProbe()
     case "hotkeyhealthprobe":
         let requested = Int(parts.count > 1 ? parts[1] : "") ?? 20
@@ -3597,7 +3547,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if _installedDictationInsertProbeIsActive { return false }
         openLastSettingsTab()
         return true
     }

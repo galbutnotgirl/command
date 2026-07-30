@@ -41,7 +41,8 @@
       "agent/Sources/ClaudeCommandCore/VoiceDispatchProbe.swift",
         "agent/Sources/ClaudeCommandCore/DictationSessionHealth.swift",
         "agent/Sources/ClaudeCommandCore/DictationTriggerCoordinator.swift",
-        "agent/Tools/DictationModelProbe/main.swift"
+        "agent/Tools/DictationModelProbe/main.swift",
+        "agent/Tools/DictationPasteReceiver/main.swift"
       ],
       "evidence": [
         "agent/Tests/ClaudeCommandCoreTests/VoiceSettingsTests.swift",
