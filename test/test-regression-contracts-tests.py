@@ -94,7 +94,7 @@ class RegressionContractValidatorTests(unittest.TestCase):
     def testAreaMinimumCannotBeLowered(self) -> None:
         document = copy.deepcopy(self.document)
         document["coverageRequirements"]["dictation"] = 1
-        self.assertTrue(any("cannot drop below 7" in item for item in self.failures(document)))
+        self.assertTrue(any("cannot drop below 8" in item for item in self.failures(document)))
 
     def testMandatoryGateDeclarationCannotBeRemoved(self) -> None:
         document = copy.deepcopy(self.document)

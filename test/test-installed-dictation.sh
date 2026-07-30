@@ -92,9 +92,79 @@ print("{}\t{}\t{}".format(
   sleep 0.2
 done
 
+lifecycle_reply=""
+for (( readiness_attempt = 1; readiness_attempt <= 100; readiness_attempt++ )); do
+  lifecycle_reply="$(printf 'dictationlifecycleprobe\n' | nc -U -w 35 "$SOCKET" 2>/dev/null || true)"
+  loading_phase="$(python3 -c '
+import json, sys
+try:
+    result = json.loads(sys.argv[1])
+except Exception:
+    print("no")
+else:
+    waiting = result.get("status") == "modelUnavailable" and result.get("capturePhase") == "loading"
+    print("yes" if waiting else "no")
+' "$lifecycle_reply")"
+  [[ "$loading_phase" == "yes" ]] || break
+  sleep 0.1
+done
+if [[ -z "$lifecycle_reply" ]]; then
+  print -u2 -- "FAIL: production dictation lifecycle probe returned no response"
+  exit 1
+fi
+lifecycle_summary="$(python3 -c '
+import json, sys
+result = json.loads(sys.argv[1])
+required = {
+    "ok", "status", "sessionID", "modelStatus", "capturePhase", "terminalStage",
+    "capturedBuffers", "transcriptionUpdates", "finalCharacters", "inputDevice",
+    "durationMilliseconds",
+}
+missing = required.difference(result)
+if missing:
+    raise SystemExit("missing fields: " + ", ".join(sorted(missing)))
+if result["ok"] is not True or result["status"] != "passed":
+    raise SystemExit(result.get("failure") or f"lifecycle probe failed: {result}")
+if result["modelStatus"] != "ready":
+    raise SystemExit("production lifecycle passed without ready model")
+if result["capturePhase"] != "idle":
+    raise SystemExit("production lifecycle left recorder non-idle")
+if result["terminalStage"] not in {"completed", "empty"}:
+    raise SystemExit("production lifecycle has nonterminal session health")
+if not isinstance(result["capturedBuffers"], int) or result["capturedBuffers"] < 4:
+    raise SystemExit("production lifecycle passed without four audio buffers")
+if not isinstance(result["durationMilliseconds"], int) or result["durationMilliseconds"] < 1:
+    raise SystemExit("production lifecycle has invalid duration")
+print("{}\t{}\t{}\t{}\t{}".format(
+    result["sessionID"],
+    result["capturedBuffers"],
+    result["transcriptionUpdates"],
+    result["terminalStage"],
+    result["durationMilliseconds"],
+))
+' "$lifecycle_reply")" || {
+  print -u2 -- "FAIL: production dictation lifecycle probe: ${lifecycle_summary:-invalid response}"
+  print -u2 -- "$lifecycle_reply"
+  exit 1
+}
+lifecycle_session="${lifecycle_summary%%$'\t'*}"
+lifecycle_remainder="${lifecycle_summary#*$'\t'}"
+lifecycle_buffers="${lifecycle_remainder%%$'\t'*}"
+lifecycle_remainder="${lifecycle_remainder#*$'\t'}"
+lifecycle_updates="${lifecycle_remainder%%$'\t'*}"
+lifecycle_remainder="${lifecycle_remainder#*$'\t'}"
+lifecycle_stage="${lifecycle_remainder%%$'\t'*}"
+lifecycle_duration="${lifecycle_remainder##*$'\t'}"
+
+current_pid="$(job_pid)"
+if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/null; then
+  print -u2 -- "FAIL: Command restarted during production dictation lifecycle probe"
+  exit 1
+fi
+
 history_after="$(history_digest)"
 if [[ "$history_after" != "$history_before" ]]; then
-  print -u2 -- "FAIL: microphone probe changed dictation history"
+  print -u2 -- "FAIL: dictation probes changed dictation history"
   exit 1
 fi
 
@@ -102,4 +172,5 @@ print -- "installed dictation probe passed"
 print -- "  pid: ${initial_pid} (stable)"
 print -- "  probes: ${RUNS}/${RUNS}"
 print -- "  audio buffers: ${total_buffers} total"
+print -- "  production lifecycle: session ${lifecycle_session}, ${lifecycle_buffers} buffers, ${lifecycle_updates} updates, ${lifecycle_stage}, ${lifecycle_duration} ms"
 print -- "  dictation history: unchanged"

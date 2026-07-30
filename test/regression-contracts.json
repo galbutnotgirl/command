@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "coverageRequirements": {
     "app-runtime": 2,
-    "dictation": 7,
+    "dictation": 8,
     "shortcuts-and-input": 1,
     "assistant-routing": 1,
     "clipboard-history": 1,
@@ -139,6 +139,30 @@
         }
       ],
       "runtimeEvidence": "test/test-installed-dictation.sh must pass repeated installed-process captures with positive buffer counts, stable PID, and unchanged dictation history."
+    },
+    {
+      "id": "DICT-008",
+      "areas": ["dictation"],
+      "risk": "Microphone buffers and standalone model fixtures pass while production trigger, model stream, stop-tail drain, ASR finish, or terminal cleanup is broken in installed app.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationLifecycleProbeTests.swift",
+          "contains": "testPassedLifecycleCarriesProductionMetrics"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationLifecycleProbeTests.swift",
+          "contains": "testLifecycleResultRoundTripsAsSingleLineJSON"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "production lifecycle probe uses real dictation trigger"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "diagnostic dictation bypasses processing and history"
+        }
+      ],
+      "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must drive production trigger and release paths through model loading, microphone streaming, four or more buffers, stop-tail drain, ASR finish, and clean completed or empty terminal health without adding dictation history."
     },
     {
       "id": "APP-001",

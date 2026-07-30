@@ -196,6 +196,7 @@ final class HistoryStore: ObservableObject {
         case .claude: modeLabel = "claude"
         case .claude2: modeLabel = "claude2"
         case .customAction: modeLabel = "custom"
+        case .diagnostic: modeLabel = "diagnostic"
         }
         let r = Record(timestamp: Date(), raw: raw, processed: processed, mode: modeLabel)
         records.insert(r, at: 0)

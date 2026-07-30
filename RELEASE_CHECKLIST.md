@@ -42,6 +42,13 @@ With installed Command running under launchd, run `./test/test-installed-restart
 `./test/test-installed-runtime.sh`. Restart must return `ok`, replace PID, recover socket,
 preserve UserDefaults, and produce no crash report before idle soak begins.
 
+Run `./test/test-installed-dictation.sh` before and after restart. It performs repeated raw
+microphone-buffer probes, then drives production trigger and release paths through model
+streaming, recorder buffers, stop-tail drain, ASR finish, and clean terminal health. Diagnostic
+mode must leave dictation history unchanged. This installed check does not prove physical-key
+dispatch or spoken-content accuracy; manual shortcut checks and cached final-word fixtures cover
+those boundaries.
+
 With current Claude and ChatGPT apps running, verify installed assistant contracts without opening or submitting conversations:
 
 ```bash
@@ -62,7 +69,8 @@ Review `test/regression-contracts.json` for behavior touched by this release. `.
 Run `time ./qualify-installed-build.sh` on exact clean release commit no more
 than 24 hours before publishing. `release.sh --publish` verifies all eight
 installed checks before gates and again before tagging; stale, mismatched,
-failed, clean-install, or edited reports stop publication.
+failed, clean-install, or edited reports stop publication. Dictation lifecycle
+checks run on both sides of qualification's launchd restart.
 
 Run `./test/test-regression-impact.sh` and review `test/regression-impact.json`. Every changed runtime area since latest `v*` tag must include matching automated evidence before release preflight can pass.
 

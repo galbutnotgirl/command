@@ -14,7 +14,7 @@ MANIFEST = ROOT / "test" / "regression-contracts.json"
 IMPACT_CONFIG = ROOT / "test" / "regression-impact.json"
 BASELINE_AREA_MINIMUMS = {
     "app-runtime": 2,
-    "dictation": 7,
+    "dictation": 8,
     "shortcuts-and-input": 1,
     "assistant-routing": 1,
     "clipboard-history": 1,

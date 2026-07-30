@@ -140,7 +140,9 @@ final class DictationOverlay: NSObject {
         isVisible = true
         isFinishing = false
         menuBar.setRecording(true)
-        playUISound(settingsModel.startSound, role: .start)
+        if mode != .diagnostic {
+            playUISound(settingsModel.startSound, role: .start)
+        }
         startLevelUpdates()
         startCaptureWatchdog()
         return true
@@ -161,7 +163,9 @@ final class DictationOverlay: NSObject {
         guard isVisible, !isFinishing else { return }
         isFinishing = true
         resetDictTrigMode()
-        playStopSound()
+        if recorder.currentMode != .diagnostic {
+            playStopSound()
+        }
         recorder.stop()
     }
 
@@ -236,6 +240,11 @@ final class DictationOverlay: NSObject {
             guard let self = self else { return }
             Task { @MainActor in
                 appendLog("[dictation] final received mode=\(String(describing: mode)) rawChars=\(rawText.count)")
+                if mode == .diagnostic {
+                    appendLog("[dictation-probe] diagnostic final suppressed chars=\(rawText.count)")
+                    self.hide()
+                    return
+                }
                 let processed = await TranscriptProcessor.process(
                     rawText,
                     vocab: .shared,
@@ -287,6 +296,9 @@ final class DictationOverlay: NSObject {
         stampDictationSource(cc: pb.changeCount)   // after the write — exact cc, no race
 
         switch mode {
+        case .diagnostic:
+            appendLog("[dictation-probe] diagnostic dispatch suppressed chars=\(text.count)")
+
         case .insert:
             guard !prevBundle.isEmpty else {
                 appendLog("[dictation] insert failed: previous app bundle missing")

@@ -256,6 +256,7 @@ DICTATION_OVERLAY_SOURCE="$(cat "${DIR}/agent/DictationOverlay.swift")"
 RECORDER_SOURCE="$(cat "${DIR}/agent/Recorder.swift")"
 DICTATION_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationSessionHealth.swift")"
 DICTATION_PROBE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationCaptureProbe.swift")"
+DICTATION_LIFECYCLE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationLifecycleProbe.swift")"
 DICTATION_TRIGGER_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationTriggerCoordinator.swift")"
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
   'helper_newchat ||'
@@ -279,6 +280,8 @@ assert_contains "dictation release paths share one state transition" "$AGENT_SOU
   'releaseDictationTrigger()'
 assert_contains "installed microphone probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "dictationprobe": return runInstalledDictationProbe()'
+assert_contains "installed production lifecycle probe is reachable through owner-only socket" "$AGENT_SOURCE" \
+  'case "dictationlifecycleprobe": return runInstalledDictationLifecycleProbe()'
 assert_contains "installed restart can identify socket-owning process" "$AGENT_SOURCE" \
   'case "runtimepid": return "\(ProcessInfo.processInfo.processIdentifier)"'
 assert_contains "installed restart requires socket PID to match launchd" "$(cat "${DIR}/test/test-installed-restart.sh")" \
@@ -289,6 +292,19 @@ assert_contains "installed microphone probe rejects zero buffers" "$DICTATION_PR
   'capturedBuffers > 0 ? .passed : .noAudioBuffers'
 assert_contains "installed microphone probe reports busy capture phase" "$RECORDER_SOURCE" \
   'capturePhase: state.rawValue'
+assert_contains "production lifecycle probe uses real dictation trigger" "$AGENT_SOURCE" \
+  'triggerDictation(mode: .diagnostic, keycode: nil, pollForRelease: false)'
+assert_contains "production lifecycle probe uses real dictation release" "$AGENT_SOURCE" \
+  'releaseDictationTrigger()'
+assert_contains "production lifecycle probe requires recorder buffers" "$AGENT_SOURCE" \
+  'runtime.capturedBuffers >= 4'
+assert_contains "production lifecycle probe returns typed metrics" "$DICTATION_LIFECYCLE_SOURCE" \
+  'public struct DictationLifecycleProbeResult'
+assert_contains "installed dictation check executes production lifecycle" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  "printf 'dictationlifecycleprobe\\n'"
+assert_before "diagnostic dictation bypasses processing and history" "$DICTATION_OVERLAY_SOURCE" \
+  'if mode == .diagnostic {' \
+  'HistoryStore.shared.add(raw: rawText'
 assert_contains "installed microphone check waits only for model loading" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   'result.get("status") == "recorderBusy" and result.get("capturePhase") == "loading"'
 assert_contains "dictation startup rejection explains model loading" "$DICTATION_OVERLAY_SOURCE" \

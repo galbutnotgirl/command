@@ -1932,6 +1932,227 @@ func runInstalledDictationProbe() -> String {
     return String(decoding: data, as: UTF8.self)
 }
 
+private struct DictationLifecycleRuntimeSnapshot {
+    let modelReady: Bool
+    let modelStatus: String
+    let capturePhase: String
+    let overlayVisible: Bool
+    let capturedBuffers: Int
+}
+
+private func dictationLifecycleRuntimeSnapshot() -> DictationLifecycleRuntimeSnapshot {
+    var snapshot: DictationLifecycleRuntimeSnapshot?
+    DispatchQueue.main.sync {
+        let modelReady: Bool
+        let modelStatus: String
+        switch recorder.modelStatus {
+        case .ready:
+            modelReady = true
+            modelStatus = "ready"
+        case .notDownloaded:
+            modelReady = false
+            modelStatus = "notDownloaded"
+        case .downloading(let progress):
+            modelReady = false
+            modelStatus = "downloading:\(Int((progress * 100).rounded()))"
+        case .error(let message):
+            modelReady = false
+            modelStatus = "error:\(message)"
+        }
+        snapshot = DictationLifecycleRuntimeSnapshot(
+            modelReady: modelReady,
+            modelStatus: modelStatus,
+            capturePhase: recorder.state.rawValue,
+            overlayVisible: DictationOverlay.shared.isVisible,
+            capturedBuffers: recorder.capturedBufferCount
+        )
+    }
+    return snapshot ?? DictationLifecycleRuntimeSnapshot(
+        modelReady: false,
+        modelStatus: "unknown",
+        capturePhase: "unknown",
+        overlayVisible: false,
+        capturedBuffers: 0
+    )
+}
+
+private func encodeDictationLifecycleProbeResult(_ result: DictationLifecycleProbeResult) -> String {
+    guard let data = try? DictationLifecycleProbeCoding.encode(result) else {
+        return #"{"ok":false,"status":"failed","failure":"Could not encode dictation lifecycle probe result."}"#
+    }
+    return String(decoding: data, as: UTF8.self)
+}
+
+private func makeDictationLifecycleProbeResult(
+    status: DictationLifecycleProbeStatus,
+    startedAt: Date,
+    modelStatus: String,
+    runtime: DictationLifecycleRuntimeSnapshot,
+    health: DictationSessionHealth?,
+    failure: String? = nil
+) -> String {
+    encodeDictationLifecycleProbeResult(DictationLifecycleProbeResult(
+        status: status,
+        sessionID: health?.sessionID ?? 0,
+        modelStatus: modelStatus,
+        capturePhase: runtime.capturePhase,
+        terminalStage: health?.stage.rawValue ?? "none",
+        capturedBuffers: health?.capturedBuffers ?? runtime.capturedBuffers,
+        transcriptionUpdates: health?.transcriptionUpdates ?? 0,
+        finalCharacters: health?.finalCharacters ?? 0,
+        inputDevice: health?.inputDevice ?? "unknown",
+        durationMilliseconds: Int(Date().timeIntervalSince(startedAt) * 1_000),
+        failure: failure ?? health?.failure
+    ))
+}
+
+private func cancelInstalledDictationLifecycleProbe() {
+    dispatchPrecondition(condition: .notOnQueue(.main))
+    DispatchQueue.main.sync {
+        recorder.cancel()
+        DictationOverlay.shared.hide()
+    }
+}
+
+func runInstalledDictationLifecycleProbe() -> String {
+    let startedAt = Date()
+    let initial = dictationLifecycleRuntimeSnapshot()
+    guard initial.modelReady else {
+        return makeDictationLifecycleProbeResult(
+            status: .modelUnavailable,
+            startedAt: startedAt,
+            modelStatus: initial.modelStatus,
+            runtime: initial,
+            health: nil,
+            failure: "Parakeet model is not ready."
+        )
+    }
+    guard initial.capturePhase == DictationCapturePhase.idle.rawValue,
+          !initial.overlayVisible else {
+        return makeDictationLifecycleProbeResult(
+            status: .recorderBusy,
+            startedAt: startedAt,
+            modelStatus: initial.modelStatus,
+            runtime: initial,
+            health: latestDictationSessionHealth(),
+            failure: "Dictation recorder is busy before lifecycle probe."
+        )
+    }
+
+    let previousHealth = latestDictationSessionHealth()
+    appendLog("[dictation-probe] lifecycle requested previousSession=\(previousHealth?.sessionID ?? 0)")
+    DispatchQueue.main.async {
+        triggerDictation(mode: .diagnostic, keycode: nil, pollForRelease: false)
+    }
+
+    let captureDeadline = Date().addingTimeInterval(12)
+    var probeHealth: DictationSessionHealth?
+    while Date() < captureDeadline {
+        let runtime = dictationLifecycleRuntimeSnapshot()
+        if let health = latestDictationSessionHealth(),
+           health.mode == String(describing: DictMode.diagnostic),
+           health != previousHealth {
+            probeHealth = health
+            if health.stage == .failed || health.stage == .cancelled {
+                cancelInstalledDictationLifecycleProbe()
+                return makeDictationLifecycleProbeResult(
+                    status: .failed,
+                    startedAt: startedAt,
+                    modelStatus: initial.modelStatus,
+                    runtime: runtime,
+                    health: health,
+                    failure: health.failure ?? "Production dictation capture failed before release."
+                )
+            }
+            if runtime.capturedBuffers >= 4 { break }
+        }
+        if runtime.capturePhase == DictationCapturePhase.error.rawValue {
+            cancelInstalledDictationLifecycleProbe()
+            return makeDictationLifecycleProbeResult(
+                status: .failed,
+                startedAt: startedAt,
+                modelStatus: initial.modelStatus,
+                runtime: runtime,
+                health: probeHealth,
+                failure: probeHealth?.failure ?? "Production recorder entered error state."
+            )
+        }
+        usleep(50_000)
+    }
+
+    guard let capturedHealth = probeHealth else {
+        let runtime = dictationLifecycleRuntimeSnapshot()
+        cancelInstalledDictationLifecycleProbe()
+        return makeDictationLifecycleProbeResult(
+            status: .startRejected,
+            startedAt: startedAt,
+            modelStatus: initial.modelStatus,
+            runtime: runtime,
+            health: nil,
+            failure: "Production dictation trigger did not create a session."
+        )
+    }
+    guard dictationLifecycleRuntimeSnapshot().capturedBuffers >= 4 else {
+        let runtime = dictationLifecycleRuntimeSnapshot()
+        cancelInstalledDictationLifecycleProbe()
+        return makeDictationLifecycleProbeResult(
+            status: .captureTimedOut,
+            startedAt: startedAt,
+            modelStatus: initial.modelStatus,
+            runtime: runtime,
+            health: capturedHealth,
+            failure: "Production dictation did not capture four audio buffers within 12 seconds."
+        )
+    }
+
+    DispatchQueue.main.sync {
+        releaseDictationTrigger()
+    }
+
+    let finishDeadline = Date().addingTimeInterval(15)
+    while Date() < finishDeadline {
+        let runtime = dictationLifecycleRuntimeSnapshot()
+        if let health = latestDictationSessionHealth(), health.sessionID == capturedHealth.sessionID {
+            probeHealth = health
+            if health.stage == .failed || health.stage == .cancelled {
+                cancelInstalledDictationLifecycleProbe()
+                return makeDictationLifecycleProbeResult(
+                    status: .failed,
+                    startedAt: startedAt,
+                    modelStatus: initial.modelStatus,
+                    runtime: runtime,
+                    health: health,
+                    failure: health.failure ?? "Production dictation failed while finishing."
+                )
+            }
+            if (health.stage == .completed || health.stage == .empty),
+               runtime.capturePhase == DictationCapturePhase.idle.rawValue,
+               !runtime.overlayVisible {
+                appendLog("[dictation-probe] lifecycle passed \(health.diagnosticSummary)")
+                return makeDictationLifecycleProbeResult(
+                    status: .passed,
+                    startedAt: startedAt,
+                    modelStatus: initial.modelStatus,
+                    runtime: runtime,
+                    health: health
+                )
+            }
+        }
+        usleep(50_000)
+    }
+
+    let runtime = dictationLifecycleRuntimeSnapshot()
+    cancelInstalledDictationLifecycleProbe()
+    return makeDictationLifecycleProbeResult(
+        status: .finishTimedOut,
+        startedAt: startedAt,
+        modelStatus: initial.modelStatus,
+        runtime: runtime,
+        health: probeHealth,
+        failure: "Production dictation did not reach a clean terminal state within 15 seconds."
+    )
+}
+
 func handle(_ line: String) -> String {
     let parts = line.split(separator: " ", maxSplits: 1).map(String.init)
     switch parts.first ?? "" {
@@ -2002,6 +2223,7 @@ func handle(_ line: String) -> String {
     case "showsettings":  DispatchQueue.main.async { settingsWindow.show(tab: .setup) }; return "ok"
     case "runtimepid": return "\(ProcessInfo.processInfo.processIdentifier)"
     case "dictationprobe": return runInstalledDictationProbe()
+    case "dictationlifecycleprobe": return runInstalledDictationLifecycleProbe()
     case "restart":
         // Reply before beginning the detached handoff so callers can distinguish
         // an accepted restart from a dead socket.

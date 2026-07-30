@@ -8,7 +8,13 @@ import ClaudeCommandCore
 
 // ─── Mode ──────────────────────────────────────────────────────────────────────
 
-enum DictMode: Equatable { case insert, claude, claude2, customAction(actionID: String, triggerID: String) }
+enum DictMode: Equatable {
+    case insert
+    case claude
+    case claude2
+    case customAction(actionID: String, triggerID: String)
+    case diagnostic
+}
 
 // AVAudioEngine owns tap buffers and may reuse them as soon as its callback
 // returns. Deep-copy before crossing the AsyncStream boundary so transcription
