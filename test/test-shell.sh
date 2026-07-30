@@ -328,6 +328,8 @@ assert_contains "installed dictation check injects live capture failure" "$(cat 
   "printf 'dictationrecoveryprobe\\n'"
 assert_contains "dictation failure synchronously releases capture resources" "$RECORDER_SOURCE" \
   'releaseCaptureResources(finishManager: true)'
+assert_contains "successful dictation releases startup ownership" "$RECORDER_SOURCE" \
+  'self.captureStartupBegan = false'
 assert_contains "dictation recovery waits for asynchronous resource teardown" "$RECORDER_SOURCE" \
   'activeManagerCleanupTaskCount'
 assert_contains "dictation recovery injects only after live buffers" "$RECORDER_SOURCE" \

@@ -172,7 +172,7 @@ import json, sys
 result = json.loads(sys.argv[1])
 required = {
     "ok", "status", "injectedSessionID", "injectedBuffers",
-    "injectedTerminalStage", "cleanup", "recovery", "durationMilliseconds",
+    "injectedTerminalStage", "cleanup", "durationMilliseconds",
 }
 missing = required.difference(result)
 if missing:

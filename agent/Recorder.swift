@@ -629,6 +629,7 @@ final class Recorder: ObservableObject {
                 appendLog("[dictation] finish session=\(finishingSession) finalChars=\(text.count) partialChars=\(self.lastTranscript.count) selectedChars=\(best.count)")
                 await capturedStreamTask?.value
                 guard self.sessionID == finishingSession else { return }
+                self.captureStartupBegan = false
                 self.state = .idle
                 self.audioLevel = 0
                 if self.shouldDispatchDictation(best) {
@@ -644,6 +645,7 @@ final class Recorder: ObservableObject {
                 self.log("finish() threw: \(error)")
                 await capturedStreamTask?.value
                 guard self.sessionID == finishingSession else { return }
+                self.captureStartupBegan = false
                 self.state = .idle
                 self.audioLevel = 0
                 if self.shouldDispatchDictation(self.lastTranscript) {
