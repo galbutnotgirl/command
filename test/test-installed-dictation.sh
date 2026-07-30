@@ -46,9 +46,9 @@ start_paste_receiver() {
 </dict></plist>
 PLIST
   codesign --force --sign - --timestamp=none "$app" >/dev/null 2>&1
-  open -n "$app" --args "$receiver_output" "$receiver_ready"
+  open -n -F "$app" --args "$receiver_output" "$receiver_ready"
 
-  for (( attempt = 1; attempt <= 100; attempt++ )); do
+  for (( attempt = 1; attempt <= 250; attempt++ )); do
     [[ -f "$receiver_ready" ]] && break
     sleep 0.02
   done

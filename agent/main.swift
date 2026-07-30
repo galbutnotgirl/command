@@ -87,8 +87,12 @@ func postKey(_ k: CGKeyCode, cmd: Bool, opt: Bool = false, shift: Bool = false, 
 
 func activate(_ bundle: String) {
     guard !bundle.isEmpty else { return }
-    // open -b is reliable on all macOS (Tahoe: NSRunningApplication.activate()
-    // doesn't steal focus from another app when called from an LSUIElement process).
+    // Address running instances directly first. This covers apps outside indexed
+    // Applications folders and avoids selecting a stale duplicate by bundle ID.
+    for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundle) {
+        _ = app.activate(options: [.activateAllWindows])
+    }
+    // Keep Launch Services fallback for LSUIElement callers and apps not running yet.
     let t = Process(); t.launchPath = "/usr/bin/open"; t.arguments = ["-b", bundle]
     try? t.run()
 }
@@ -100,7 +104,7 @@ func waitForActive(_ bundle: String, attempts: Int = 120) -> Bool {
     guard !bundle.isEmpty else { return false }
     for _ in 0..<max(1, attempts) {
         if NSRunningApplication.runningApplications(withBundleIdentifier: bundle)
-            .first?.isActive == true { return true }
+            .contains(where: \.isActive) { return true }
         usleep(10_000)
     }
     return false

@@ -35,7 +35,10 @@ private final class ReceiverDelegate: NSObject, NSApplicationDelegate, NSTextVie
         window.makeFirstResponder(textView)
         NSApp.activate(ignoringOtherApps: true)
 
-        publishReadyWhenFocused(attemptsRemaining: 60)
+        // Production probe activates receiver by bundle ID and verifies focus
+        // before posting Command-V. Readiness only means window and editor exist;
+        // requiring this background helper to steal focus during launch is flaky.
+        DispatchQueue.main.async { [weak self] in self?.publishReady() }
     }
 
     func textDidChange(_ notification: Notification) {
@@ -43,26 +46,13 @@ private final class ReceiverDelegate: NSObject, NSApplicationDelegate, NSTextVie
         try? Data(textView.string.utf8).write(to: outputURL, options: .atomic)
     }
 
-    private func publishReadyWhenFocused(attemptsRemaining: Int) {
+    private func publishReady() {
         guard let window, let textView else {
             NSApp.terminate(nil)
             return
         }
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(textView)
-        NSApp.activate(ignoringOtherApps: true)
-        guard NSApp.isActive,
-              window.isKeyWindow,
-              textView.window?.firstResponder === textView else {
-            guard attemptsRemaining > 1 else {
-                NSApp.terminate(nil)
-                return
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
-                self?.publishReadyWhenFocused(attemptsRemaining: attemptsRemaining - 1)
-            }
-            return
-        }
         try? Data().write(to: outputURL, options: .atomic)
         let pid = ProcessInfo.processInfo.processIdentifier
         try? Data("\(pid)\n".utf8).write(to: readyURL, options: .atomic)
