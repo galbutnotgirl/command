@@ -34,7 +34,7 @@ assert_not_contains() {
 
 make_app() {
   local app_path="$1" version="$2" bundle_id="${3:-com.claudecommand}"
-  mkdir -p "$app_path/Contents/MacOS"
+  mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
   cat > "$app_path/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -44,8 +44,23 @@ make_app() {
   <key>CFBundleName</key><string>Command</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>${version}</string>
+  <key>ClaudeCommandGitBranch</key><string>main@aaaaaaa</string>
 </dict></plist>
 PLIST
+  python3 - "$app_path/Contents/Resources/regression-gates-attestation.json" "$version" <<'PY'
+import json, pathlib, sys
+gates = "regression-impact regression-contracts swift clipboard-watcher node assistant-contract shell build-transaction release-transaction install-state uninstall updater-swap restart release-policy qualification-orchestration qualification-report regression-attestation static-analysis docs pages string-review dictation-model".split()
+pathlib.Path(sys.argv[1]).write_text(json.dumps({
+    "schemaVersion": 1,
+    "result": "passed",
+    "suite": "command-full-regression-v1",
+    "commit": "a" * 40,
+    "branch": "main",
+    "version": sys.argv[2],
+    "generatedAt": "2026-07-30T10:00:00Z",
+    "requiredGates": gates,
+}), encoding="utf-8")
+PY
   print '#!/bin/sh\nexit 0' > "$app_path/Contents/MacOS/Command"
   chmod +x "$app_path/Contents/MacOS/Command"
   codesign --force --sign - --identifier "$bundle_id" "$app_path" >/dev/null 2>&1
@@ -74,6 +89,21 @@ assert_status "valid update installs" "$?" 0
 assert_eq "valid update replaces version" "$(version_of "$SUCCESS_DEST")" "2.0.0"
 assert_eq "valid update removes backup" "$([[ -e "${SUCCESS_DEST}.old" ]] && print yes || print no)" "no"
 assert_eq "in-app update preserves local Clipboard History" "$(cat "$CLIP_HISTORY")" "clipboard-history-sentinel"
+
+UNQUALIFIED_ROOT="${TMP_ROOT}/unqualified update"
+UNQUALIFIED_DEST="${UNQUALIFIED_ROOT}/Applications/Command.app"
+UNQUALIFIED_NEW="${UNQUALIFIED_ROOT}/download/Command.app"
+make_app "$UNQUALIFIED_DEST" "1.0.0"
+make_app "$UNQUALIFIED_NEW" "2.0.0"
+rm "$UNQUALIFIED_NEW/Contents/Resources/regression-gates-attestation.json"
+codesign --force --sign - --identifier com.claudecommand "$UNQUALIFIED_NEW" >/dev/null 2>&1
+set +e
+HOME="${TMP_ROOT}/home" zsh "$SWAPPER" 999999 "$UNQUALIFIED_NEW" "$UNQUALIFIED_DEST" \
+  com.claudecommand 2.0.0 "$TEST_REQUIREMENT" 0 >/dev/null 2>&1
+UNQUALIFIED_STATUS="$?"
+set -e
+assert_status "update without regression attestation fails" "$UNQUALIFIED_STATUS" 1
+assert_eq "unqualified update leaves current app untouched" "$(version_of "$UNQUALIFIED_DEST")" "1.0.0"
 
 ROLLBACK_ROOT="${TMP_ROOT}/version rollback"
 ROLLBACK_DEST="${ROLLBACK_ROOT}/Applications/Command.app"

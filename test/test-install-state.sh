@@ -47,12 +47,32 @@ cat > "$SOURCE_APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>com.claudecommand</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>9.9.9-test</string>
+  <key>ClaudeCommandGitBranch</key><string>main@aaaaaaa</string>
 </dict></plist>
 PLIST
+write_fixture_attestation() {
+  local version="${1:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$SOURCE_APP/Contents/Info.plist")}"
+  mkdir -p "$SOURCE_APP/Contents/Resources"
+  python3 - "$SOURCE_APP/Contents/Resources/regression-gates-attestation.json" "$version" <<'PY'
+import json, pathlib, sys
+gates = "regression-impact regression-contracts swift clipboard-watcher node assistant-contract shell build-transaction release-transaction install-state uninstall updater-swap restart release-policy qualification-orchestration qualification-report regression-attestation static-analysis docs pages string-review dictation-model".split()
+pathlib.Path(sys.argv[1]).write_text(json.dumps({
+    "schemaVersion": 1,
+    "result": "passed",
+    "suite": "command-full-regression-v1",
+    "commit": "a" * 40,
+    "branch": "main",
+    "version": sys.argv[2],
+    "generatedAt": "2026-07-30T10:00:00Z",
+    "requiredGates": gates,
+}), encoding="utf-8")
+PY
+}
 # Build unsigned Mach-O fixture so app signing embeds signature like production
 # Command. Scripts use xattr signatures; pre-signed system tools keep Apple seal.
 print 'int main(void) { return 0; }' \
   | /usr/bin/clang -x c - -o "$SOURCE_APP/Contents/MacOS/Command"
+write_fixture_attestation
 codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/null 2>&1
 
 cat > "$FAKE_BIN/launchctl" <<'SH'
@@ -107,9 +127,33 @@ run_install() {
   COMMAND_SOCKET_WAIT_ATTEMPTS="${6:-0}" \
   COMMAND_ALLOW_TCC_IDENTITY_CHANGE="${4:-0}" \
   COMMAND_CLEAN_INSTALL="${5:-0}" \
+  COMMAND_ALLOW_UNQUALIFIED_INSTALL="${7:-0}" \
   COMMAND_TEST_DEFAULTS_EXIST="${1:-0}" \
   zsh "$INSTALLER" 2>&1
 }
+
+: > "$DEFAULTS_LOG"
+: > "$LIFECYCLE_LOG"
+mv "$SOURCE_APP/Contents/Resources/regression-gates-attestation.json" "$TMP_ROOT/attestation.saved"
+codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/null 2>&1
+MISSING_ATTESTATION_OUTPUT="$(run_install 0)"
+MISSING_ATTESTATION_STATUS=$?
+assert_true "installer rejects build without regression attestation" test "$MISSING_ATTESTATION_STATUS" -ne 0
+assert_contains "missing attestation rejection directs qualified install" \
+  "Run ./qualify-installed-build.sh" "$MISSING_ATTESTATION_OUTPUT"
+assert_true "unqualified build cannot create install directory" test ! -e "$FAKE_HOME/Applications/Command.app"
+mv "$TMP_ROOT/attestation.saved" "$SOURCE_APP/Contents/Resources/regression-gates-attestation.json"
+codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/null 2>&1
+
+write_fixture_attestation "0.0.0-mismatch"
+codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/null 2>&1
+: > "$LIFECYCLE_LOG"
+MISMATCHED_ATTESTATION_OUTPUT="$(run_install 0)"
+MISMATCHED_ATTESTATION_STATUS=$?
+assert_true "installer rejects attestation for another version" test "$MISMATCHED_ATTESTATION_STATUS" -ne 0
+assert_not_contains "mismatched attestation fails before app mutation" "launchctl bootout" "$(cat "$LIFECYCLE_LOG")"
+write_fixture_attestation
+codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/null 2>&1
 
 FRESH_OUTPUT="$(run_install 0)"
 FRESH_DEFAULTS="$(cat "$DEFAULTS_LOG")"
@@ -160,6 +204,7 @@ assert_true "incremental install stops launchd and Command before bundle sync" \
 /usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 9.9.10-test' "$SOURCE_APP/Contents/Info.plist"
 mkdir -p "$SOURCE_APP/Contents/Resources"
 print -- "new-build-only" > "$SOURCE_APP/Contents/Resources/new-build-only.txt"
+write_fixture_attestation
 codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/null 2>&1
 mkdir -p "$FAKE_HOME/.claude/state"
 print -- "stale socket marker" > "$FAKE_HOME/.claude/state/command-agent.sock"
@@ -190,6 +235,7 @@ assert_contains "stuck-process failure is actionable" "did not stop; install can
 assert_not_contains "stuck process prevents bundle sync" "rsync " "$(cat "$LIFECYCLE_LOG")"
 
 /usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 9.9.10-test' "$SOURCE_APP/Contents/Info.plist"
+write_fixture_attestation
 codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/null 2>&1
 : > "$LIFECYCLE_LOG"
 rm -f "$RSYNC_STATE"

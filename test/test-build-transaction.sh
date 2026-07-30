@@ -28,7 +28,8 @@ cp -R "$ROOT/docs/." "$FIXTURE/docs/"
 cp "$ROOT/vendor/claude-command-capture/src/"*.js "$FIXTURE/vendor/claude-command-capture/src/"
 cp "$ROOT/vendor/claude-command-capture/bin/"*.js "$FIXTURE/vendor/claude-command-capture/bin/"
 for resource in send-to-claude.sh send-to-claude-lib.sh match-enrich-rule.py \
-  update-swap.sh restart-app.sh uninstall-command.sh capture-handoff.sh README.md VERSION; do
+  update-swap.sh restart-app.sh uninstall-command.sh verify-regression-attestation.sh \
+  capture-handoff.sh README.md VERSION; do
   cp "$ROOT/$resource" "$FIXTURE/$resource"
 done
 print -r -- '// fixture' > "$FIXTURE/agent/main.swift"
@@ -106,6 +107,10 @@ check "successful signing returns zero" test "$success_status" -eq 0
 check "successful signing installs staged executable" grep -qx committed-build "$FIXTURE/Command.app/Contents/MacOS/Command"
 check "successful signing removes previous marker" test ! -e "$FIXTURE/Command.app/Contents/previous-marker"
 check "successful signing installs signature marker" test -f "$FIXTURE/Command.app/Contents/_CodeSignature/CodeResources"
+check "direct development build bundles attestation verifier" \
+  test -x "$FIXTURE/Command.app/Contents/Resources/verify-regression-attestation.sh"
+check "direct development build cannot claim qualification" \
+  test ! -e "$FIXTURE/Command.app/Contents/Resources/regression-gates-attestation.json"
 check "successful signing removes staging directory" zsh -c \
   '[[ -z "$(find "$1" -maxdepth 1 -name ".command-build.*" -print -quit)" ]]' _ "$FIXTURE"
 check "successful signing removes backup directory" zsh -c \

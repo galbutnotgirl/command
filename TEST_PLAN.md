@@ -12,15 +12,19 @@ Run from repository root on clean `main`:
 ./test/test-regression-impact.sh
 python3 ./test/test-regression-impact.py --base HEAD^
 python3 ./test/test-regression-contracts.py
-cd agent && swift test
-cd ../vendor/claude-command-capture && node --test
-cd ../.. && ./test/test-shell.sh
+(cd agent && swift test)
+swift build --package-path agent --product CommandClipboardWatcher
+./test/test-clipboard-watcher.sh
+(cd vendor/claude-command-capture && node --test)
+./test/test-shell.sh
 ./test/test-build-transaction.sh
 ./test/test-release-transaction.sh
 ./test/test-install-state.sh
 ./test/test-updater-swap.sh
 ./test/test-restart-app.sh
 ./test/test-release-policy.sh
+python3 ./test/test-regression-attestation.py
+./test/test-regression-attestation.sh
 ./test/test-static-analysis.sh
 python3 ./test/test-docs.py
 python3 ./test/test-pages.py
@@ -69,6 +73,11 @@ With Parakeet models cached on release Mac:
 ```
 
 `release.sh --publish` runs this Parakeet probe automatically and refuses `--skip-checks`. Known critical failures and required proof are tracked in [`test/regression-contracts.json`](test/regression-contracts.json); `test-regression-contracts.py` fails when evidence or release wiring disappears.
+
+Full `release.sh` gates create `regression-gates-attestation.json` only after every required
+test passes, then sign it inside app. Local installer, in-app updater, and detached swapper
+verify commit, branch marker, version, suite, and gate list before replacing installed app.
+`build-agent.sh` alone produces unqualified artifact and cannot be installed by default.
 
 [`test/regression-impact.json`](test/regression-impact.json) owns every runtime Swift, JavaScript, and shell file. CI compares full pushed or pull-request range and fails when touched runtime areas lack matching test changes. Release preflight repeats impact audit across every change since latest version tag.
 

@@ -81,9 +81,12 @@ Command requires macOS 14+. Source install is mainly for local development or te
 ```bash
 git clone https://github.com/galbutnotgirl/command
 cd command
-./build-agent.sh
-./install-agent.sh
+time ./qualify-installed-build.sh
 ```
+
+Qualification runs full regression suite, creates signed commit-bound test attestation,
+builds, installs incrementally, and validates running app. Direct `build-agent.sh` output is
+development-only; installer rejects it unless explicit test-only override is set.
 
 Optional, if you want the legacy SendHelper keystroke fallback for source testing:
 
@@ -171,10 +174,13 @@ See [docs/UNINSTALL.md](docs/UNINSTALL.md) for Quick Action, LaunchAgent, legacy
 For local development, use:
 
 ```bash
-./script/build_and_run.sh
+./script/build_and_run.sh --allow-unqualified
 ```
 
-It stops any running `Command`, builds `Command.app`, launches the fresh local bundle, pings the app dispatch socket, and checks bundled docs. Use `./script/build_and_run.sh --verify` when you need runtime confirmation.
+This explicit development-only path stops running `Command`, builds unqualified `Command.app`,
+and launches local bundle. It must not replace daily installed app. Use
+`./script/build_and_run.sh --allow-unqualified --verify` for isolated runtime confirmation.
+Verify mode pings the app dispatch socket, and checks bundled docs.
 
 ```bash
 cd agent && swift test
@@ -184,15 +190,15 @@ cd ../.. && ./test/test-shell.sh
 ./test/test-updater-swap.sh
 ./test/test-restart-app.sh
 ./test/test-release-policy.sh
+python3 ./test/test-regression-attestation.py
+./test/test-regression-attestation.sh
 ./test/test-static-analysis.sh
 python3 ./test/test-docs.py
 python3 ./test/test-pages.py
 python3 ./test/test_string_review.py
 ./release.sh --skip-checks
 ./test/test-release-asset.sh
-./build-agent.sh
-./install-agent.sh
-./test/test-installed-restart.sh
+time ./qualify-installed-build.sh
 ```
 
 Release:

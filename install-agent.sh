@@ -26,6 +26,21 @@ BACKUP_APP=""
     print -- "[agent] ERROR source Command.app has an invalid signature; install canceled"
     exit 1
 }
+if [[ "${COMMAND_ALLOW_UNQUALIFIED_INSTALL:-0}" == "1" ]]; then
+    print -- "[agent] WARNING installing unqualified development build by explicit override"
+else
+    ATTESTATION_VERIFIER="${DIR}/verify-regression-attestation.sh"
+    [ -x "$ATTESTATION_VERIFIER" ] || {
+        print -- "[agent] ERROR regression attestation verifier missing; install canceled"
+        exit 1
+    }
+    "$ATTESTATION_VERIFIER" "$SRC_APP" >/dev/null 2>&1 || {
+        print -- "[agent] ERROR build has not passed required regression gates; install canceled"
+        print -- "[agent] Run ./qualify-installed-build.sh instead of installing a direct development build."
+        exit 1
+    }
+    print -- "[agent] regression attestation verified"
+fi
 
 # Fresh install = no prior LaunchAgent plist AND no prior app bundle.
 # Update = app already exists (in-place sync, TCC grants survive).

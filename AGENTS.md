@@ -13,6 +13,13 @@ Do not report installed build as validated unless command passes and
 incremental install. Never set `COMMAND_CLEAN_INSTALL` or change signing identity
 unless user explicitly requests clean-install testing.
 
+Never install `Command.app` produced directly by `build-agent.sh`. Direct builds are
+unqualified development artifacts. `install-agent.sh`, in-app updater, and detached
+swapper must reject bundles without signed commit-bound regression attestation.
+Do not set `COMMAND_ALLOW_UNQUALIFIED_INSTALL` outside isolated installer tests.
+Do not launch direct build as daily app. `script/build_and_run.sh` requires explicit
+`--allow-unqualified` and is limited to isolated UI development.
+
 Command runs full release gates, signed build, incremental install, installed
 identity check, microphone capture before and after restart, runtime soak, and
 final-word model fixtures. Microphone checks inject one failure after live

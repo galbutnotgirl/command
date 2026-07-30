@@ -11,6 +11,12 @@ recent change if something in there needs undoing).
 
 ## Installed regression gates (2026-07-30)
 
+- Qualified-install enforcement prevents direct development builds from replacing working app.
+  Full release gates create commit-bound regression attestation only after Swift, native
+  Clipboard History, provider compatibility, shell/transaction/install/update, docs, static,
+  and final-word model checks pass. Build signs attestation into app; local installer, in-app
+  updater, and detached swapper verify it before mutation. Missing, failed, wrong-version,
+  wrong-commit, or incomplete attestations fail closed.
 - Exact-commit qualification now runs ten ordered checks and blocks public publication when
   report is stale, edited, mismatched, incomplete, or from clean install.
 - Installed dictation checks run before and after restart: repeated raw microphone captures plus
@@ -29,7 +35,8 @@ recent change if something in there needs undoing).
 - Rollback checkpoints: `checkpoint/2026-07-30-0114-dictation-lifecycle-probe`,
   `checkpoint/2026-07-30-0138-installed-hotkey-health`, and
   `checkpoint/2026-07-30-0205-dictation-fault-recovery`, and
-  `checkpoint/2026-07-30-0236-voice-dispatch-endurance`.
+  `checkpoint/2026-07-30-0236-voice-dispatch-endurance`, and
+  `checkpoint/2026-07-30-0259-qualified-install-gate`.
 
 ## Modifier chords and uninstaller (2026-07-28)
 

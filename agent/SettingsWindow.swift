@@ -3613,6 +3613,26 @@ struct ChannelPicker: View {
 
 // Tail of each log, not the whole file — enough to actually see what just
 // happened without dumping megabytes of history into the clipboard.
+private func regressionQualificationDiagnostic(
+    bundle: Bundle = .main,
+    version: String,
+    buildMarker: String
+) -> String {
+    guard !buildMarker.isEmpty else { return "unqualified development build" }
+    guard let url = bundle.url(forResource: "regression-gates-attestation", withExtension: "json"),
+          let data = try? Data(contentsOf: url) else {
+        return "missing"
+    }
+    if let failure = regressionAttestationValidationFailure(
+        data: data,
+        expectedVersion: version,
+        expectedBuildMarker: buildMarker
+    ) {
+        return "invalid: \(failure)"
+    }
+    return "passed"
+}
+
 @MainActor
 func copyCommandDiagnosticInfo(
     model: SettingsModel = settingsModel,
@@ -3655,6 +3675,7 @@ func copyCommandDiagnosticInfo(
     out += "App path: \(Bundle.main.bundlePath)\n"
     out += "Bundle ID: \(Bundle.main.bundleIdentifier ?? "unknown")\n"
     out += "Minimum macOS: \((Bundle.main.infoDictionary?["LSMinimumSystemVersion"] as? String) ?? "unknown")\n"
+    out += "Regression qualification: \(regressionQualificationDiagnostic(version: version, buildMarker: gitBranch))\n"
     out += "Update channel: \(channel.label)\n"
     if let available {
         out += "Update check: v\(available.latestVersion) available\n"
@@ -4065,6 +4086,7 @@ struct AboutView: View {
         out += "App path: \(Bundle.main.bundlePath)\n"
         out += "Bundle ID: \(Bundle.main.bundleIdentifier ?? "unknown")\n"
         out += "Minimum macOS: \((Bundle.main.infoDictionary?["LSMinimumSystemVersion"] as? String) ?? "unknown")\n"
+        out += "Regression qualification: \(regressionQualificationDiagnostic(version: version, buildMarker: gitBranch))\n"
         out += "Update channel: \(channel.label)\n"
         if let available {
             out += "Update check: v\(available.latestVersion) available\n"

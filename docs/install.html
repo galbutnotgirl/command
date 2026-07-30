@@ -123,11 +123,11 @@
         <p>It requires macOS 14 or later plus Xcode command-line tools.</p>
         <pre><code>git clone https://github.com/galbutnotgirl/command
 cd command
-./build-agent.sh
-./install-agent.sh</code></pre>
-        <p>For local development, use:</p>
-        <pre><code>./script/build_and_run.sh</code></pre>
-        <p>That script stops any running app, builds <code>Command.app</code>, launches the fresh local bundle, pings the app dispatch socket, and checks bundled docs. Use <code>./script/build_and_run.sh --verify</code> to confirm runtime readiness.</p>
+time ./qualify-installed-build.sh</code></pre>
+        <p>Qualification runs the full regression suite, signs a commit-bound test attestation into the app, installs incrementally, and validates running shortcuts, microphone, restart, and final-word behavior. Direct builds cannot replace the installed app without an explicit test-only override.</p>
+        <p>For isolated unqualified UI development, use:</p>
+        <pre><code>./script/build_and_run.sh --allow-unqualified</code></pre>
+        <p>That explicit development path stops the running app and launches the local bundle. It must not replace the daily installed app. Use <code>./script/build_and_run.sh --allow-unqualified --verify</code> to confirm isolated runtime readiness; verify mode pings the app dispatch socket and checks bundled docs.</p>
         <p>Optional, if you want the legacy SendHelper keystroke fallback for source testing:</p>
         <pre><code>./build-helper.sh</code></pre>
         <p>Optional, if you want legacy right-click Services in macOS Services menus:</p>

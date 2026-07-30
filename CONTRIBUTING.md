@@ -14,14 +14,17 @@ Requirements:
 Build and run the local app:
 
 ```bash
-./script/build_and_run.sh
+./script/build_and_run.sh --allow-unqualified
 ```
 
 Verify the app process, dispatch socket, and bundled docs:
 
 ```bash
-./script/build_and_run.sh --verify
+./script/build_and_run.sh --allow-unqualified --verify
 ```
+
+This path is for isolated development only. Install daily app through
+`time ./qualify-installed-build.sh`; direct builds have no regression attestation.
 
 ## Test Matrix
 

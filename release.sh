@@ -39,6 +39,8 @@ PREVIOUS_ZIP=""
 PREVIOUS_SHA256=""
 QUALIFICATION_REPORT="${COMMAND_QUALIFICATION_REPORT:-${DIST}/installed-qualification.json}"
 RELEASE_COMMIT=""
+ATTESTATION_ROOT=""
+BUILD_ATTESTATION=""
 
 cleanup_package_staging() {
   if [ "$PACKAGE_SWAP_STARTED" = "1" ] && [ "$PACKAGE_COMMITTED" = "0" ]; then
@@ -47,6 +49,7 @@ cleanup_package_staging() {
     [ -n "$PREVIOUS_SHA256" ] && [ -f "$PREVIOUS_SHA256" ] && mv "$PREVIOUS_SHA256" "$FINAL_SHA256" 2>/dev/null || true
   fi
   [ -n "$PACKAGE_ROOT" ] && rm -rf "$PACKAGE_ROOT"
+  [ -n "$ATTESTATION_ROOT" ] && rm -rf "$ATTESTATION_ROOT"
 }
 trap cleanup_package_staging EXIT
 trap 'exit 130' HUP INT TERM
@@ -135,7 +138,11 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   python3 "${DIR}/test/test-regression-contracts.py" || fail "regression contracts failed — restore tracked evidence before release."
   python3 "${DIR}/test/test-regression-contracts-tests.py" || fail "regression contract self-tests failed — fix fail-closed validation before release."
   (cd "${DIR}/agent" && swift test) || fail "Swift tests failed — fix app/core tests before release."
+  (cd "${DIR}/agent" && swift build --product CommandClipboardWatcher) \
+    || fail "native Clipboard History helper build failed."
+  "${DIR}/test/test-clipboard-watcher.sh" || fail "native Clipboard History helper smoke test failed."
   (cd "${DIR}/vendor/claude-command-capture" && node --test) || fail "Node tests failed — fix background runner tests before release."
+  "${DIR}/test/test-assistant-contract.sh" || fail "installed Claude/ChatGPT compatibility contract failed."
   "${DIR}/test/test-shell.sh" || fail "shell tests failed — fix scripts before release."
   "${DIR}/test/test-build-transaction.sh" || fail "build transaction tests failed — fix artifact preservation before release."
   "${DIR}/test/test-release-transaction.sh" || fail "release transaction tests failed — fix package preservation before release."
@@ -146,18 +153,29 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   "${DIR}/test/test-release-policy.sh" || fail "release policy tests failed — fix signing/notarization guards before release."
   "${DIR}/test/test-qualification-orchestration.sh" || fail "installed qualification orchestration tests failed — fix local runtime qualification before release."
   python3 "${DIR}/test/test-installed-qualification-report.py" || fail "installed qualification report verifier tests failed — fix publication attestation before release."
+  python3 "${DIR}/test/test-regression-attestation.py" || fail "regression attestation generator tests failed."
+  "${DIR}/test/test-regression-attestation.sh" || fail "regression attestation verifier tests failed."
   "${DIR}/test/test-static-analysis.sh" || fail "static analysis failed — fix script or configuration syntax before release."
   python3 "${DIR}/test/test-docs.py" || fail "docs validation failed — fix docs links/metadata/packaging guards before release."
   python3 "${DIR}/test/test-pages.py" || fail "Pages validation failed — fix deploy assets and install recovery before release."
   python3 "${DIR}/test/test_string_review.py" || fail "string review round-trip failed — fix export/apply safety before release."
-  if [ "$PUBLISH" = "1" ]; then
-    "${DIR}/test/test-dictation-model.sh" || fail "real Parakeet dictation regression probe failed — do not publish this build."
-  fi
+  "${DIR}/test/test-dictation-model.sh" || fail "real Parakeet dictation regression probe failed — do not build this app."
+
+  ATTESTATION_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/command-regression-attestation.XXXXXX")" \
+    || fail "could not create regression attestation staging directory"
+  BUILD_ATTESTATION="${ATTESTATION_ROOT}/regression-gates-attestation.json"
+  python3 "${DIR}/create-regression-attestation.py" \
+    --repo "$DIR" --version-file "${DIR}/VERSION" --output "$BUILD_ATTESTATION" \
+    || fail "could not create regression attestation"
 fi
 
 print -- "[release] building ${TAG}…"
-"${DIR}/build-agent.sh" || fail "build failed"
+COMMAND_BUILD_ATTESTATION="$BUILD_ATTESTATION" "${DIR}/build-agent.sh" || fail "build failed"
 [ -d "$APP" ] || fail "missing $APP"
+if [ "$SKIP_CHECKS" = "0" ]; then
+  "${DIR}/verify-regression-attestation.sh" "$APP" \
+    || fail "built app regression attestation does not match signed bundle"
+fi
 
 SIGN_INFO="$(codesign -dv --verbose=4 "$APP" 2>&1 || true)"
 if [ "$NOTARIZE" = "1" ]; then
@@ -224,6 +242,7 @@ for required_resource in \
   CommandClipboardWatcher \
   update-swap.sh \
   restart-app.sh \
+  verify-regression-attestation.sh \
   capture-handoff.sh \
   claude-command-capture/bin/submit-cli.js \
   claude-command-capture/src/submit.js \
@@ -232,6 +251,14 @@ for required_resource in \
   print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/${required_resource}" \
     || fail "packaged zip missing bundled runtime resource: ${required_resource}"
 done
+if [ "$SKIP_CHECKS" = "0" ]; then
+  print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/regression-gates-attestation.json" \
+    || fail "qualified package is missing regression attestation"
+else
+  if print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/regression-gates-attestation.json"; then
+    fail "unchecked package must not claim qualified regression attestation"
+  fi
+fi
 
 if [ "$NOTARIZE" = "1" ]; then
   command -v xcrun >/dev/null 2>&1 || fail "--notarize needs xcrun/Xcode command-line tools."

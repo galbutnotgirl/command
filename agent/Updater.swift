@@ -158,6 +158,21 @@ private func validateUpdateBundle(
     guard info["CFBundleShortVersionString"] as? String == expectedVersion else {
         return "Update app version does not match release metadata."
     }
+    guard let buildMarker = info["ClaudeCommandGitBranch"] as? String, !buildMarker.isEmpty else {
+        return "Update app is missing build identity metadata."
+    }
+    let attestationPath = (appPath as NSString)
+        .appendingPathComponent("Contents/Resources/regression-gates-attestation.json")
+    guard let attestationData = FileManager.default.contents(atPath: attestationPath) else {
+        return "Update app is missing regression qualification."
+    }
+    if let failure = regressionAttestationValidationFailure(
+        data: attestationData,
+        expectedVersion: expectedVersion,
+        expectedBuildMarker: buildMarker
+    ) {
+        return "Update regression qualification failed: \(failure)"
+    }
     guard let executable = info["CFBundleExecutable"] as? String, !executable.isEmpty else {
         return "Update app is missing executable metadata."
     }

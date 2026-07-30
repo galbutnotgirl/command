@@ -32,6 +32,7 @@ trap 'exit 130' HUP INT TERM
 # number to compare against the latest GitHub release tag.
 VERSION="$( [ -f "${DIR}/VERSION" ] && tr -d ' \t\n' < "${DIR}/VERSION" || echo "1.0.0" )"
 print -- "[agent] version ${VERSION}"
+ATTESTATION_SOURCE="${COMMAND_BUILD_ATTESTATION:-}"
 
 # Branch + short commit, so a local dev build says which worktree/branch it came
 # from (Settings ▸ About). Empty when not a git checkout (e.g. a release zip has
@@ -78,6 +79,21 @@ PLIST
 
 # Bundle runtime helpers into Resources.
 mkdir -p "${APP}/Contents/Resources"
+ATTESTATION_VERIFIER="${DIR}/verify-regression-attestation.sh"
+if [ -f "$ATTESTATION_VERIFIER" ]; then
+  cp "$ATTESTATION_VERIFIER" "${APP}/Contents/Resources/verify-regression-attestation.sh"
+  chmod +x "${APP}/Contents/Resources/verify-regression-attestation.sh"
+  print -- "[agent] bundled regression attestation verifier"
+else
+  print -- "[agent] ERROR missing verify-regression-attestation.sh"; exit 1
+fi
+if [ -n "$ATTESTATION_SOURCE" ]; then
+  [ -f "$ATTESTATION_SOURCE" ] || { print -- "[agent] ERROR regression attestation missing: $ATTESTATION_SOURCE"; exit 1; }
+  cp "$ATTESTATION_SOURCE" "${APP}/Contents/Resources/regression-gates-attestation.json"
+  print -- "[agent] bundled qualified regression attestation"
+else
+  print -- "[agent] development build is unqualified; run ./qualify-installed-build.sh to install"
+fi
 SEND="${DIR}/send-to-claude.sh"
 if [ -f "$SEND" ]; then
   cp "$SEND" "${APP}/Contents/Resources/send-to-claude.sh"

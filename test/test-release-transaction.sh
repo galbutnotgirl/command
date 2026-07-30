@@ -38,7 +38,7 @@ for asset in ${(z)DOC_ASSETS}; do
   cp "$ROOT/docs/$asset" "$FIXTURE/Command.app/Contents/Resources/docs/$asset"
 done
 for resource in send-to-claude.sh send-to-claude-lib.sh match-enrich-rule.py CommandClipboardWatcher \
-  update-swap.sh restart-app.sh uninstall-command.sh capture-handoff.sh \
+  update-swap.sh restart-app.sh uninstall-command.sh verify-regression-attestation.sh capture-handoff.sh \
   claude-command-capture/bin/submit-cli.js claude-command-capture/src/submit.js \
   claude-command-capture/src/runner.js claude-command-capture/src/submissions.js; do
   mkdir -p "$FIXTURE/Command.app/Contents/Resources/${resource:h}"

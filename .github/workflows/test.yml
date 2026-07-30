@@ -87,6 +87,12 @@ jobs:
       - name: Installed qualification report verifier tests
         run: python3 ./test/test-installed-qualification-report.py
 
+      - name: Regression attestation generator tests
+        run: python3 ./test/test-regression-attestation.py
+
+      - name: Regression attestation verifier tests
+        run: ./test/test-regression-attestation.sh
+
       - name: Static syntax and configuration checks
         run: ./test/test-static-analysis.sh
 

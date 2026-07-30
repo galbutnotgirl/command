@@ -141,6 +141,16 @@ assert_true "qualification rejects clean install mode" test "$CLEAN_STATUS" -ne 
 assert_contains "clean install rejection is actionable" "clean install is forbidden" "$CLEAN_OUTPUT"
 assert_true "clean install rejection occurs before any command" test ! -s "$LOG"
 
+: > "$LOG"
+set +e
+UNQUALIFIED_OUTPUT="$(COMMAND_ALLOW_UNQUALIFIED_INSTALL=1 run_qualifier)"
+UNQUALIFIED_STATUS=$?
+set -e
+assert_true "qualification rejects unqualified install override" test "$UNQUALIFIED_STATUS" -ne 0
+assert_contains "unqualified override rejection is actionable" \
+  "unqualified install override is forbidden" "$UNQUALIFIED_OUTPUT"
+assert_true "unqualified override rejection occurs before any command" test ! -s "$LOG"
+
 print -- "dirty" >> "$FIXTURE/VERSION"
 : > "$LOG"
 set +e

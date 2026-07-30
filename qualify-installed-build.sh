@@ -115,6 +115,8 @@ run_step() {
   || fail "clean install is forbidden during qualification"
 [[ "${COMMAND_ALLOW_TCC_IDENTITY_CHANGE:-0}" == "0" ]] \
   || fail "signing identity override is forbidden during qualification"
+[[ "${COMMAND_ALLOW_UNQUALIFIED_INSTALL:-0}" == "0" ]] \
+  || fail "unqualified install override is forbidden during qualification"
 [[ "$PROBE_RUNS" == <-> ]] && (( PROBE_RUNS >= 1 && PROBE_RUNS <= 20 )) \
   || fail "COMMAND_QUALIFY_PROBE_RUNS must be between 1 and 20"
 [[ "$HOTKEY_EVENTS" == <-> ]] && (( HOTKEY_EVENTS >= 2 && HOTKEY_EVENTS <= 200 )) \

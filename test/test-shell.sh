@@ -433,11 +433,18 @@ assert_contains "installer compares signed bundle content instead of timestamps"
   'rsync -a --delete --checksum "${SRC_APP}/" "${APP}/"'
 assert_contains "installer rolls back app when fresh process is not ready" "$INSTALL_SOURCE" \
   'restore_after_readiness_failure "new Command process did not answer ping"'
+assert_contains "installer rejects builds without regression qualification" "$INSTALL_SOURCE" \
+  'build has not passed required regression gates; install canceled'
+assert_before "installer verifies regression qualification before stopping running app" "$INSTALL_SOURCE" \
+  'regression attestation verified' \
+  'launchctl bootout'
 QUALIFICATION_SOURCE="$(cat "${DIR}/qualify-installed-build.sh")"
 QUALIFICATION_VERIFIER_SOURCE="$(cat "${DIR}/verify-installed-qualification.py")"
 RELEASE_SOURCE="$(cat "${DIR}/release.sh")"
 assert_contains "installed qualification forbids clean install" "$QUALIFICATION_SOURCE" \
   'clean install is forbidden during qualification'
+assert_contains "installed qualification forbids unqualified install override" "$QUALIFICATION_SOURCE" \
+  'unqualified install override is forbidden during qualification'
 assert_contains "installed qualification verifies microphone before restart" "$QUALIFICATION_SOURCE" \
   'run_step "Microphone capture before restart"'
 assert_contains "installed qualification verifies microphone after restart" "$QUALIFICATION_SOURCE" \
@@ -460,6 +467,14 @@ assert_before "public release qualification runs before regression gates" "$RELE
 assert_before "public release qualification reruns before tag creation" "$RELEASE_SOURCE" \
   'installed qualification changed or expired during release' \
   'print -- "[release] tagging ${TAG}'
+assert_contains "full release always runs final-word model gate" "$RELEASE_SOURCE" \
+  'real Parakeet dictation regression probe failed — do not build this app'
+assert_before "release creates regression attestation after final-word gate" "$RELEASE_SOURCE" \
+  'real Parakeet dictation regression probe failed — do not build this app' \
+  'create-regression-attestation.py'
+assert_before "release creates regression attestation before signed build" "$RELEASE_SOURCE" \
+  'create-regression-attestation.py' \
+  'COMMAND_BUILD_ATTESTATION="$BUILD_ATTESTATION"'
 
 DOCTOR_SOURCE="$(cat "${DIR}/doctor.sh")"
 assert_contains "doctor accepts built-in shortcuts without override file" "$DOCTOR_SOURCE" \
@@ -570,6 +585,19 @@ assert_not_contains "build never deletes final app during assembly" "$BUILD_AGEN
   'rm -rf "$FINAL_APP"'
 assert_contains "build exits after termination signal before rollback" "$BUILD_AGENT_SOURCE" \
   "trap 'exit 130' HUP INT TERM"
+assert_contains "build only embeds caller-provided regression attestation" "$BUILD_AGENT_SOURCE" \
+  'ATTESTATION_SOURCE="${COMMAND_BUILD_ATTESTATION:-}"'
+assert_contains "direct build reports unqualified install path" "$BUILD_AGENT_SOURCE" \
+  'development build is unqualified; run ./qualify-installed-build.sh to install'
+
+set +e
+UNQUALIFIED_RUN_OUTPUT="$("${DIR}/script/build_and_run.sh" 2>&1)"
+UNQUALIFIED_RUN_STATUS="$?"
+set -e
+assert_status "development runner requires explicit unqualified opt-in" "$UNQUALIFIED_RUN_STATUS" "64"
+assert_contains "development runner directs daily use through qualification" \
+  "$UNQUALIFIED_RUN_OUTPUT" \
+  'Run time ./qualify-installed-build.sh for daily app'
 
 AGENT_SOURCE="$(<"${DIR}/agent/main.swift")"
 assert_contains "modifier chords bypass Carbon for every action" "$AGENT_SOURCE" \
@@ -578,6 +606,14 @@ assert_contains "modifier chords exclude their primary modifier bit" "$AGENT_SOU
   'chordModifiers(activeModifiers: activeMods, primaryKeycode: kc)'
 assert_contains "modifier chords route through normal action dispatch" "$AGENT_SOURCE" \
   'fireMediaAction(kc, mods: cm)'
+
+UPDATER_SOURCE="$(<"${DIR}/agent/Updater.swift")"
+SWAPPER_SOURCE="$(<"${DIR}/update-swap.sh")"
+assert_contains "in-app updater verifies signed regression attestation" "$UPDATER_SOURCE" \
+  'regressionAttestationValidationFailure('
+assert_before "swapper verifies candidate before preserving current app" "$SWAPPER_SOURCE" \
+  'candidate regression attestation failed' \
+  '/bin/mv "$DEST_APP" "$BACKUP_APP"'
 
 RELEASE_SOURCE="$(<"${DIR}/release.sh")"
 assert_contains "release builds package in a same-volume staging directory" "$RELEASE_SOURCE" \

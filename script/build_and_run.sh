@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODE="${1:-run}"
+MODE="run"
+ALLOW_UNQUALIFIED=0
 APP_NAME="Command"
 BUNDLE_ID="com.claudecommand"
 
@@ -11,8 +12,22 @@ APP_BINARY="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 APP_SOCKET="${HOME}/.claude/state/command-agent.sock"
 
 usage() {
-  echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2
+  echo "usage: $0 --allow-unqualified [run|--debug|--logs|--telemetry|--verify]" >&2
 }
+
+for argument in "$@"; do
+  case "$argument" in
+    --allow-unqualified) ALLOW_UNQUALIFIED=1 ;;
+    run|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify) MODE="$argument" ;;
+    *) usage; exit 2 ;;
+  esac
+done
+
+if [ "$ALLOW_UNQUALIFIED" != "1" ]; then
+  echo "Refusing to launch unqualified development build." >&2
+  echo "Run time ./qualify-installed-build.sh for daily app, or add --allow-unqualified for isolated UI development." >&2
+  exit 64
+fi
 
 stop_app() {
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true

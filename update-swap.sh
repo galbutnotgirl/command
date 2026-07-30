@@ -49,6 +49,11 @@ rollback() {
 }
 
 [[ -d "$NEW_APP" ]] || { log "ERROR candidate missing: $NEW_APP"; exit 1; }
+ATTESTATION_VERIFIER="${COMMAND_ATTESTATION_VERIFIER:-${0:A:h}/verify-regression-attestation.sh}"
+if [[ ! -x "$ATTESTATION_VERIFIER" ]] || ! "$ATTESTATION_VERIFIER" "$NEW_APP" >/dev/null 2>&1; then
+  log "ERROR candidate regression attestation failed"
+  exit 1
+fi
 
 # Successful app exit does not trigger Command's launchd KeepAlive rule. Wait
 # for current process before touching bundle, then reopen exactly once below.

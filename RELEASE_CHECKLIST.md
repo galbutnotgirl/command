@@ -31,6 +31,8 @@ cd ../.. && ./test/test-shell.sh
 ./test/test-updater-swap.sh
 ./test/test-restart-app.sh
 ./test/test-release-policy.sh
+python3 ./test/test-regression-attestation.py
+./test/test-regression-attestation.sh
 ./test/test-static-analysis.sh
 python3 ./test/test-docs.py
 python3 ./test/test-pages.py
@@ -72,6 +74,11 @@ Optional local packaging check:
 ```
 
 Review `test/regression-contracts.json` for behavior touched by this release. `./release.sh --publish --notarize` requires full gates and runs cached Parakeet final-word fixtures automatically; `--skip-checks` cannot publish.
+
+Full release gates generate signed `regression-gates-attestation.json` after all required
+checks pass. Confirm qualified zip contains it and `verify-regression-attestation.sh` accepts
+extracted app. Never install direct `build-agent.sh` output or use
+`COMMAND_ALLOW_UNQUALIFIED_INSTALL` outside isolated installer tests.
 
 Run `time ./qualify-installed-build.sh` on exact clean release commit no more
 than 24 hours before publishing. `release.sh --publish` verifies all ten

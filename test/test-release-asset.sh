@@ -116,6 +116,7 @@ for required_resource in \
   CommandClipboardWatcher \
   update-swap.sh \
   restart-app.sh \
+  verify-regression-attestation.sh \
   capture-handoff.sh \
   claude-command-capture/bin/submit-cli.js \
   claude-command-capture/src/submit.js \
@@ -124,6 +125,9 @@ for required_resource in \
   print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/${required_resource}" \
     || fail "missing bundled runtime resource: ${required_resource}"
 done
+if print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/regression-gates-attestation.json"; then
+  fail "--skip-checks release asset must not claim regression qualification"
+fi
 
 BUILT_VERSION="$(unzip -p "$ZIP" Command.app/Contents/Info.plist 2>/dev/null | plutil -extract CFBundleShortVersionString raw -o - - 2>/dev/null)"
 [ "$BUILT_VERSION" = "$VERSION" ] || fail "Info.plist version ${BUILT_VERSION:-missing}, expected ${VERSION}"
@@ -174,8 +178,8 @@ unzip -p "$ZIP" Command.app/Contents/Resources/docs/install.html 2>/dev/null | g
   || fail "bundled docs/install.html missing existing-alpha migration anchor"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/install.html 2>/dev/null | grep -Eqi "move .*Applications" \
   || fail "bundled docs/install.html missing automatic relocation guidance"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/install.html 2>/dev/null | grep -q "For local development, use" \
-  || fail "bundled docs/install.html missing neutral local-development wording"
+unzip -p "$ZIP" Command.app/Contents/Resources/docs/install.html 2>/dev/null | grep -q "For isolated unqualified UI development, use" \
+  || fail "bundled docs/install.html missing explicit unqualified-development wording"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/install.html 2>/dev/null | grep -qv "For local Codex development" \
   || fail "bundled docs/install.html still has Codex-specific local-development wording"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/permissions.html 2>/dev/null | grep -q "The identifier remains <code>com.claudecommand</code>" \

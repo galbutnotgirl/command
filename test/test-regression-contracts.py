@@ -20,7 +20,7 @@ BASELINE_AREA_MINIMUMS = {
     "clipboard-history": 1,
     "settings-and-import": 1,
     "background-actions": 1,
-    "install-update-release": 3,
+    "install-update-release": 4,
     "hotkey-configuration": 1,
 }
 MANDATORY_GATES = {

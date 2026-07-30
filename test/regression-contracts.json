@@ -8,7 +8,7 @@
     "clipboard-history": 1,
     "settings-and-import": 1,
     "background-actions": 1,
-    "install-update-release": 3,
+    "install-update-release": 4,
     "hotkey-configuration": 1
   },
   "regressions": [
@@ -424,6 +424,30 @@
       "runtimeEvidence": "release.sh --publish fails unless a recent report matches exact HEAD, branch, and version with all ten incremental installed checks passed; the gate reruns immediately before tagging."
     },
     {
+      "id": "INSTALL-004",
+      "areas": ["install-update-release", "app-runtime"],
+      "risk": "A direct development build or downloaded update bypasses regression gates and replaces the working app, allowing previously fixed microphone, shortcut, routing, or state bugs to return.",
+      "automatedEvidence": [
+        {
+          "file": "test/test-install-state.sh",
+          "contains": "installer rejects build without regression attestation"
+        },
+        {
+          "file": "test/test-updater-swap.sh",
+          "contains": "update without regression attestation fails"
+        },
+        {
+          "file": "test/test-regression-attestation.py",
+          "contains": "test_creates_exact_commit_bound_attestation"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/RegressionAttestationTests.swift",
+          "contains": "testRejectsVersionAndCommitMarkerMismatch"
+        }
+      ],
+      "runtimeEvidence": "Every qualified Command.app contains a signed regression-gates-attestation.json matching its full commit, branch marker, and version. Local installer, in-app updater, and detached swapper reject missing, failed, stale, or mismatched attestations before mutating the installed app."
+    },
+    {
       "id": "HOTKEY-001",
       "areas": ["hotkey-configuration"],
       "risk": "Generated default hotkeys collide, reference missing actions, or overwrite user-customized bindings.",
@@ -462,6 +486,14 @@
       "contains": "python3 ./test/test-installed-qualification-report.py"
     },
     {
+      "file": ".github/workflows/test.yml",
+      "contains": "python3 ./test/test-regression-attestation.py"
+    },
+    {
+      "file": ".github/workflows/test.yml",
+      "contains": "./test/test-regression-attestation.sh"
+    },
+    {
       "file": "release.sh",
       "contains": "python3 \"${DIR}/test/test-regression-contracts.py\""
     },
@@ -480,6 +512,14 @@
     {
       "file": "release.sh",
       "contains": "python3 \"${DIR}/test/test-installed-qualification-report.py\""
+    },
+    {
+      "file": "release.sh",
+      "contains": "python3 \"${DIR}/test/test-regression-attestation.py\""
+    },
+    {
+      "file": "release.sh",
+      "contains": "\"${DIR}/test/test-regression-attestation.sh\""
     },
     {
       "file": "release.sh",
