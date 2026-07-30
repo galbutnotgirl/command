@@ -11,7 +11,10 @@ final class HotkeyHealthProbeTests: XCTestCase {
             expectedCarbonRegistrations: 4,
             actualCarbonRegistrations: 4,
             expectedEventTapAliases: 2,
-            configuredVoiceAliases: 2,
+            configuredVoiceAliases: 3,
+            expectedCarbonVoiceAliases: 2,
+            expectedEventTapVoiceAliases: 1,
+            validatedCarbonVoiceAliases: 2,
             requestedEvents: 100,
             deliveredEvents: 100,
             durationMilliseconds: 25
@@ -19,6 +22,7 @@ final class HotkeyHealthProbeTests: XCTestCase {
 
         XCTAssertTrue(result.ok)
         XCTAssertEqual(result.expectedCarbonRegistrations, result.actualCarbonRegistrations)
+        XCTAssertEqual(result.validatedCarbonVoiceAliases, result.expectedCarbonVoiceAliases)
         XCTAssertEqual(result.requestedEvents, result.deliveredEvents)
     }
 
@@ -44,9 +48,12 @@ final class HotkeyHealthProbeTests: XCTestCase {
             registrationFailures: -3,
             expectedEventTapAliases: -4,
             configuredVoiceAliases: -5,
-            requestedEvents: -6,
-            deliveredEvents: -7,
-            durationMilliseconds: -8
+            expectedCarbonVoiceAliases: -6,
+            expectedEventTapVoiceAliases: -7,
+            validatedCarbonVoiceAliases: -8,
+            requestedEvents: -9,
+            deliveredEvents: -10,
+            durationMilliseconds: -11
         )
 
         XCTAssertEqual(result.expectedCarbonRegistrations, 0)
@@ -54,6 +61,9 @@ final class HotkeyHealthProbeTests: XCTestCase {
         XCTAssertEqual(result.registrationFailures, 0)
         XCTAssertEqual(result.expectedEventTapAliases, 0)
         XCTAssertEqual(result.configuredVoiceAliases, 0)
+        XCTAssertEqual(result.expectedCarbonVoiceAliases, 0)
+        XCTAssertEqual(result.expectedEventTapVoiceAliases, 0)
+        XCTAssertEqual(result.validatedCarbonVoiceAliases, 0)
         XCTAssertEqual(result.requestedEvents, 0)
         XCTAssertEqual(result.deliveredEvents, 0)
         XCTAssertEqual(result.durationMilliseconds, 0)

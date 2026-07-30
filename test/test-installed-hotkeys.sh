@@ -38,7 +38,8 @@ result = json.loads(sys.argv[1])
 required = {
     "ok", "status", "accessibilityTrusted", "eventTapInstalled", "eventTapEnabled",
     "expectedCarbonRegistrations", "actualCarbonRegistrations", "registrationFailures",
-    "expectedEventTapAliases", "configuredVoiceAliases", "requestedEvents",
+    "expectedEventTapAliases", "configuredVoiceAliases", "expectedCarbonVoiceAliases",
+    "expectedEventTapVoiceAliases", "validatedCarbonVoiceAliases", "requestedEvents",
     "deliveredEvents", "durationMilliseconds",
 }
 missing = required.difference(result)
@@ -51,7 +52,8 @@ for field in ("accessibilityTrusted", "eventTapInstalled", "eventTapEnabled"):
         raise SystemExit(f"{field} is not true")
 integer_fields = (
     "expectedCarbonRegistrations", "actualCarbonRegistrations", "registrationFailures",
-    "expectedEventTapAliases", "configuredVoiceAliases", "requestedEvents",
+    "expectedEventTapAliases", "configuredVoiceAliases", "expectedCarbonVoiceAliases",
+    "expectedEventTapVoiceAliases", "validatedCarbonVoiceAliases", "requestedEvents",
     "deliveredEvents", "durationMilliseconds",
 )
 for field in integer_fields:
@@ -61,16 +63,23 @@ if result["registrationFailures"] != 0:
     raise SystemExit("hotkey registration failures were recorded")
 if result["actualCarbonRegistrations"] != result["expectedCarbonRegistrations"]:
     raise SystemExit("Carbon registration count mismatch")
+if result["expectedCarbonVoiceAliases"] + result["expectedEventTapVoiceAliases"] != result["configuredVoiceAliases"]:
+    raise SystemExit("voice alias ownership count mismatch")
+if result["validatedCarbonVoiceAliases"] != result["expectedCarbonVoiceAliases"]:
+    raise SystemExit("Carbon voice alias route count mismatch")
 if result["requestedEvents"] != int(sys.argv[2]):
     raise SystemExit("probe did not use requested event count")
 if result["deliveredEvents"] != result["requestedEvents"]:
     raise SystemExit("tagged event delivery count mismatch")
-print("{}\t{}\t{}\t{}\t{}\t{}".format(
+print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}".format(
     result["deliveredEvents"],
     result["expectedCarbonRegistrations"],
     result["actualCarbonRegistrations"],
     result["expectedEventTapAliases"],
     result["configuredVoiceAliases"],
+    result["expectedCarbonVoiceAliases"],
+    result["expectedEventTapVoiceAliases"],
+    result["validatedCarbonVoiceAliases"],
     result["durationMilliseconds"],
 ))
 ' "$reply" "$EVENTS")" || {
@@ -85,11 +94,13 @@ if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/nul
   exit 1
 fi
 
-IFS=$'\t' read -r delivered expected_carbon actual_carbon event_tap_aliases voice_aliases duration <<< "$summary"
+IFS=$'\t' read -r delivered expected_carbon actual_carbon event_tap_aliases voice_aliases carbon_voice_aliases event_tap_voice_aliases validated_carbon_voice_aliases duration <<< "$summary"
 print -- "installed hotkey health passed"
 print -- "  pid: ${initial_pid} (stable)"
 print -- "  tagged HID events: ${delivered}/${EVENTS}"
 print -- "  Carbon registrations: ${actual_carbon}/${expected_carbon}"
 print -- "  event-tap aliases: ${event_tap_aliases}"
 print -- "  configured voice aliases: ${voice_aliases}"
+print -- "  Carbon voice routes: ${validated_carbon_voice_aliases}/${carbon_voice_aliases}"
+print -- "  event-tap voice aliases: ${event_tap_voice_aliases}"
 print -- "  duration: ${duration} ms"

@@ -316,6 +316,12 @@ assert_contains "shortcut recording invalidates registration health" "$AGENT_SOU
   '_hotkeyRegistrationSnapshot.actualCarbonRegistrations = 0'
 assert_contains "installed hotkey check requires full tagged delivery" "$(cat "${DIR}/test/test-installed-hotkeys.sh")" \
   'result["deliveredEvents"] != result["requestedEvents"]'
+assert_contains "installed hotkey check validates every Carbon voice route" "$(cat "${DIR}/test/test-installed-hotkeys.sh")" \
+  'result["validatedCarbonVoiceAliases"] != result["expectedCarbonVoiceAliases"]'
+assert_contains "installed hotkey runtime probes registered Carbon voice aliases" "$AGENT_SOURCE" \
+  'runInstalledCarbonVoiceRouteProbe('
+assert_contains "Carbon voice route probe is intercepted inside real handler" "$AGENT_SOURCE" \
+  'routeProbe?.record(kind: kind)'
 assert_contains "installed restart can identify socket-owning process" "$AGENT_SOURCE" \
   'case "runtimepid": return "\(ProcessInfo.processInfo.processIdentifier)"'
 assert_contains "installed restart requires socket PID to match launchd" "$(cat "${DIR}/test/test-installed-restart.sh")" \

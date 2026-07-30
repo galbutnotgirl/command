@@ -22,6 +22,9 @@ public struct HotkeyHealthProbeResult: Codable, Equatable, Sendable {
     public let registrationFailures: Int
     public let expectedEventTapAliases: Int
     public let configuredVoiceAliases: Int
+    public let expectedCarbonVoiceAliases: Int
+    public let expectedEventTapVoiceAliases: Int
+    public let validatedCarbonVoiceAliases: Int
     public let requestedEvents: Int
     public let deliveredEvents: Int
     public let durationMilliseconds: Int
@@ -37,6 +40,9 @@ public struct HotkeyHealthProbeResult: Codable, Equatable, Sendable {
         registrationFailures: Int = 0,
         expectedEventTapAliases: Int = 0,
         configuredVoiceAliases: Int = 0,
+        expectedCarbonVoiceAliases: Int = 0,
+        expectedEventTapVoiceAliases: Int = 0,
+        validatedCarbonVoiceAliases: Int = 0,
         requestedEvents: Int = 0,
         deliveredEvents: Int = 0,
         durationMilliseconds: Int = 0,
@@ -52,6 +58,9 @@ public struct HotkeyHealthProbeResult: Codable, Equatable, Sendable {
         self.registrationFailures = max(0, registrationFailures)
         self.expectedEventTapAliases = max(0, expectedEventTapAliases)
         self.configuredVoiceAliases = max(0, configuredVoiceAliases)
+        self.expectedCarbonVoiceAliases = max(0, expectedCarbonVoiceAliases)
+        self.expectedEventTapVoiceAliases = max(0, expectedEventTapVoiceAliases)
+        self.validatedCarbonVoiceAliases = max(0, validatedCarbonVoiceAliases)
         self.requestedEvents = max(0, requestedEvents)
         self.deliveredEvents = max(0, deliveredEvents)
         self.durationMilliseconds = max(0, durationMilliseconds)
