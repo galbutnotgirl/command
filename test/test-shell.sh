@@ -253,10 +253,12 @@ AGENT_SOURCE="$(cat "${DIR}/agent/main.swift")"
 SETTINGS_SOURCE="$(cat "${DIR}/agent/SettingsWindow.swift")"
 PERMISSIONS_SOURCE="$(cat "${DIR}/agent/Permissions.swift")"
 DICTATION_OVERLAY_SOURCE="$(cat "${DIR}/agent/DictationOverlay.swift")"
+DICTATION_FAILURE_SOURCE="$(sed -n '/recorder.onFailure =/,/private func playStopSound/p' "${DIR}/agent/DictationOverlay.swift")"
 RECORDER_SOURCE="$(cat "${DIR}/agent/Recorder.swift")"
 DICTATION_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationSessionHealth.swift")"
 DICTATION_PROBE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationCaptureProbe.swift")"
 DICTATION_LIFECYCLE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationLifecycleProbe.swift")"
+DICTATION_RECOVERY_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationRecoveryProbe.swift")"
 HOTKEY_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/HotkeyHealthProbe.swift")"
 DICTATION_TRIGGER_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationTriggerCoordinator.swift")"
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
@@ -283,6 +285,8 @@ assert_contains "installed microphone probe is reachable through owner-only sock
   'case "dictationprobe": return runInstalledDictationProbe()'
 assert_contains "installed production lifecycle probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "dictationlifecycleprobe": return runInstalledDictationLifecycleProbe()'
+assert_contains "installed dictation recovery probe is reachable through owner-only socket" "$AGENT_SOURCE" \
+  'case "dictationrecoveryprobe": return runInstalledDictationRecoveryProbe()'
 assert_contains "installed hotkey health probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "hotkeyhealthprobe":'
 assert_contains "installed hotkey health probe posts tagged HID events" "$AGENT_SOURCE" \
@@ -316,8 +320,21 @@ assert_contains "production lifecycle probe requires recorder buffers" "$AGENT_S
   'runtime.capturedBuffers >= 4'
 assert_contains "production lifecycle probe returns typed metrics" "$DICTATION_LIFECYCLE_SOURCE" \
   'public struct DictationLifecycleProbeResult'
+assert_contains "dictation recovery probe returns typed cleanup metrics" "$DICTATION_RECOVERY_SOURCE" \
+  'public struct DictationCaptureResourceSnapshot'
 assert_contains "installed dictation check executes production lifecycle" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   "printf 'dictationlifecycleprobe\\n'"
+assert_contains "installed dictation check injects live capture failure" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  "printf 'dictationrecoveryprobe\\n'"
+assert_contains "dictation failure synchronously releases capture resources" "$RECORDER_SOURCE" \
+  'releaseCaptureResources(finishManager: true)'
+assert_contains "dictation recovery waits for asynchronous resource teardown" "$RECORDER_SOURCE" \
+  'activeManagerCleanupTaskCount'
+assert_contains "dictation recovery injects only after live buffers" "$RECORDER_SOURCE" \
+  'diagnosticFailureAfterBufferCount'
+assert_before "diagnostic failures suppress user warning panels" "$DICTATION_FAILURE_SOURCE" \
+  'if mode == .diagnostic {' \
+  'DictationCaptureWarningPanel.shared.show('
 assert_before "diagnostic dictation bypasses processing and history" "$DICTATION_OVERLAY_SOURCE" \
   'if mode == .diagnostic {' \
   'HistoryStore.shared.add(raw: rawText'

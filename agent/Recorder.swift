@@ -106,6 +106,7 @@ final class Recorder: ObservableObject {
     private var loadedModels: AsrModels?
     private var currentMgr: SlidingWindowAsrManager?
     private var audioEngine: AVAudioEngine?
+    private var audioTapEngine: AVAudioEngine?
     private var silenceTimer: DispatchSourceTimer?
     private var lastTranscript = ""
     private var sessionID = 0
@@ -113,6 +114,9 @@ final class Recorder: ObservableObject {
     private var streamTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<OwnedAudioBuffer>.Continuation?
     private var bufferFeederTask: Task<Void, Never>?
+    private var activeStreamTaskCount = 0
+    private var activeBufferFeederTaskCount = 0
+    private var activeManagerCleanupTaskCount = 0
     private let stopTailPolicy = DEFAULT_DICTATION_STOP_TAIL_POLICY
     private var totalAudioSeconds: Double = 0
     private var activeSpeechSeconds: Double = 0
@@ -126,6 +130,7 @@ final class Recorder: ObservableObject {
     private var inputDeviceName = "unknown"
     private var sessionHealth: DictationSessionHealth?
     private var captureProbeInProgress = false
+    private var diagnosticFailureAfterBufferCount: Int?
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
 
@@ -167,6 +172,74 @@ final class Recorder: ObservableObject {
             transcriptionUpdates: transcriptionUpdateCount
         )
         if persist { persistSessionHealth() }
+    }
+
+    func captureResourceSnapshot(overlayVisible: Bool) -> DictationCaptureResourceSnapshot {
+        DictationCaptureResourceSnapshot(
+            capturePhase: state.rawValue,
+            overlayVisible: overlayVisible,
+            captureStartupBegan: captureStartupBegan,
+            audioEngineActive: audioEngine != nil,
+            audioTapActive: audioTapEngine != nil,
+            streamTaskActive: streamTask != nil || activeStreamTaskCount > 0,
+            audioContinuationActive: audioContinuation != nil,
+            bufferFeederActive: bufferFeederTask != nil || activeBufferFeederTaskCount > 0,
+            managerActive: currentMgr != nil || activeManagerCleanupTaskCount > 0,
+            silenceTimerActive: silenceTimer != nil
+        )
+    }
+
+    func armDiagnosticCaptureFailure(afterBuffers: Int = 2) -> Bool {
+        guard state.canStart, !captureResourcesAreActive, !captureProbeInProgress else { return false }
+        diagnosticFailureAfterBufferCount = max(1, afterBuffers)
+        return true
+    }
+
+    private var captureResourcesAreActive: Bool {
+        audioEngine != nil
+            || audioTapEngine != nil
+            || streamTask != nil
+            || activeStreamTaskCount > 0
+            || audioContinuation != nil
+            || bufferFeederTask != nil
+            || activeBufferFeederTaskCount > 0
+            || currentMgr != nil
+            || activeManagerCleanupTaskCount > 0
+            || silenceTimer != nil
+            || captureStartupBegan
+    }
+
+    private func releaseCaptureResources(finishManager: Bool) {
+        let engine = audioEngine ?? audioTapEngine
+        audioEngine = nil
+        if let engine { removeProductionAudioTap(from: engine) }
+        engine?.stop()
+
+        streamTask?.cancel()
+        streamTask = nil
+        audioContinuation?.finish()
+        audioContinuation = nil
+        bufferFeederTask?.cancel()
+        bufferFeederTask = nil
+        cancelSilenceTimer()
+
+        let manager = currentMgr
+        currentMgr = nil
+        if finishManager, let manager {
+            activeManagerCleanupTaskCount += 1
+            Task {
+                defer { self.activeManagerCleanupTaskCount -= 1 }
+                _ = try? await manager.finish()
+            }
+        }
+        captureStartupBegan = false
+        audioLevel = 0
+    }
+
+    private func removeProductionAudioTap(from engine: AVAudioEngine) {
+        guard audioTapEngine === engine else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        audioTapEngine = nil
     }
 
     // MARK: - Model management
@@ -244,6 +317,11 @@ final class Recorder: ObservableObject {
             appendLog("[dictation] start rejected mode=\(mode) phase=\(state.rawValue)")
             return false
         }
+        if captureResourcesAreActive {
+            appendLog("[dictation] releasing stale capture resources before session start phase=\(state.rawValue)")
+            releaseCaptureResources(finishManager: true)
+        }
+        if mode != .diagnostic { diagnosticFailureAfterBufferCount = nil }
         guard loadedModels != nil else {
             fail("models not loaded")
             DispatchQueue.main.async {
@@ -385,7 +463,9 @@ final class Recorder: ObservableObject {
         inputDeviceName = AVCaptureDevice.default(for: .audio)?.localizedName ?? "unknown"
         log("audio device: \(inputDeviceName); format: \(hwFormat.sampleRate)Hz ch=\(hwFormat.channelCount)")
 
+        activeStreamTaskCount += 1
         streamTask = Task {
+            defer { self.activeStreamTaskCount -= 1 }
             let mgr = SlidingWindowAsrManager(config: .default)
             do { try await mgr.loadModels(models) }
             catch { self.fail("mgr.loadModels: \(error)"); return }
@@ -403,7 +483,9 @@ final class Recorder: ObservableObject {
             // of guessing how long in-flight Tasks need to land.
             let (bufStream, bufContinuation) = AsyncStream<OwnedAudioBuffer>.makeStream()
             self.audioContinuation = bufContinuation
+            self.activeBufferFeederTaskCount += 1
             self.bufferFeederTask = Task {
+                defer { self.activeBufferFeederTaskCount -= 1 }
                 for await buf in bufStream { await mgr.streamAudio(buf.value) }
                 self.log("buffer feeder drained")
             }
@@ -425,18 +507,26 @@ final class Recorder: ObservableObject {
                     }
                 }
             }
+            self.audioTapEngine = engine
 
             do {
                 try await mgr.startStreaming(source: .microphone)
                 self.log("startStreaming ok")
+                guard self.sessionID == session, !Task.isCancelled else {
+                    self.log("startup abandoned after stream preparation session=\(session)")
+                    self.removeProductionAudioTap(from: engine)
+                    return
+                }
                 do { try engine.start(); self.log("engine started") }
                 catch {
                     self.fail("engine.start: \(error.localizedDescription)")
-                    inputNode.removeTap(onBus: 0); return
+                    self.removeProductionAudioTap(from: engine); return
                 }
                 self.audioEngine = engine
                 guard self.sessionID == session, !Task.isCancelled else {
-                    engine.stop(); inputNode.removeTap(onBus: 0); self.audioEngine = nil; return
+                    engine.stop(); self.removeProductionAudioTap(from: engine)
+                    if self.audioEngine === engine { self.audioEngine = nil }
+                    return
                 }
                 self.state = .listening
                 self.transitionSessionHealth(to: .listening)
@@ -468,7 +558,7 @@ final class Recorder: ObservableObject {
                 guard self.sessionID == session else { return }
                 self.fail("streaming error: \(error.localizedDescription)")
             }
-            engine.stop(); inputNode.removeTap(onBus: 0)
+            engine.stop(); self.removeProductionAudioTap(from: engine)
             if self.audioEngine === engine { self.audioEngine = nil }
             self.log("engine stopped, buf total=\(bufCount)")
         }
@@ -518,7 +608,7 @@ final class Recorder: ObservableObject {
 
         Task {
             try? await Task.sleep(nanoseconds: stopTailNanoseconds)
-            engineToStop?.inputNode.removeTap(onBus: 0)
+            if let engineToStop { self.removeProductionAudioTap(from: engineToStop) }
             engineToStop?.stop()
 
             // The buffers captured during the grace window above are still sitting in
@@ -574,20 +664,12 @@ final class Recorder: ObservableObject {
         transitionSessionHealth(to: .cancelled)
         sessionID += 1
         stopRequestedDuringStart = false
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop(); audioEngine = nil
-        streamTask?.cancel(); streamTask = nil
-        audioContinuation?.finish(); audioContinuation = nil
-        bufferFeederTask?.cancel(); bufferFeederTask = nil
-        cancelSilenceTimer()
+        diagnosticFailureAfterBufferCount = nil
+        releaseCaptureResources(finishManager: true)
         lastTranscript = ""; liveTranscript = ""
         totalAudioSeconds = 0; activeSpeechSeconds = 0
-        captureStartupBegan = false
         secondsSinceStopTailActivity = .infinity; noiseFloorRMS = 0.003
-        audioLevel = 0
         state = .idle
-        let mgr = currentMgr; currentMgr = nil
-        Task { try? await mgr?.finish() }
     }
 
     private func resetSilenceTimer() {
@@ -628,6 +710,12 @@ final class Recorder: ObservableObject {
         } else if secondsSinceStopTailActivity.isFinite {
             secondsSinceStopTailActivity += seconds
         }
+        if let failureBufferCount = diagnosticFailureAfterBufferCount,
+           capturedBufferCount >= failureBufferCount {
+            diagnosticFailureAfterBufferCount = nil
+            appendLog("[dictation-probe] injecting capture failure after buffers=\(capturedBufferCount)")
+            fail("diagnostic injected capture failure")
+        }
     }
 
     private func minimumDictationDuration() -> Double {
@@ -650,8 +738,9 @@ final class Recorder: ObservableObject {
             transitionSessionHealth(to: .failed, failure: msg)
         }
         stopRequestedDuringStart = false
-        streamTask?.cancel(); streamTask = nil
-        audioLevel = 0; state = .error
+        diagnosticFailureAfterBufferCount = nil
+        releaseCaptureResources(finishManager: true)
+        state = .error
         onFailure?(msg, currentMode)
     }
 }

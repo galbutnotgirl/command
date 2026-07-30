@@ -15,4 +15,6 @@ unless user explicitly requests clean-install testing.
 
 Command runs full release gates, signed build, incremental install, installed
 identity check, microphone capture before and after restart, runtime soak, and
-final-word model fixtures. It does not publish GitHub release.
+final-word model fixtures. Microphone checks inject one failure after live
+buffers, prove full capture-resource cleanup, and require an immediate
+production retry. It does not publish GitHub release.

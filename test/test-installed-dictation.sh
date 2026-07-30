@@ -162,6 +162,79 @@ if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/nul
   exit 1
 fi
 
+recovery_reply="$(printf 'dictationrecoveryprobe\n' | nc -U -w 50 "$SOCKET" 2>/dev/null || true)"
+if [[ -z "$recovery_reply" ]]; then
+  print -u2 -- "FAIL: dictation failure-recovery probe returned no response"
+  exit 1
+fi
+recovery_summary="$(python3 -c '
+import json, sys
+result = json.loads(sys.argv[1])
+required = {
+    "ok", "status", "injectedSessionID", "injectedBuffers",
+    "injectedTerminalStage", "cleanup", "recovery", "durationMilliseconds",
+}
+missing = required.difference(result)
+if missing:
+    raise SystemExit("missing fields: " + ", ".join(sorted(missing)))
+if result["ok"] is not True or result["status"] != "passed":
+    raise SystemExit(result.get("failure") or f"recovery probe failed: {result}")
+if result["injectedTerminalStage"] != "failed" or result["injectedBuffers"] < 2:
+    raise SystemExit("probe did not inject failure after live microphone buffers")
+cleanup = result["cleanup"]
+cleanup_fields = {
+    "capturePhase", "overlayVisible", "captureStartupBegan", "audioEngineActive", "audioTapActive",
+    "streamTaskActive", "audioContinuationActive", "bufferFeederActive",
+    "managerActive", "silenceTimerActive", "fullyReleased",
+}
+missing_cleanup = cleanup_fields.difference(cleanup)
+if missing_cleanup:
+    raise SystemExit("missing cleanup fields: " + ", ".join(sorted(missing_cleanup)))
+if cleanup["capturePhase"] != "error" or cleanup["fullyReleased"] is not True:
+    raise SystemExit("capture resources were not fully released after injected failure")
+for field in cleanup_fields - {"capturePhase", "fullyReleased"}:
+    if cleanup[field] is not False:
+        raise SystemExit(f"cleanup field stayed active: {field}")
+retry = result["recovery"]
+if not isinstance(retry, dict) or retry.get("ok") is not True or retry.get("status") != "passed":
+    raise SystemExit("immediate production retry did not pass")
+if retry.get("capturePhase") != "idle" or retry.get("terminalStage") not in {"completed", "empty"}:
+    raise SystemExit("immediate production retry did not finish cleanly")
+if not isinstance(retry.get("capturedBuffers"), int) or retry["capturedBuffers"] < 4:
+    raise SystemExit("immediate production retry captured fewer than four buffers")
+print("{}\t{}\t{}\t{}\t{}\t{}\t{}".format(
+    result["injectedSessionID"],
+    result["injectedBuffers"],
+    cleanup["capturePhase"],
+    retry["sessionID"],
+    retry["capturedBuffers"],
+    retry["terminalStage"],
+    result["durationMilliseconds"],
+))
+' "$recovery_reply")" || {
+  print -u2 -- "FAIL: dictation failure-recovery probe: ${recovery_summary:-invalid response}"
+  print -u2 -- "$recovery_reply"
+  exit 1
+}
+recovery_injected_session="${recovery_summary%%$'\t'*}"
+recovery_remainder="${recovery_summary#*$'\t'}"
+recovery_injected_buffers="${recovery_remainder%%$'\t'*}"
+recovery_remainder="${recovery_remainder#*$'\t'}"
+recovery_cleanup_phase="${recovery_remainder%%$'\t'*}"
+recovery_remainder="${recovery_remainder#*$'\t'}"
+recovery_retry_session="${recovery_remainder%%$'\t'*}"
+recovery_remainder="${recovery_remainder#*$'\t'}"
+recovery_retry_buffers="${recovery_remainder%%$'\t'*}"
+recovery_remainder="${recovery_remainder#*$'\t'}"
+recovery_retry_stage="${recovery_remainder%%$'\t'*}"
+recovery_duration="${recovery_remainder##*$'\t'}"
+
+current_pid="$(job_pid)"
+if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/null; then
+  print -u2 -- "FAIL: Command restarted during dictation failure-recovery probe"
+  exit 1
+fi
+
 history_after="$(history_digest)"
 if [[ "$history_after" != "$history_before" ]]; then
   print -u2 -- "FAIL: dictation probes changed dictation history"
@@ -173,4 +246,5 @@ print -- "  pid: ${initial_pid} (stable)"
 print -- "  probes: ${RUNS}/${RUNS}"
 print -- "  audio buffers: ${total_buffers} total"
 print -- "  production lifecycle: session ${lifecycle_session}, ${lifecycle_buffers} buffers, ${lifecycle_updates} updates, ${lifecycle_stage}, ${lifecycle_duration} ms"
+print -- "  failure recovery: session ${recovery_injected_session} failed after ${recovery_injected_buffers} buffers, cleanup ${recovery_cleanup_phase}; retry session ${recovery_retry_session} captured ${recovery_retry_buffers} buffers and finished ${recovery_retry_stage}, ${recovery_duration} ms"
 print -- "  dictation history: unchanged"

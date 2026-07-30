@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "coverageRequirements": {
-    "app-runtime": 3,
-    "dictation": 8,
+    "app-runtime": 4,
+    "dictation": 9,
     "shortcuts-and-input": 2,
     "assistant-routing": 1,
     "clipboard-history": 1,
@@ -163,6 +163,29 @@
         }
       ],
       "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must drive production trigger and release paths through model loading, microphone streaming, four or more buffers, stop-tail drain, ASR finish, and clean completed or empty terminal health without adding dictation history."
+    },
+    {
+      "id": "DICT-009",
+      "areas": [
+        "dictation",
+        "app-runtime"
+      ],
+      "risk": "A microphone or ASR failure leaves audio engine, tap, stream, buffer feeder, continuation, manager, or timer resources active, causing the next dictation trigger to fail until Command is restarted.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationRecoveryProbeTests.swift",
+          "contains": "testReleasedSnapshotRequiresEveryCaptureResourceToBeIdle"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationRecoveryProbeTests.swift",
+          "contains": "testPassedRecoveryCarriesFailureAndRetryEvidence"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "installed dictation check injects live capture failure"
+        }
+      ],
+      "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must inject failure after two live microphone buffers, prove every capture resource is released with stable PID and unchanged history, then immediately complete a second production dictation lifecycle without restarting Command."
     },
     {
       "id": "APP-001",

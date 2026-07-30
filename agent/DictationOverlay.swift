@@ -269,6 +269,10 @@ final class DictationOverlay: NSObject {
             Task { @MainActor in
                 appendLog("[dictation] failed mode=\(String(describing: mode)) error=\(message)")
                 self?.hide()
+                if mode == .diagnostic {
+                    appendLog("[dictation-probe] diagnostic failure warning suppressed")
+                    return
+                }
                 DictationCaptureWarningPanel.shared.show(
                     title: "Dictation failed",
                     detail: "No audio is being captured. Command reset dictation; release your shortcut and try again.",

@@ -14,14 +14,17 @@ recent change if something in there needs undoing).
 - Exact-commit qualification now runs ten ordered checks and blocks public publication when
   report is stale, edited, mismatched, incomplete, or from clean install.
 - Installed dictation checks run before and after restart: repeated raw microphone captures plus
-  production trigger, model stream, recorder, stop-tail, ASR finish, and terminal cleanup.
+  production trigger, model stream, recorder, stop-tail, ASR finish, and terminal cleanup. Each
+  side also injects failure after live buffers, proves engine/tap/stream/queue/manager/timer
+  release, and requires immediate production retry without restarting Command.
 - Installed hotkey checks run before and after restart: Accessibility trust, enabled HID event tap,
   expected versus successful Carbon registrations, and tagged event delivery through callback.
   Probe events are swallowed before configured actions, clipboard writes, or assistant routing.
 - Event-tap passthrough returns borrowed events without retaining them. Prior retained passthrough
   leaked one event reference for ordinary keyboard traffic and could degrade long-running input.
-- Rollback checkpoints: `checkpoint/2026-07-30-0114-dictation-lifecycle-probe` and
-  `checkpoint/2026-07-30-0138-installed-hotkey-health`.
+- Rollback checkpoints: `checkpoint/2026-07-30-0114-dictation-lifecycle-probe`,
+  `checkpoint/2026-07-30-0138-installed-hotkey-health`, and
+  `checkpoint/2026-07-30-0205-dictation-fault-recovery`.
 
 ## Modifier chords and uninstaller (2026-07-28)
 

@@ -2046,6 +2046,27 @@ private func dictationLifecycleRuntimeSnapshot() -> DictationLifecycleRuntimeSna
     )
 }
 
+private func dictationCaptureResourceSnapshot() -> DictationCaptureResourceSnapshot {
+    var snapshot: DictationCaptureResourceSnapshot?
+    DispatchQueue.main.sync {
+        snapshot = recorder.captureResourceSnapshot(
+            overlayVisible: DictationOverlay.shared.isVisible
+        )
+    }
+    return snapshot ?? DictationCaptureResourceSnapshot(
+        capturePhase: "unknown",
+        overlayVisible: true,
+        captureStartupBegan: true,
+        audioEngineActive: true,
+        audioTapActive: true,
+        streamTaskActive: true,
+        audioContinuationActive: true,
+        bufferFeederActive: true,
+        managerActive: true,
+        silenceTimerActive: true
+    )
+}
+
 private func encodeDictationLifecycleProbeResult(_ result: DictationLifecycleProbeResult) -> String {
     guard let data = try? DictationLifecycleProbeCoding.encode(result) else {
         return #"{"ok":false,"status":"failed","failure":"Could not encode dictation lifecycle probe result."}"#
@@ -2097,7 +2118,8 @@ func runInstalledDictationLifecycleProbe() -> String {
             failure: "Parakeet model is not ready."
         )
     }
-    guard initial.capturePhase == DictationCapturePhase.idle.rawValue,
+    guard [DictationCapturePhase.idle.rawValue, DictationCapturePhase.error.rawValue]
+            .contains(initial.capturePhase),
           !initial.overlayVisible else {
         return makeDictationLifecycleProbeResult(
             status: .recorderBusy,
@@ -2220,6 +2242,161 @@ func runInstalledDictationLifecycleProbe() -> String {
         runtime: runtime,
         health: probeHealth,
         failure: "Production dictation did not reach a clean terminal state within 15 seconds."
+    )
+}
+
+private func encodeDictationRecoveryProbeResult(_ result: DictationRecoveryProbeResult) -> String {
+    guard let data = try? DictationRecoveryProbeCoding.encode(result) else {
+        return #"{"ok":false,"status":"failed","failure":"Could not encode dictation recovery probe result."}"#
+    }
+    return String(decoding: data, as: UTF8.self)
+}
+
+private func makeDictationRecoveryProbeResult(
+    status: DictationRecoveryProbeStatus,
+    startedAt: Date,
+    injectedHealth: DictationSessionHealth? = nil,
+    cleanup: DictationCaptureResourceSnapshot,
+    recovery: DictationLifecycleProbeResult? = nil,
+    failure: String? = nil
+) -> String {
+    encodeDictationRecoveryProbeResult(DictationRecoveryProbeResult(
+        status: status,
+        injectedSessionID: injectedHealth?.sessionID ?? 0,
+        injectedBuffers: injectedHealth?.capturedBuffers ?? 0,
+        injectedTerminalStage: injectedHealth?.stage.rawValue ?? "none",
+        cleanup: cleanup,
+        recovery: recovery,
+        durationMilliseconds: Int(Date().timeIntervalSince(startedAt) * 1_000),
+        failure: failure
+    ))
+}
+
+func runInstalledDictationRecoveryProbe() -> String {
+    dispatchPrecondition(condition: .notOnQueue(.main))
+    let startedAt = Date()
+    let initial = dictationLifecycleRuntimeSnapshot()
+    let initialResources = dictationCaptureResourceSnapshot()
+    guard initial.modelReady else {
+        return makeDictationRecoveryProbeResult(
+            status: .modelUnavailable,
+            startedAt: startedAt,
+            cleanup: initialResources,
+            failure: "Parakeet model is not ready."
+        )
+    }
+    guard [DictationCapturePhase.idle.rawValue, DictationCapturePhase.error.rawValue]
+            .contains(initial.capturePhase),
+          !initial.overlayVisible,
+          initialResources.fullyReleased else {
+        return makeDictationRecoveryProbeResult(
+            status: .recorderBusy,
+            startedAt: startedAt,
+            cleanup: initialResources,
+            failure: "Dictation recorder has active resources before recovery probe."
+        )
+    }
+
+    let previousHealth = latestDictationSessionHealth()
+    var armed = false
+    DispatchQueue.main.sync {
+        armed = recorder.armDiagnosticCaptureFailure(afterBuffers: 2)
+        if armed {
+            triggerDictation(mode: .diagnostic, keycode: nil, pollForRelease: false)
+        }
+    }
+    guard armed else {
+        return makeDictationRecoveryProbeResult(
+            status: .recorderBusy,
+            startedAt: startedAt,
+            cleanup: dictationCaptureResourceSnapshot(),
+            failure: "Could not arm diagnostic capture failure."
+        )
+    }
+
+    let failureDeadline = Date().addingTimeInterval(12)
+    var injectedHealth: DictationSessionHealth?
+    while Date() < failureDeadline {
+        if let health = latestDictationSessionHealth(),
+           health.mode == String(describing: DictMode.diagnostic),
+           health != previousHealth {
+            injectedHealth = health
+            if health.stage == .failed { break }
+            if health.stage == .completed || health.stage == .empty || health.stage == .cancelled {
+                cancelInstalledDictationLifecycleProbe()
+                return makeDictationRecoveryProbeResult(
+                    status: .failureNotObserved,
+                    startedAt: startedAt,
+                    injectedHealth: health,
+                    cleanup: dictationCaptureResourceSnapshot(),
+                    failure: "Injected capture failure did not reach failed terminal health."
+                )
+            }
+        }
+        usleep(50_000)
+    }
+
+    guard let failedHealth = injectedHealth,
+          failedHealth.stage == .failed,
+          failedHealth.capturedBuffers >= 2,
+          failedHealth.failure == "diagnostic injected capture failure" else {
+        cancelInstalledDictationLifecycleProbe()
+        return makeDictationRecoveryProbeResult(
+            status: .failureNotObserved,
+            startedAt: startedAt,
+            injectedHealth: injectedHealth,
+            cleanup: dictationCaptureResourceSnapshot(),
+            failure: "Injected failure was not observed after live microphone buffers."
+        )
+    }
+
+    let cleanupDeadline = Date().addingTimeInterval(3)
+    var cleanup = dictationCaptureResourceSnapshot()
+    while Date() < cleanupDeadline, !cleanup.fullyReleased {
+        usleep(50_000)
+        cleanup = dictationCaptureResourceSnapshot()
+    }
+    guard cleanup.fullyReleased,
+          cleanup.capturePhase == DictationCapturePhase.error.rawValue else {
+        cancelInstalledDictationLifecycleProbe()
+        return makeDictationRecoveryProbeResult(
+            status: .cleanupTimedOut,
+            startedAt: startedAt,
+            injectedHealth: failedHealth,
+            cleanup: cleanup,
+            failure: "Capture resources remained active after injected failure."
+        )
+    }
+
+    let recoveryJSON = runInstalledDictationLifecycleProbe()
+    guard let recoveryData = recoveryJSON.data(using: .utf8),
+          let recovery = try? DictationLifecycleProbeCoding.decode(recoveryData) else {
+        return makeDictationRecoveryProbeResult(
+            status: .failed,
+            startedAt: startedAt,
+            injectedHealth: failedHealth,
+            cleanup: cleanup,
+            failure: "Could not decode immediate retry result."
+        )
+    }
+    guard recovery.ok else {
+        return makeDictationRecoveryProbeResult(
+            status: .recoveryFailed,
+            startedAt: startedAt,
+            injectedHealth: failedHealth,
+            cleanup: cleanup,
+            recovery: recovery,
+            failure: recovery.failure ?? "Immediate production dictation retry failed."
+        )
+    }
+
+    appendLog("[dictation-probe] recovery passed injectedSession=\(failedHealth.sessionID) retrySession=\(recovery.sessionID)")
+    return makeDictationRecoveryProbeResult(
+        status: .passed,
+        startedAt: startedAt,
+        injectedHealth: failedHealth,
+        cleanup: cleanup,
+        recovery: recovery
     )
 }
 
@@ -2469,6 +2646,7 @@ func handle(_ line: String) -> String {
     case "runtimepid": return "\(ProcessInfo.processInfo.processIdentifier)"
     case "dictationprobe": return runInstalledDictationProbe()
     case "dictationlifecycleprobe": return runInstalledDictationLifecycleProbe()
+    case "dictationrecoveryprobe": return runInstalledDictationRecoveryProbe()
     case "hotkeyhealthprobe":
         let requested = Int(parts.count > 1 ? parts[1] : "") ?? 20
         return runInstalledHotkeyHealthProbe(requestedEvents: requested)

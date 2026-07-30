@@ -208,7 +208,9 @@ before building and again immediately before tagging. Installed qualification
 checks Carbon registration plus tagged HID event delivery through enabled event
 tap, then runs repeated raw microphone-buffer probes and production dictation
 lifecycle through trigger, model stream, recorder, stop-tail drain, ASR finish,
-and clean terminal state before and after app restart. Probes never write
+and clean terminal state before and after app restart. It also injects a failure
+after live buffers, proves engine/tap/stream/queue/manager/timer cleanup, and
+requires immediate production retry without restarting Command. Probes never write
 history, clipboard content, or assistant actions. Physical hardware remains
 manual; cached final-word fixtures verify spoken-tail retention separately.
 

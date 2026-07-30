@@ -2,6 +2,14 @@ import XCTest
 @testable import ClaudeCommandCore
 
 final class DictationTriggerCoordinatorTests: XCTestCase {
+    private enum Operation: CaseIterable {
+        case press
+        case quickRelease
+        case heldRelease
+        case deferredStop
+        case reset
+    }
+
     func testHeldDictationStartsAndStopsImmediatelyOnRelease() {
         var coordinator = DictationTriggerCoordinator()
 
@@ -88,5 +96,75 @@ final class DictationTriggerCoordinatorTests: XCTestCase {
         var longer = DictationTriggerCoordinator()
         _ = longer.press(at: 90)
         XCTAssertEqual(longer.release(at: 90.251), .stopRecording)
+    }
+
+    func testEverySixStepTriggerSequencePreservesActionStateInvariants() {
+        var sequence: [Operation] = []
+        exerciseSequences(remaining: 6, sequence: &sequence)
+    }
+
+    private func exerciseSequences(remaining: Int, sequence: inout [Operation]) {
+        if remaining == 0 {
+            assertInvariants(for: sequence)
+            return
+        }
+        for operation in Operation.allCases {
+            sequence.append(operation)
+            exerciseSequences(remaining: remaining - 1, sequence: &sequence)
+            sequence.removeLast()
+        }
+    }
+
+    private func assertInvariants(for sequence: [Operation], file: StaticString = #filePath, line: UInt = #line) {
+        var coordinator = DictationTriggerCoordinator()
+        var time: TimeInterval = 100
+
+        for operation in sequence {
+            let previousMode = coordinator.mode
+            let action: DictationTriggerAction?
+            switch operation {
+            case .press:
+                action = coordinator.press(at: time)
+                time += 0.05
+            case .quickRelease:
+                action = coordinator.release(at: time)
+                time += 0.10
+            case .heldRelease:
+                time += 0.40
+                action = coordinator.release(at: time)
+            case .deferredStop:
+                action = coordinator.deferredStopFired()
+                time += 0.05
+            case .reset:
+                coordinator.reset()
+                action = nil
+                time += 0.05
+            }
+
+            guard let action else {
+                XCTAssertEqual(coordinator.mode, .idle, file: file, line: line)
+                continue
+            }
+            switch action {
+            case .startRecording:
+                XCTAssertEqual(coordinator.mode, .pushToTalk, file: file, line: line)
+                XCTAssertEqual(previousMode, .idle, file: file, line: line)
+            case .lockRecording:
+                XCTAssertEqual(coordinator.mode, .locked, file: file, line: line)
+                XCTAssertTrue(
+                    previousMode == .pushToTalk || previousMode == .awaitingSecondTap,
+                    file: file,
+                    line: line
+                )
+            case .stopRecording:
+                XCTAssertEqual(coordinator.mode, .idle, file: file, line: line)
+            case .deferStop(let delay):
+                XCTAssertEqual(coordinator.mode, .awaitingSecondTap, file: file, line: line)
+                XCTAssertGreaterThan(delay, 0, file: file, line: line)
+                XCTAssertLessThanOrEqual(delay, coordinator.doubleTapWindow, file: file, line: line)
+            case .none:
+                XCTAssertEqual(coordinator.mode, previousMode, file: file, line: line)
+            }
+        }
     }
 }
