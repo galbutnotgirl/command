@@ -20,6 +20,7 @@ REQUIRED_GATES = [
     "regression-contracts",
     "swift",
     "dictation-delivery",
+    "dictation-insert",
     "dictation-watchdog",
     "clipboard-watcher",
     "node",

@@ -61,8 +61,8 @@ class RegressionAttestationGeneratorTests(unittest.TestCase):
         self.assertEqual(document["version"], "1.2.3-test")
         self.assertEqual(document["result"], "passed")
         self.assertEqual(document["suite"], "command-full-regression-v1")
-        self.assertEqual(len(document["requiredGates"]), 25)
-        self.assertEqual(len(set(document["requiredGates"])), 25)
+        self.assertEqual(len(document["requiredGates"]), 26)
+        self.assertEqual(len(set(document["requiredGates"])), 26)
 
         swift = (ROOT / "agent/Sources/ClaudeCommandCore/RegressionAttestation.swift").read_text()
         swift_block = swift.split("requiredRegressionGateIDs = [", 1)[1].split("]", 1)[0]

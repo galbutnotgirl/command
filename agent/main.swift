@@ -1997,6 +1997,262 @@ private final class DictationProbeResponseBox: @unchecked Sendable {
     }
 }
 
+private final class DictationInsertProbeResponseBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var execution: DictationFinalDeliveryExecution?
+
+    func store(_ execution: DictationFinalDeliveryExecution) {
+        lock.lock()
+        self.execution = execution
+        lock.unlock()
+    }
+
+    func load() -> DictationFinalDeliveryExecution? {
+        lock.lock()
+        defer { lock.unlock() }
+        return execution
+    }
+}
+
+@MainActor
+private struct InstalledPasteboardSnapshot {
+    private struct Item {
+        let values: [String: Data]
+    }
+
+    private let items: [Item]
+    let isRestorable: Bool
+
+    init(_ pasteboard: NSPasteboard) {
+        var complete = true
+        items = (pasteboard.pasteboardItems ?? []).map { item in
+            var values: [String: Data] = [:]
+            for type in item.types {
+                guard let data = item.data(forType: type) else {
+                    complete = false
+                    continue
+                }
+                values[type.rawValue] = data
+            }
+            return Item(values: values)
+        }
+        isRestorable = complete
+    }
+
+    func restore(to pasteboard: NSPasteboard) -> Bool {
+        guard isRestorable else { return false }
+        pasteboard.clearContents()
+        guard !items.isEmpty else {
+            return pasteboard.pasteboardItems?.isEmpty ?? true
+        }
+        let restored = items.map { snapshot -> NSPasteboardItem in
+            let item = NSPasteboardItem()
+            for (rawType, data) in snapshot.values {
+                item.setData(data, forType: NSPasteboard.PasteboardType(rawType))
+            }
+            return item
+        }
+        guard pasteboard.writeObjects(restored) else { return false }
+        return matches(pasteboard)
+    }
+
+    private func matches(_ pasteboard: NSPasteboard) -> Bool {
+        let current = pasteboard.pasteboardItems ?? []
+        guard current.count == items.count else { return false }
+        for (item, snapshot) in zip(current, items) {
+            let currentTypes = Set(item.types.map(\.rawValue))
+            guard currentTypes == Set(snapshot.values.keys) else { return false }
+            for (rawType, expected) in snapshot.values {
+                let type = NSPasteboard.PasteboardType(rawType)
+                guard item.data(forType: type) == expected else { return false }
+            }
+        }
+        return true
+    }
+}
+
+@MainActor
+private final class InstalledDictationInsertProbeHarness {
+    let targetBundle: String
+    let previousBundle: String
+    private let pasteboardSnapshot: InstalledPasteboardSnapshot
+    private let panel: NSPanel
+    private let textView: NSTextView
+
+    init?() {
+        guard let bundle = Bundle.main.bundleIdentifier, !bundle.isEmpty else { return nil }
+        targetBundle = bundle
+        previousBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        pasteboardSnapshot = InstalledPasteboardSnapshot(.general)
+        guard pasteboardSnapshot.isRestorable else { return nil }
+
+        panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 80),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 320, height: 80))
+        textView.isEditable = true
+        textView.isSelectable = true
+        textView.string = ""
+        panel.contentView = textView
+        panel.title = "Command Dictation Delivery Check"
+        panel.isReleasedWhenClosed = false
+        panel.alphaValue = 0.01
+        panel.level = .floating
+
+        _ = NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(textView)
+    }
+
+    func start(
+        rawText: String,
+        response: DictationInsertProbeResponseBox,
+        completed: DispatchSemaphore
+    ) {
+        Task { @MainActor in
+            let execution = await DictationOverlay.shared.runInstalledInsertDeliveryProbe(
+                rawText: rawText,
+                targetBundle: targetBundle
+            )
+            response.store(execution)
+            completed.signal()
+        }
+    }
+
+    func receiverContains(_ expected: String) -> Bool {
+        textView.string == expected
+    }
+
+    func finish() -> (clipboardRestored: Bool, previousAppRestored: Bool) {
+        panel.orderOut(nil)
+        let pasteboard = NSPasteboard.general
+        let restored = pasteboardSnapshot.restore(to: pasteboard)
+        DictationOverlay.shared.stampClipboardSource(
+            bundle: "com.claudecommand",
+            cc: pasteboard.changeCount
+        )
+
+        var previousRestored = previousBundle.isEmpty || previousBundle == targetBundle
+        if !previousRestored {
+            activate(previousBundle)
+            waitForActive(previousBundle)
+            previousRestored = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == previousBundle
+        }
+        applyDockPolicy()
+        return (restored, previousRestored)
+    }
+}
+
+private func encodeDictationInsertProbeResult(_ result: DictationInsertProbeResult) -> String {
+    guard let data = try? DictationInsertProbeCoding.encode(result) else {
+        return #"{"ok":false,"status":"failed","failure":"Could not encode dictation insert probe result."}"#
+    }
+    return String(decoding: data, as: UTF8.self)
+}
+
+func runInstalledDictationInsertProbe() -> String {
+    dispatchPrecondition(condition: .notOnQueue(.main))
+    let startedAt = Date()
+    guard AXIsProcessTrusted() else {
+        return encodeDictationInsertProbeResult(DictationInsertProbeResult(
+            status: .accessibilityUnavailable,
+            failure: "Accessibility is not trusted."
+        ))
+    }
+
+    var harness: InstalledDictationInsertProbeHarness?
+    DispatchQueue.main.sync { harness = InstalledDictationInsertProbeHarness() }
+    guard let harness else {
+        return encodeDictationInsertProbeResult(DictationInsertProbeResult(
+            status: .receiverUnavailable,
+            failure: "Could not create focused paste receiver or safely snapshot clipboard."
+        ))
+    }
+
+    let rawText = "Command delivery probe preserves final words amber turbine"
+    let response = DictationInsertProbeResponseBox()
+    let completed = DispatchSemaphore(value: 0)
+    DispatchQueue.main.async {
+        harness.start(rawText: rawText, response: response, completed: completed)
+    }
+
+    let pipelineCompleted = completed.wait(timeout: .now() + 10) == .success
+    let execution = response.load()
+    var receiverMatched = false
+    if pipelineCompleted, let expected = execution?.pipeline.processedText, !expected.isEmpty {
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline {
+            DispatchQueue.main.sync { receiverMatched = harness.receiverContains(expected) }
+            if receiverMatched { break }
+            usleep(20_000)
+        }
+    }
+
+    var cleanup = (clipboardRestored: false, previousAppRestored: false)
+    DispatchQueue.main.sync { cleanup = harness.finish() }
+
+    guard pipelineCompleted, let execution else {
+        return encodeDictationInsertProbeResult(DictationInsertProbeResult(
+            status: .failed,
+            clipboardRestored: cleanup.clipboardRestored,
+            previousAppRestored: cleanup.previousAppRestored,
+            durationMilliseconds: Int(Date().timeIntervalSince(startedAt) * 1_000),
+            failure: "Production dictation delivery pipeline did not complete within ten seconds."
+        ))
+    }
+
+    let pipeline = execution.pipeline
+    let insert = execution.insert
+    let status: DictationInsertProbeStatus
+    let failure: String?
+    if !pipeline.delivered || insert == nil {
+        status = .pipelineSuppressed
+        failure = "Production dictation delivery pipeline suppressed non-empty probe text."
+    } else if insert?.clipboardWritten != true {
+        status = .clipboardWriteFailed
+        failure = "Production dictation delivery did not write processed text to clipboard."
+    } else if insert?.targetActive != true {
+        status = .targetInactive
+        failure = "Command did not activate focused dictation paste receiver."
+    } else if insert?.pasteEventPosted != true {
+        status = .pasteEventFailed
+        failure = "Production dictation delivery did not post Command-V to target process."
+    } else if !receiverMatched {
+        status = .pasteTimedOut
+        failure = "Focused AppKit receiver did not receive exact processed transcript."
+    } else if !cleanup.clipboardRestored {
+        status = .clipboardRestoreFailed
+        failure = "Dictation probe could not restore prior clipboard contents exactly."
+    } else if !cleanup.previousAppRestored {
+        status = .previousAppRestoreFailed
+        failure = "Dictation probe could not restore previously focused app."
+    } else {
+        status = .passed
+        failure = nil
+    }
+
+    appendLog("[dictation-probe] insert delivery status=\(status.rawValue) pipeline=\(pipeline.status.rawValue) receiverMatched=\(receiverMatched) clipboardRestored=\(cleanup.clipboardRestored)")
+    return encodeDictationInsertProbeResult(DictationInsertProbeResult(
+        status: status,
+        pipelineStatus: pipeline.status.rawValue,
+        rawCharacters: pipeline.rawText.count,
+        processedCharacters: pipeline.processedText.count,
+        clipboardWritten: insert?.clipboardWritten ?? false,
+        targetActive: insert?.targetActive ?? false,
+        pasteEventPosted: insert?.pasteEventPosted ?? false,
+        receiverMatched: receiverMatched,
+        clipboardRestored: cleanup.clipboardRestored,
+        previousAppRestored: cleanup.previousAppRestored,
+        durationMilliseconds: Int(Date().timeIntervalSince(startedAt) * 1_000),
+        failure: failure
+    ))
+}
+
 func runInstalledDictationProbe() -> String {
     let response = DictationProbeResponseBox()
     let completed = DispatchSemaphore(value: 0)
@@ -3197,6 +3453,7 @@ func handle(_ line: String) -> String {
     case "dictationrecoveryprobe": return runInstalledDictationRecoveryProbe()
     case "dictationwatchdogprobe": return runInstalledDictationWatchdogProbe()
     case "dictationstreamwatchdogprobe": return runInstalledDictationWatchdogProbe(scenario: .midstream)
+    case "dictationinsertprobe": return runInstalledDictationInsertProbe()
     case "voicedispatchprobe": return runInstalledVoiceDispatchProbe()
     case "hotkeyhealthprobe":
         let requested = Int(parts.count > 1 ? parts[1] : "") ?? 20

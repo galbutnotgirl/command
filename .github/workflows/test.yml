@@ -49,6 +49,10 @@ jobs:
         working-directory: agent
         run: swift test --filter DictationDeliveryPipelineTests
 
+      - name: Dictation focused-field delivery probe
+        working-directory: agent
+        run: swift test --filter DictationInsertProbeTests
+
       - name: Dictation startup and liveness watchdog
         working-directory: agent
         run: swift test --filter 'Dictation(CaptureWatchdog|WatchdogProbe)Tests'

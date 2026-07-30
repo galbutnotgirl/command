@@ -140,6 +140,8 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   (cd "${DIR}/agent" && swift test) || fail "Swift tests failed — fix app/core tests before release."
   (cd "${DIR}/agent" && swift test --filter DictationDeliveryPipelineTests) \
     || fail "dictation delivery pipeline tests failed — transcript may not reach history or dispatch."
+  (cd "${DIR}/agent" && swift test --filter DictationInsertProbeTests) \
+    || fail "dictation insert probe tests failed — processed text may not reach focused field."
   (cd "${DIR}/agent" && swift test --filter 'Dictation(CaptureWatchdog|WatchdogProbe)Tests') \
     || fail "dictation watchdog tests failed — stalled microphone capture may remain active."
   (cd "${DIR}/agent" && swift build --product CommandClipboardWatcher) \

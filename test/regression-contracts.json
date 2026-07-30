@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "coverageRequirements": {
-    "app-runtime": 6,
-    "dictation": 12,
+    "app-runtime": 7,
+    "dictation": 13,
     "shortcuts-and-input": 3,
     "assistant-routing": 1,
     "clipboard-history": 1,
@@ -270,6 +270,26 @@
         }
       ],
       "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must test two production failures: stall startup before any audio buffer and release the unresolved trigger, then silently stop the live audio tap after at least three buffers while recording remains active. Each scenario must produce exactly one warning and reset, fully release resources with stable PID and unchanged history, and complete an immediate production lifecycle without restarting Command."
+    },
+    {
+      "id": "DICT-013",
+      "areas": ["dictation", "app-runtime"],
+      "risk": "Capture and processing succeed and completion sound plays, but clipboard write, target activation, Command-V delivery, or focused-field insertion fails, so user receives no dictated text.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationInsertProbeTests.swift",
+          "contains": "testPassedProbeCarriesPipelinePasteAndRestoreEvidence"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "installed dictation check proves real paste delivery"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "installed dictation check requires exact receiver and state restoration"
+        }
+      ],
+      "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must pass a known non-empty transcript through the production final-text delivery handler, write it to the general pasteboard, activate a focused AppKit text receiver, post Command-V to the installed process, observe exact processed text in the receiver, restore prior clipboard contents and focused app, keep PID stable, and leave dictation and Clipboard History unchanged."
     },
     {
       "id": "APP-001",
@@ -579,6 +599,10 @@
     },
     {
       "file": ".github/workflows/test.yml",
+      "contains": "swift test --filter DictationInsertProbeTests"
+    },
+    {
+      "file": ".github/workflows/test.yml",
       "contains": "swift test --filter 'Dictation(CaptureWatchdog|WatchdogProbe)Tests'"
     },
     {
@@ -608,6 +632,10 @@
     {
       "file": "release.sh",
       "contains": "swift test --filter DictationDeliveryPipelineTests"
+    },
+    {
+      "file": "release.sh",
+      "contains": "swift test --filter DictationInsertProbeTests"
     },
     {
       "file": "release.sh",

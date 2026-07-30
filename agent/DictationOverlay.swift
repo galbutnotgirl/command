@@ -3,6 +3,17 @@
 import Cocoa
 import ClaudeCommandCore
 
+struct DictationInsertDispatchOutcome: Sendable {
+    let clipboardWritten: Bool
+    let targetActive: Bool
+    let pasteEventPosted: Bool
+}
+
+struct DictationFinalDeliveryExecution: Sendable {
+    let pipeline: DictationDeliveryResult
+    let insert: DictationInsertDispatchOutcome?
+}
+
 @MainActor
 private final class DictationCaptureWarningPanel {
     static let shared = DictationCaptureWarningPanel()
@@ -252,25 +263,10 @@ final class DictationOverlay: NSObject {
                     self.hide()
                     return
                 }
-                let result = await runDictationDeliveryPipeline(
-                    rawText: rawText,
-                    process: { text in
-                        await TranscriptProcessor.process(
-                            text,
-                            vocab: .shared,
-                            settings: .shared,
-                            log: { DebugLog.shared.append($0) }
-                        )
-                    },
-                    deliver: { raw, processed in
-                        HistoryStore.shared.add(raw: raw, processed: processed, mode: mode)
-                        self.hide()
-                        self.dispatch(text: processed, mode: mode)
-                    }
-                )
+                let execution = await self.handleFinal(rawText: rawText, mode: mode)
+                let result = execution.pipeline
                 appendLog("[dictation] delivery status=\(result.status.rawValue) rawChars=\(result.rawText.count) processedChars=\(result.processedText.count)")
                 if !result.delivered {
-                    self.hide()
                     appendLog("[dictation] processed transcript suppressed before history and dispatch")
                 }
             }
@@ -304,36 +300,122 @@ final class DictationOverlay: NSObject {
         playUISound(settingsModel.stopSound, role: .stop)
     }
 
+    func runInstalledInsertDeliveryProbe(
+        rawText: String,
+        targetBundle: String
+    ) async -> DictationFinalDeliveryExecution {
+        await handleFinal(
+            rawText: rawText,
+            mode: .insert,
+            recordHistory: false,
+            insertTargetOverride: targetBundle,
+            clipboardSource: "com.claudecommand",
+            notifyOnFailure: false,
+            processOverride: { $0 }
+        )
+    }
+
+    private func handleFinal(
+        rawText: String,
+        mode: DictMode,
+        recordHistory: Bool = true,
+        insertTargetOverride: String? = nil,
+        clipboardSource: String = "com.claudecommand.dictation",
+        notifyOnFailure: Bool = true,
+        processOverride: ((String) async -> String)? = nil
+    ) async -> DictationFinalDeliveryExecution {
+        var insertOutcome: DictationInsertDispatchOutcome?
+        let result = await runDictationDeliveryPipeline(
+            rawText: rawText,
+            process: { text in
+                if let processOverride { return await processOverride(text) }
+                return await TranscriptProcessor.process(
+                    text,
+                    vocab: .shared,
+                    settings: .shared,
+                    log: { DebugLog.shared.append($0) }
+                )
+            },
+            deliver: { raw, processed in
+                if recordHistory {
+                    HistoryStore.shared.add(raw: raw, processed: processed, mode: mode)
+                }
+                self.hide()
+                insertOutcome = self.dispatch(
+                    text: processed,
+                    mode: mode,
+                    insertTargetOverride: insertTargetOverride,
+                    clipboardSource: clipboardSource,
+                    notifyOnFailure: notifyOnFailure
+                )
+            }
+        )
+        if !result.delivered { hide() }
+        return DictationFinalDeliveryExecution(pipeline: result, insert: insertOutcome)
+    }
+
     // MARK: - Dispatch final text
 
-    private func dispatch(text: String, mode: DictMode) {
+    private func dispatch(
+        text: String,
+        mode: DictMode,
+        insertTargetOverride: String? = nil,
+        clipboardSource: String = "com.claudecommand.dictation",
+        notifyOnFailure: Bool = true
+    ) -> DictationInsertDispatchOutcome? {
         let pb = NSPasteboard.general
         pb.clearContents()
         let clipboardWritten = pb.setString(text, forType: .string)
         appendLog("[dictation] dispatch mode=\(String(describing: mode)) chars=\(text.count) previousBundle=\(prevBundle.isEmpty ? "(empty)" : prevBundle) clipboard=\(clipboardWritten)")
         guard clipboardWritten else {
-            notify("Dictation failed", "Command could not place transcript on clipboard.")
-            return
+            if notifyOnFailure {
+                notify("Dictation failed", "Command could not place transcript on clipboard.")
+            }
+            return mode == .insert
+                ? DictationInsertDispatchOutcome(
+                    clipboardWritten: false,
+                    targetActive: false,
+                    pasteEventPosted: false
+                )
+                : nil
         }
-        stampDictationSource(cc: pb.changeCount)   // after the write — exact cc, no race
+        stampClipboardSource(bundle: clipboardSource, cc: pb.changeCount)
 
         switch mode {
         case .diagnostic:
             appendLog("[dictation-probe] diagnostic dispatch suppressed chars=\(text.count)")
+            return nil
 
         case .insert:
-            guard !prevBundle.isEmpty else {
+            let targetBundle = insertTargetOverride ?? prevBundle
+            guard !targetBundle.isEmpty else {
                 appendLog("[dictation] insert failed: previous app bundle missing")
-                notify("Dictation copied", "Transcript is on clipboard, but Command could not identify where to paste it.")
-                return
+                if notifyOnFailure {
+                    notify("Dictation copied", "Transcript is on clipboard, but Command could not identify where to paste it.")
+                }
+                return DictationInsertDispatchOutcome(
+                    clipboardWritten: true,
+                    targetActive: false,
+                    pasteEventPosted: false
+                )
             }
-            activate(prevBundle)
-            waitForActive(prevBundle)
-            let pasted = postKey(kV, cmd: true, to: prevBundle)
-            appendLog("[dictation] insert target=\(prevBundle) active=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier == prevBundle) pastePosted=\(pasted)")
-            if !pasted {
+            if targetBundle == Bundle.main.bundleIdentifier {
+                NSApp.activate(ignoringOtherApps: true)
+            } else {
+                activate(targetBundle)
+            }
+            waitForActive(targetBundle)
+            let targetActive = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == targetBundle
+            let pasted = postKey(kV, cmd: true, to: targetBundle)
+            appendLog("[dictation] insert target=\(targetBundle) active=\(targetActive) pastePosted=\(pasted)")
+            if !pasted, notifyOnFailure {
                 notify("Dictation copied", "Transcript is on clipboard, but Command could not paste into previous app.")
             }
+            return DictationInsertDispatchOutcome(
+                clipboardWritten: true,
+                targetActive: targetActive,
+                pasteEventPosted: pasted
+            )
 
         case .claude, .claude2:
             let front = prevBundle
@@ -343,9 +425,11 @@ final class DictationOverlay: NSObject {
                           customSession: "add", customIncludeSource: false,
                           provider: provider)
             }
+            return nil
 
         case .customAction(let actionID, let triggerID):
             dispatchCustomAction(actionID: actionID, triggerID: triggerID, text: text)
+            return nil
         }
     }
 
@@ -378,8 +462,8 @@ final class DictationOverlay: NSObject {
     // so it's recorded (unlike the internal-only "com.claudecommand" sentinel) and
     // shows up under the picker's "Dictated" filter. The exact changeCount (not just a
     // timestamp) is what lets the watcher match this deterministically to its own write.
-    private func stampDictationSource(cc: Int) {
-        let entry: [String: Any] = ["bundle": "com.claudecommand.dictation",
+    func stampClipboardSource(bundle: String, cc: Int) {
+        let entry: [String: Any] = ["bundle": bundle,
                                      "ts": Date().timeIntervalSince1970, "cc": cc]
         if let d = try? JSONSerialization.data(withJSONObject: entry) {
             try? d.write(to: URL(fileURLWithPath: COPY_SOURCE_PATH))

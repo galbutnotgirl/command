@@ -262,6 +262,7 @@ DICTATION_PROBE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationC
 DICTATION_LIFECYCLE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationLifecycleProbe.swift")"
 DICTATION_RECOVERY_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationRecoveryProbe.swift")"
 DICTATION_WATCHDOG_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationWatchdogProbe.swift")"
+DICTATION_INSERT_PROBE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationInsertProbe.swift")"
 VOICE_DISPATCH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/VoiceDispatchProbe.swift")"
 HOTKEY_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/HotkeyHealthProbe.swift")"
 DICTATION_TRIGGER_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationTriggerCoordinator.swift")"
@@ -293,6 +294,8 @@ assert_contains "installed dictation recovery probe is reachable through owner-o
   'case "dictationrecoveryprobe": return runInstalledDictationRecoveryProbe()'
 assert_contains "installed dictation watchdog probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "dictationwatchdogprobe": return runInstalledDictationWatchdogProbe()'
+assert_contains "installed dictation insert probe is reachable through owner-only socket" "$AGENT_SOURCE" \
+  'case "dictationinsertprobe": return runInstalledDictationInsertProbe()'
 assert_contains "installed voice dispatch probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "voicedispatchprobe": return runInstalledVoiceDispatchProbe()'
 assert_contains "installed hotkey health probe is reachable through owner-only socket" "$AGENT_SOURCE" \
@@ -337,6 +340,8 @@ assert_contains "dictation watchdog probe returns typed stall and retry metrics"
   'public struct DictationWatchdogProbeResult'
 assert_contains "voice dispatch probe returns typed event and capture metrics" "$VOICE_DISPATCH_SOURCE" \
   'public struct VoiceDispatchProbeResult'
+assert_contains "dictation insert probe returns typed pipeline paste and restore metrics" "$DICTATION_INSERT_PROBE_SOURCE" \
+  'public struct DictationInsertProbeResult'
 assert_contains "installed dictation check executes production lifecycle" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   "printf 'dictationlifecycleprobe\\n'"
 assert_contains "installed dictation check injects live capture failure" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
@@ -357,6 +362,10 @@ assert_contains "installed midstream watchdog uses production recorder" "$AGENT_
   'recorder.armDiagnosticMidstreamStall(afterBuffers: 3)'
 assert_contains "installed dictation check drives tagged voice events through action routing" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   "printf 'voicedispatchprobe\\n'"
+assert_contains "installed dictation check proves real paste delivery" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  "printf 'dictationinsertprobe\\n'"
+assert_contains "installed dictation check requires exact receiver and state restoration" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  '"clipboardWritten", "targetActive", "pasteEventPosted", "receiverMatched",'
 assert_contains "tagged voice events continue through installed event callback" "$AGENT_SOURCE" \
   'let isVoiceDispatchProbe = probeDisposition == .voiceDispatch'
 assert_contains "voice dispatch probe overrides only tagged event target" "$AGENT_SOURCE" \
@@ -389,7 +398,7 @@ assert_contains "dictation overlay uses shared delivery pipeline" "$DICTATION_OV
   'runDictationDeliveryPipeline('
 assert_before "dictation pipeline prepares history before dispatch" "$DICTATION_OVERLAY_SOURCE" \
   'HistoryStore.shared.add(raw: raw, processed: processed, mode: mode)' \
-  'self.dispatch(text: processed, mode: mode)'
+  'insertOutcome = self.dispatch('
 assert_contains "empty processed transcript falls back to captured raw text" "$DICTATION_DELIVERY_SOURCE" \
   'case deliveredRawFallback'
 assert_contains "model fixture runs shared delivery pipeline" "$DICTATION_MODEL_PROBE_SOURCE" \

@@ -14,6 +14,7 @@ python3 ./test/test-regression-impact.py --base HEAD^
 python3 ./test/test-regression-contracts.py
 (cd agent && swift test)
 (cd agent && swift test --filter DictationDeliveryPipelineTests)
+(cd agent && swift test --filter DictationInsertProbeTests)
 swift build --package-path agent --product CommandClipboardWatcher
 ./test/test-clipboard-watcher.sh
 (cd vendor/claude-command-capture && node --test)
@@ -69,7 +70,10 @@ Running before and after restart catches dead input hooks without firing user ac
 Installed dictation test performs repeated raw microphone-buffer captures and one production
 lifecycle through trigger, model stream, recorder, stop-tail drain, ASR finish, and clean terminal
 health without changing history. Tagged Fn down/up next travels through installed HID event tap and
-voice action routing into diagnostic capture. It then stalls startup before its first audio buffer,
+voice action routing into diagnostic capture. A known transcript then passes through production
+final-text delivery into general pasteboard, activates a focused AppKit field, posts Command-V,
+and must arrive exactly; prior clipboard contents and app focus must be restored. Test then stalls
+startup before its first audio buffer,
 releases the trigger while startup remains unresolved, and requires one warning, one automatic
 reset, complete resource cleanup, and an immediate production retry. Three later failure/retry
 cycles inject faults after live microphone buffers, verifying every capture resource releases and
@@ -195,12 +199,12 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-30)
 
-- Automated local suites: 229 Swift, 58 Node, 183 shell, 17 build-transaction,
+- Automated local suites: 231 Swift, 58 Node, 187 shell, 17 build-transaction,
   17 release-transaction, 41 install-state, 14 updater, 9 restart-handoff,
   9 installed-state preservation, 9 release-policy, 94 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
-- Twenty-six tracked regressions have 83 source/test evidence links; thirteen dictation regressions
-  retain 41 links. Every contract spans at least two files, includes release-executed integration
+- Twenty-seven tracked regressions have 86 source/test evidence links; fourteen dictation regressions
+  retain 46 links. Every contract spans at least two files, includes release-executed integration
   evidence, and has runtime evidence, CI enforcement, and public-release
   enforcement. Latest session health is
   persisted through start, model load, listening, first buffer, finish, and terminal outcome.
@@ -211,9 +215,9 @@ Preserve user settings for incremental tests. Use clean install only for onboard
   files; an ad-hoc success run replaced the staged build cleanly with no leftovers.
 - Release zip and checksum are also staged and committed as a pair only after validation and
   optional notarization complete; interrupted or failed packaging restores prior assets.
-- AddressSanitizer and ThreadSanitizer pass all 229 Swift tests after current recorder,
-  midstream-watchdog, owned-buffer, async-stream, and event-dispatch changes. Rerun both after
-  future recorder, async stream, or shared-state changes.
+- AddressSanitizer and ThreadSanitizer pass all 231 Swift tests after current recorder,
+  midstream-watchdog, installed insert-delivery, owned-buffer, async-stream, and event-dispatch
+  changes. Rerun both after future recorder, async stream, or shared-state changes.
 - Current accessibility-label build passes a 60-second launchd/socket runtime soak with stable
   PID, 61/61 socket pings, flat 50 open descriptors, declining RSS, no new crashes, and no newly
   emitted critical diagnostics.

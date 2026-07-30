@@ -45,7 +45,7 @@ write_attestation() {
   local result="${1:-passed}" version="${2:-1.2.3-test}" commit="${3:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
   python3 - "$ATTESTATION" "$result" "$version" "$commit" <<'PY'
 import json, pathlib, sys
-gates = "regression-impact regression-contracts swift dictation-delivery dictation-watchdog clipboard-watcher node assistant-contract shell build-transaction release-transaction install-state state-preservation uninstall updater-swap restart release-policy qualification-orchestration qualification-report regression-attestation static-analysis docs pages string-review dictation-model".split()
+gates = "regression-impact regression-contracts swift dictation-delivery dictation-insert dictation-watchdog clipboard-watcher node assistant-contract shell build-transaction release-transaction install-state state-preservation uninstall updater-swap restart release-policy qualification-orchestration qualification-report regression-attestation static-analysis docs pages string-review dictation-model".split()
 pathlib.Path(sys.argv[1]).write_text(json.dumps({
     "schemaVersion": 1,
     "result": sys.argv[2],
@@ -97,6 +97,15 @@ data["requiredGates"].remove("dictation-watchdog")
 path.write_text(json.dumps(data))
 PY
 expect_fail "missing dictation watchdog gate is rejected" "missing gate: dictation-watchdog"
+write_attestation
+python3 - "$ATTESTATION" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+data = json.loads(path.read_text())
+data["requiredGates"].remove("dictation-insert")
+path.write_text(json.dumps(data))
+PY
+expect_fail "missing dictation insert gate is rejected" "missing gate: dictation-insert"
 write_attestation
 python3 - "$ATTESTATION" <<'PY'
 import json, pathlib, sys

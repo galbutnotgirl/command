@@ -223,6 +223,56 @@ if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/nul
   exit 1
 fi
 
+insert_reply="$(printf 'dictationinsertprobe\n' | nc -U -w 15 "$SOCKET" 2>/dev/null || true)"
+if [[ -z "$insert_reply" ]]; then
+  print -u2 -- "FAIL: installed dictation insert probe returned no response"
+  exit 1
+fi
+insert_summary="$(python3 -c '
+import json, sys
+result = json.loads(sys.argv[1])
+required = {
+    "ok", "status", "pipelineStatus", "rawCharacters", "processedCharacters",
+    "clipboardWritten", "targetActive", "pasteEventPosted", "receiverMatched",
+    "clipboardRestored", "previousAppRestored", "durationMilliseconds",
+}
+missing = required.difference(result)
+if missing:
+    raise SystemExit("missing fields: " + ", ".join(sorted(missing)))
+if result["ok"] is not True or result["status"] != "passed":
+    raise SystemExit(result.get("failure") or f"dictation insert probe failed: {result}")
+if result["pipelineStatus"] != "delivered":
+    raise SystemExit("dictation insert probe did not use delivered production pipeline result")
+for field in ("rawCharacters", "processedCharacters", "durationMilliseconds"):
+    if not isinstance(result[field], int) or result[field] < 1:
+        raise SystemExit(f"invalid dictation insert metric: {field}")
+for field in (
+    "clipboardWritten", "targetActive", "pasteEventPosted", "receiverMatched",
+    "clipboardRestored", "previousAppRestored",
+):
+    if result[field] is not True:
+        raise SystemExit(f"dictation insert proof missing: {field}")
+print("{}\t{}\t{}".format(
+    result["rawCharacters"],
+    result["processedCharacters"],
+    result["durationMilliseconds"],
+))
+' "$insert_reply")" || {
+  print -u2 -- "FAIL: installed dictation insert probe: ${insert_summary:-invalid response}"
+  print -u2 -- "$insert_reply"
+  exit 1
+}
+insert_raw_chars="${insert_summary%%$'\t'*}"
+insert_remainder="${insert_summary#*$'\t'}"
+insert_processed_chars="${insert_remainder%%$'\t'*}"
+insert_duration="${insert_remainder##*$'\t'}"
+
+current_pid="$(job_pid)"
+if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/null; then
+  print -u2 -- "FAIL: Command restarted during dictation insert probe"
+  exit 1
+fi
+
 watchdog_reply="$(printf 'dictationwatchdogprobe\n' | nc -U -w 50 "$SOCKET" 2>/dev/null || true)"
 if [[ -z "$watchdog_reply" ]]; then
   print -u2 -- "FAIL: dictation startup-watchdog probe returned no response"
@@ -476,6 +526,7 @@ print -- "  probes: ${RUNS}/${RUNS}"
 print -- "  audio buffers: ${total_buffers} total"
 print -- "  production lifecycle: session ${lifecycle_session}, ${lifecycle_buffers} buffers, ${lifecycle_updates} updates, ${lifecycle_stage}, ${lifecycle_duration} ms"
 print -- "  event-tap voice dispatch: 2/2 tagged events, session ${voice_session}, ${voice_buffers} buffers, ${voice_stage}, ${voice_duration} ms, ${voice_aliases} configured aliases"
+print -- "  insert delivery: pipeline ${insert_raw_chars}->${insert_processed_chars} chars, focused receiver matched, clipboard/focus restored in ${insert_duration} ms"
 print -- "  startup watchdog: session ${watchdog_stalled_session} warned/reset after release; retry ${watchdog_retry_session} captured ${watchdog_retry_buffers} and finished ${watchdog_retry_stage} in ${watchdog_duration} ms"
 print -- "  midstream watchdog: session ${stream_watchdog_stalled_session} stalled after ${stream_watchdog_stalled_buffers} buffers; retry ${stream_watchdog_retry_session} captured ${stream_watchdog_retry_buffers} and finished ${stream_watchdog_retry_stage} in ${stream_watchdog_duration} ms"
 print -- "  failure recovery: ${RECOVERY_RUNS}/${RECOVERY_RUNS} cycles, final cleanup ${recovery_cleanup_phase}, ${recovery_total_duration} ms total"

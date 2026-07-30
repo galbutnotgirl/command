@@ -11,6 +11,12 @@ recent change if something in there needs undoing).
 
 ## Installed regression gates (2026-07-30)
 
+- Installed dictation delivery now has direct focused-field proof. Qualification sends a known
+  transcript through same final-text handler used after ASR, writes general pasteboard, activates
+  a real AppKit text receiver, posts Command-V to installed process, and requires exact inserted
+  text. Probe restores prior clipboard and app focus, leaves histories unchanged, and runs before
+  and after restart. DICT-013 plus dedicated `dictation-insert` CI/release attestation gate prevent
+  completion-sound-without-text regressions from hiding behind successful capture/model tests.
 - Dictation capture watchdog now starts when trigger is accepted instead of waiting indefinitely
   for recorder startup. It continuously tracks audio-buffer progress, warns after 1.5 seconds,
   resets after 6 seconds, survives shortcut release while startup remains unresolved, and catches
@@ -56,7 +62,8 @@ recent change if something in there needs undoing).
   `checkpoint/2026-07-30-0259-qualified-install-gate`, and
   `checkpoint/2026-07-30-0331-dictation-delivery-pipeline`, and
   `checkpoint/2026-07-30-0353-installed-state-baseline`, and
-  `checkpoint/2026-07-30-0427-dictation-startup-watchdog`.
+  `checkpoint/2026-07-30-0427-dictation-startup-watchdog`, and
+  `checkpoint/2026-07-30-0533-installed-dictation-delivery`.
 
 ## Modifier chords and uninstaller (2026-07-28)
 
