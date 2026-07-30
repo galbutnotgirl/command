@@ -2000,6 +2000,7 @@ func handle(_ line: String) -> String {
         return "ok"
     case "reloadhotkeys": DispatchQueue.main.async { reregisterHotkeys() }; return "ok"
     case "showsettings":  DispatchQueue.main.async { settingsWindow.show(tab: .setup) }; return "ok"
+    case "runtimepid": return "\(ProcessInfo.processInfo.processIdentifier)"
     case "dictationprobe": return runInstalledDictationProbe()
     case "restart":
         // Reply before beginning the detached handoff so callers can distinguish

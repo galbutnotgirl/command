@@ -27,6 +27,10 @@ ping_socket() {
   [[ "$reply" == "pong" ]]
 }
 
+socket_runtime_pid() {
+  printf 'runtimepid\n' | nc -U -w 2 "$SOCKET" 2>/dev/null || true
+}
+
 defaults delete "$LABEL" "$SENTINEL_KEY" >/dev/null 2>&1 || true
 trap 'defaults delete "$LABEL" "$SENTINEL_KEY" >/dev/null 2>&1 || true' EXIT
 defaults write "$LABEL" "$SENTINEL_KEY" -string "$SENTINEL_VALUE"
@@ -43,6 +47,10 @@ if [[ ! -S "$SOCKET" ]] || ! ping_socket; then
   print -u2 -- "FAIL: installed Command dispatch socket is not ready"
   exit 1
 fi
+if [[ "$(socket_runtime_pid)" != "$old_pid" ]]; then
+  print -u2 -- "FAIL: installed Command socket does not belong to launchd PID"
+  exit 1
+fi
 
 reply="$(printf 'restart\n' | nc -U -w 2 "$SOCKET" 2>/dev/null || true)"
 if [[ "$reply" != "ok" ]]; then
@@ -56,7 +64,8 @@ for (( attempt = 1; attempt <= MAX_ATTEMPTS; attempt++ )); do
   candidate="$(job_pid)"
   if [[ -n "$candidate" && "$candidate" != "$old_pid" ]] \
       && /bin/kill -0 "$candidate" 2>/dev/null \
-      && [[ -S "$SOCKET" ]] && ping_socket; then
+      && [[ -S "$SOCKET" ]] && ping_socket \
+      && [[ "$(socket_runtime_pid)" == "$candidate" ]]; then
     new_pid="$candidate"
     break
   fi
@@ -82,6 +91,6 @@ fi
 
 print -- "installed restart passed"
 print -- "  launchd pid: ${old_pid} -> ${new_pid}"
-print -- "  socket response: ok -> pong"
+print -- "  socket response: ok -> pong (runtime PID matched)"
 print -- "  UserDefaults sentinel: preserved"
 print -- "  new crashes: 0"

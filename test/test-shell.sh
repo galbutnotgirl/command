@@ -265,6 +265,10 @@ assert_contains "dictation release paths share one state transition" "$AGENT_SOU
   'releaseDictationTrigger()'
 assert_contains "installed microphone probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "dictationprobe": return runInstalledDictationProbe()'
+assert_contains "installed restart can identify socket-owning process" "$AGENT_SOURCE" \
+  'case "runtimepid": return "\(ProcessInfo.processInfo.processIdentifier)"'
+assert_contains "installed restart requires socket PID to match launchd" "$(cat "${DIR}/test/test-installed-restart.sh")" \
+  '[[ "$(socket_runtime_pid)" == "$candidate" ]]'
 assert_contains "installed microphone probe captures through AVAudioEngine" "$RECORDER_SOURCE" \
   'func runCaptureProbe('
 assert_contains "installed microphone probe rejects zero buffers" "$DICTATION_PROBE_SOURCE" \
