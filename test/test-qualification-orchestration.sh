@@ -103,7 +103,7 @@ run_qualifier() {
 
 : > "$LOG"
 SUCCESS_OUTPUT="$(run_qualifier)"
-EXPECTED_ORDER=$'state argc=5 clean=unset\nrelease argc=0 clean=unset\ninstall argc=0 clean=unset\nstate argc=5 clean=unset\nstate argc=7 clean=unset\nidentity argc=0 clean=unset\nhotkey argc=0 clean=unset\ndictation argc=0 clean=unset\nrestart argc=0 clean=unset\nhotkey argc=0 clean=unset\ndictation argc=0 clean=unset\nruntime argc=0 clean=unset\nmodel argc=0 clean=unset\nstate argc=5 clean=unset\nstate argc=7 clean=unset'
+EXPECTED_ORDER=$'release argc=0 clean=unset\nstate argc=5 clean=unset\ninstall argc=0 clean=unset\nstate argc=5 clean=unset\nstate argc=7 clean=unset\nidentity argc=0 clean=unset\nhotkey argc=0 clean=unset\ndictation argc=0 clean=unset\nrestart argc=0 clean=unset\nhotkey argc=0 clean=unset\ndictation argc=0 clean=unset\nruntime argc=0 clean=unset\nmodel argc=0 clean=unset\nstate argc=5 clean=unset\nstate argc=7 clean=unset'
 assert_true "qualification executes every step in fixed order" test "$(cat "$LOG")" = "$EXPECTED_ORDER"
 assert_contains "qualification reports success" "[qualify] PASSED" "$SUCCESS_OUTPUT"
 assert_true "success report binds exact fixture commit and thirteen passed steps" python3 - "$REPORT" "$FIXTURE" <<'PY'

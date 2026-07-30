@@ -532,7 +532,7 @@ assert_contains "installed qualification verifies hotkey input before restart" "
   'run_step "Hotkey input before restart"'
 assert_contains "installed qualification verifies hotkey input after restart" "$QUALIFICATION_SOURCE" \
   'run_step "Hotkey input after restart"'
-assert_contains "installed qualification captures durable state before build" "$QUALIFICATION_SOURCE" \
+assert_contains "installed qualification captures durable state before install" "$QUALIFICATION_SOURCE" \
   'run_step "Capture durable state baseline"'
 assert_contains "installed qualification verifies durable state after install" "$QUALIFICATION_SOURCE" \
   'run_step "Durable state after install"'

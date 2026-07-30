@@ -13,8 +13,8 @@ from pathlib import Path
 
 
 EXPECTED_STEPS = [
-    "Capture durable state baseline",
     "Full release gates and signed build",
+    "Capture durable state baseline",
     "Incremental install",
     "Durable state after install",
     "Installed build identity",

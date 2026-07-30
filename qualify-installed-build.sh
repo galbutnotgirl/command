@@ -154,8 +154,8 @@ for required_script in "$RELEASE_SCRIPT" "$INSTALL_SCRIPT" "$IDENTITY_SCRIPT" \
 done
 [[ -r "$STATE_POLICY" ]] || fail "durable-state policy missing: ${STATE_POLICY}"
 
-run_step "Capture durable state baseline" capture_durable_state "$STATE_BEFORE" || exit $?
 run_step "Full release gates and signed build" "$RELEASE_SCRIPT" || exit $?
+run_step "Capture durable state baseline" capture_durable_state "$STATE_BEFORE" || exit $?
 run_step "Incremental install" "$INSTALL_SCRIPT" || exit $?
 run_step "Durable state after install" verify_durable_state || exit $?
 run_step "Installed build identity" "$IDENTITY_SCRIPT" || exit $?

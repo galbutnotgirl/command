@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 VERIFIER = ROOT / "verify-installed-qualification.py"
 NOW = "2026-07-30T08:00:00Z"
 STEPS = [
-    "Capture durable state baseline",
     "Full release gates and signed build",
+    "Capture durable state baseline",
     "Incremental install",
     "Durable state after install",
     "Installed build identity",
