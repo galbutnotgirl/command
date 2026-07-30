@@ -3496,10 +3496,17 @@ private func runInstalledCarbonVoiceRouteProbe(
         down.flags = flags
         up.flags = flags
         down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        var deadline = DispatchTime.now() + .seconds(3)
+        while probe.deliveredCount() < 1, probe.delivery.wait(timeout: deadline) == .success {}
 
-        let deadline = DispatchTime.now() + .seconds(3)
-        while probe.deliveredCount() < 2, probe.delivery.wait(timeout: deadline) == .success {}
+        // Match a physical hold instead of collapsing down/up into one HID burst.
+        // Carbon may not publish either global-hotkey callback when both events
+        // arrive before its first dispatch cycle.
+        up.post(tap: .cghidEventTap)
+        if probe.deliveredCount() == 1 {
+            deadline = DispatchTime.now() + .seconds(3)
+            while probe.deliveredCount() < 2, probe.delivery.wait(timeout: deadline) == .success {}
+        }
         _carbonVoiceRouteProbeLock.lock()
         if _activeCarbonVoiceRouteProbe === probe { _activeCarbonVoiceRouteProbe = nil }
         _carbonVoiceRouteProbeLock.unlock()
