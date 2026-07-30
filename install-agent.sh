@@ -133,7 +133,9 @@ if [ -d "$APP" ]; then
         exit 1
     }
 
-    rsync -a --delete "${SRC_APP}/" "${APP}/" || restore_previous_app "copy failed"
+    # Code signing can change Mach-O bytes without changing file size or
+    # second-level mtime. Checksum mode prevents stale executable signatures.
+    rsync -a --delete --checksum "${SRC_APP}/" "${APP}/" || restore_previous_app "copy failed"
     installed_verify_detail="$(/usr/bin/codesign --verify --deep --strict --verbose=2 "$APP" 2>&1)" \
         || restore_previous_app "installed signature invalid: ${installed_verify_detail:-unknown verification error}"
     if [ -d "$OLD_APP" ]; then

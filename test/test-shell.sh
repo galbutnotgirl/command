@@ -342,6 +342,8 @@ assert_contains "installer rollback restores bundle metadata with ditto" "$INSTA
   '/usr/bin/ditto "$BACKUP_APP" "$APP"'
 assert_contains "installer readiness requires ping response" "$INSTALL_SOURCE" \
   '[ "$reply" = "pong" ]'
+assert_contains "installer compares signed bundle content instead of timestamps" "$INSTALL_SOURCE" \
+  'rsync -a --delete --checksum "${SRC_APP}/" "${APP}/"'
 assert_contains "installer rolls back app when fresh process is not ready" "$INSTALL_SOURCE" \
   'restore_after_readiness_failure "new Command process did not answer ping"'
 QUALIFICATION_SOURCE="$(cat "${DIR}/qualify-installed-build.sh")"
