@@ -221,7 +221,7 @@
           "contains": "installed dictation check repeats failure recovery"
         }
       ],
-      "runtimeEvidence": "Before and after restart, test/test-installed-hotkeys.sh must send synthetic press and release through every successfully registered Carbon and event-tap voice alias, including Home-style external-keyboard routes plus Fn, modifier-only, modifier-chord, and media-key routes, and require exact route counts without firing actions. test/test-installed-dictation.sh must also send swallowed tagged Fn key-down and key-up through installed HID event-tap action path, capture four or more live buffers, reach clean terminal health with every resource released, then pass three consecutive injected-failure and immediate-retry cycles with increasing session IDs, stable PID, and unchanged history."
+      "runtimeEvidence": "Before and after restart, test/test-installed-hotkeys.sh must verify every successfully registered Carbon voice alias through the installed Carbon handler and send HID press and release through every event-tap voice alias, including Home-style external-keyboard routes plus Fn, modifier-only, modifier-chord, and media-key routes, without firing actions. test/test-installed-dictation.sh must also send swallowed tagged Fn key-down and key-up through installed HID event-tap action path, capture four or more live buffers, reach clean terminal health with every resource released, then pass three consecutive injected-failure and immediate-retry cycles with increasing session IDs, stable PID, and unchanged history."
     },
     {
       "id": "DICT-011",

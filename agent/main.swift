@@ -3412,6 +3412,37 @@ private func eventFlags(carbonModifiers: UInt32) -> CGEventFlags {
     return flags
 }
 
+private func postCarbonVoiceRouteEvent(hotkeyID: UInt32, kind: UInt32) -> OSStatus {
+    var event: EventRef?
+    let createStatus = CreateEvent(
+        nil,
+        OSType(kEventClassKeyboard),
+        kind,
+        GetCurrentEventTime(),
+        EventAttributes(kEventAttributeNone),
+        &event
+    )
+    guard createStatus == noErr, let event else { return createStatus }
+    defer { ReleaseEvent(event) }
+
+    var eventID = EventHotKeyID(signature: OSType(0x434D4447), id: hotkeyID)
+    let parameterStatus = withUnsafePointer(to: &eventID) {
+        SetEventParameter(
+            event,
+            EventParamName(kEventParamDirectObject),
+            EventParamType(typeEventHotKeyID),
+            MemoryLayout<EventHotKeyID>.size,
+            $0
+        )
+    }
+    guard parameterStatus == noErr else { return parameterStatus }
+    return PostEventToQueue(
+        GetMainEventQueue(),
+        event,
+        EventPriority(kEventPriorityStandard)
+    )
+}
+
 private func primaryModifierFlag(keycode: UInt32) -> CGEventFlags {
     switch keycode {
     case 54, 55: return .maskCommand
@@ -3463,10 +3494,6 @@ private func runInstalledCarbonVoiceRouteProbe(
         return (0, "Registered Carbon voice alias inventory is incomplete.")
     }
     guard !routes.isEmpty else { return (0, nil) }
-    guard let source = CGEventSource(stateID: .combinedSessionState) else {
-        return (0, "Could not create Carbon voice route event source.")
-    }
-
     var validated = 0
     for route in routes {
         let probe = CarbonVoiceRouteProbeBox(hotkeyID: route.id)
@@ -3478,31 +3505,29 @@ private func runInstalledCarbonVoiceRouteProbe(
         _activeCarbonVoiceRouteProbe = probe
         _carbonVoiceRouteProbeLock.unlock()
 
-        guard let down = CGEvent(
-            keyboardEventSource: source,
-            virtualKey: CGKeyCode(route.shortcut.keycode),
-            keyDown: true
-        ), let up = CGEvent(
-            keyboardEventSource: source,
-            virtualKey: CGKeyCode(route.shortcut.keycode),
-            keyDown: false
-        ) else {
+        let pressStatus = postCarbonVoiceRouteEvent(
+            hotkeyID: route.id,
+            kind: UInt32(kEventHotKeyPressed)
+        )
+        guard pressStatus == noErr else {
             _carbonVoiceRouteProbeLock.lock()
             _activeCarbonVoiceRouteProbe = nil
             _carbonVoiceRouteProbeLock.unlock()
-            return (validated, "Could not create Carbon voice alias events.")
+            return (validated, "Could not post Carbon voice press event (status \(pressStatus)).")
         }
-        let flags = eventFlags(carbonModifiers: route.shortcut.mods)
-        down.flags = flags
-        up.flags = flags
-        down.post(tap: .cghidEventTap)
         var deadline = DispatchTime.now() + .seconds(3)
         while probe.deliveredCount() < 1, probe.delivery.wait(timeout: deadline) == .success {}
 
-        // Match a physical hold instead of collapsing down/up into one HID burst.
-        // Carbon may not publish either global-hotkey callback when both events
-        // arrive before its first dispatch cycle.
-        up.post(tap: .cghidEventTap)
+        let releaseStatus = postCarbonVoiceRouteEvent(
+            hotkeyID: route.id,
+            kind: UInt32(kEventHotKeyReleased)
+        )
+        guard releaseStatus == noErr else {
+            _carbonVoiceRouteProbeLock.lock()
+            _activeCarbonVoiceRouteProbe = nil
+            _carbonVoiceRouteProbeLock.unlock()
+            return (validated, "Could not post Carbon voice release event (status \(releaseStatus)).")
+        }
         if probe.deliveredCount() == 1 {
             deadline = DispatchTime.now() + .seconds(3)
             while probe.deliveredCount() < 2, probe.delivery.wait(timeout: deadline) == .success {}

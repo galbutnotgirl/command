@@ -65,7 +65,7 @@ UserDefaults, and no crash report. Runtime test then performs a 15-second idle s
 socket pings and verifies stable PID, bounded open descriptors, no new crash reports, and no new
 fatal or SwiftUI cycle diagnostics. Override duration with `COMMAND_SOAK_SECONDS` for longer runs.
 Installed hotkey test compares configured Carbon aliases with successful registrations, requires
-trusted enabled event tap, injects press/release through every registered Carbon and event-tap voice
+trusted enabled event tap, checks every registered Carbon alias through installed handler, injects press/release through every event-tap voice
 alias while handlers suppress user actions, and injects tagged HID events that callback swallows
 before dispatch.
 Running before and after restart catches dead input hooks without firing user actions.

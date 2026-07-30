@@ -1380,7 +1380,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   AppKit receiver used by installed focused-paste proof, so harness drift cannot hide until local
   packaging.
 - **Home-style voice aliases get installed dispatch proof**: hotkey qualification now posts synthetic
-  press and release through every registered Carbon voice shortcut and verifies real handler receives
+  Carbon press and release through every registered Carbon voice shortcut and verifies real handler receives
   both while suppressing user actions. Existing tagged Fn probe still proves event tap, live microphone
   capture, release, and cleanup.
 - **Every event-tap voice alias gets installed route proof**: hotkey qualification now resolves and
