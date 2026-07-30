@@ -1243,12 +1243,8 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             let isVoice = isBuiltInVoiceAction(action) || resolveTrigger(action)?.1.kind == .voice
             if isVoice {
                 Task { @MainActor in
-                    appendLog("[hotkeys] voice release action=\(action) id=\(hkID.id) triggerMode=\(_dictTrigMode) overlay=\(DictationOverlay.shared.isVisible) phase=\(recorder.state.rawValue)")
-                    if _dictTrigMode == .pushToTalk {
-                        _dictPTTimer?.invalidate(); _dictPTTimer = nil
-                        _dictTrigMode = .idle
-                        if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
-                    }
+                    appendLog("[hotkeys] voice release action=\(action) id=\(hkID.id) triggerMode=\(_dictTrigger.mode.rawValue) overlay=\(DictationOverlay.shared.isVisible) phase=\(recorder.state.rawValue)")
+                    releaseDictationTrigger()
                 }
             }
         }
@@ -1268,7 +1264,7 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             _carbonDictHeld.insert(hkID.id)
             let m: DictMode = dictMode(forBuiltInVoiceAction: action)
             Task { @MainActor in
-                appendLog("[hotkeys] voice press action=\(action) id=\(hkID.id) triggerMode=\(_dictTrigMode) overlay=\(DictationOverlay.shared.isVisible) phase=\(recorder.state.rawValue)")
+                appendLog("[hotkeys] voice press action=\(action) id=\(hkID.id) triggerMode=\(_dictTrigger.mode.rawValue) overlay=\(DictationOverlay.shared.isVisible) phase=\(recorder.state.rawValue)")
                 triggerDictation(mode: m, keycode: nil, pollForRelease: false)
             }
         } else if let (ca, trig) = resolveTrigger(action) {
@@ -1442,7 +1438,7 @@ private func voiceHotkeyTarget(keycode: UInt32, mods: UInt32) -> VoiceHotkeyTarg
 
 @MainActor
 private func triggerVoiceHotkey(_ target: VoiceHotkeyTarget, keycode: CGKeyCode) {
-    appendLog("[dictation] trigger request target=\(String(describing: target)) keycode=\(keycode) triggerMode=\(_dictTrigMode) overlay=\(DictationOverlay.shared.isVisible) phase=\(recorder.state.rawValue)")
+    appendLog("[dictation] trigger request target=\(String(describing: target)) keycode=\(keycode) triggerMode=\(_dictTrigger.mode.rawValue) overlay=\(DictationOverlay.shared.isVisible) phase=\(recorder.state.rawValue)")
     switch target {
     case .builtIn(let mode):
         triggerDictation(mode: mode, keycode: keycode, pollForRelease: false)
@@ -1494,38 +1490,62 @@ private func releaseVoiceHotkey(keycode: UInt32) {
     appendLog("[eventTap] voice up kc=\(keycode)")
     DispatchQueue.main.async {
         Task { @MainActor in
-            appendLog("[dictation] release request keycode=\(keycode) triggerMode=\(_dictTrigMode) overlay=\(DictationOverlay.shared.isVisible) phase=\(recorder.state.rawValue)")
-            if _dictTrigMode == .pushToTalk {
-                _dictPTTimer?.invalidate(); _dictPTTimer = nil
-                _dictTrigMode = .idle
-                if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
-            }
+            appendLog("[dictation] release request keycode=\(keycode) triggerMode=\(_dictTrigger.mode.rawValue) overlay=\(DictationOverlay.shared.isVisible) phase=\(recorder.state.rawValue)")
+            releaseDictationTrigger()
         }
     }
 }
 
 // ---- Dictation trigger state machine (matches DictationLab v2) ----------------
 // Single tap → PTT (hold to talk; CGEventSource poll releases on key-up)
-// Tap while PTT → lock (hands-free; keep recording until next tap)
+// Quick tap then second tap → lock (hands-free; keep recording until next tap)
 // Tap while locked → stop + paste
-// Double-tap from idle (within 350ms) → jump straight to lock
-private enum DictTrigMode { case idle, pushToTalk, lock }
-private var _dictTrigMode: DictTrigMode = .idle
+private var _dictTrigger = DictationTriggerCoordinator()
 private var _dictPTTimer: Timer? = nil
-private var _dictLastPress: Double = 0
-private let _dictDoubleTapWindow: Double = 0.35
+private var _dictDeferredStopTimer: Timer? = nil
 private var _carbonDictHeld: Set<UInt32> = []   // tracks held Carbon hotkey IDs; suppresses key-repeat
 
 @MainActor
 func resetDictTrigMode() {
     _dictPTTimer?.invalidate(); _dictPTTimer = nil
-    _dictTrigMode = .idle
+    _dictDeferredStopTimer?.invalidate(); _dictDeferredStopTimer = nil
+    _dictTrigger.reset()
+}
+
+@MainActor
+private func releaseDictationTrigger(at now: TimeInterval = Date().timeIntervalSinceReferenceDate) {
+    _dictPTTimer?.invalidate(); _dictPTTimer = nil
+    let action = _dictTrigger.release(at: now)
+    appendLog("[dictation] release transition action=\(String(describing: action)) triggerMode=\(_dictTrigger.mode.rawValue) phase=\(recorder.state.rawValue)")
+
+    switch action {
+    case .deferStop(let seconds):
+        _dictDeferredStopTimer?.invalidate()
+        _dictDeferredStopTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { timer in
+            MainActor.assumeIsolated {
+                timer.invalidate()
+                _dictDeferredStopTimer = nil
+                let deferredAction = _dictTrigger.deferredStopFired()
+                appendLog("[dictation] deferred release action=\(String(describing: deferredAction)) triggerMode=\(_dictTrigger.mode.rawValue) phase=\(recorder.state.rawValue)")
+                if deferredAction == .stopRecording, DictationOverlay.shared.isVisible {
+                    DictationOverlay.shared.stopRecording()
+                }
+            }
+        }
+    case .stopRecording:
+        _dictDeferredStopTimer?.invalidate(); _dictDeferredStopTimer = nil
+        if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
+    case .none:
+        break
+    case .startRecording, .lockRecording:
+        appendLog("[dictation] unexpected release action=\(String(describing: action))")
+    }
 }
 
 @MainActor
 func triggerDictation(mode: DictMode, keycode: CGKeyCode?, pollForRelease: Bool = true) {
     let healthAction = dictationTriggerHealthAction(
-        triggerIsIdle: _dictTrigMode == .idle,
+        triggerIsIdle: _dictTrigger.mode == .idle,
         overlayVisible: DictationOverlay.shared.isVisible,
         capturePhase: recorder.state
     )
@@ -1533,7 +1553,7 @@ func triggerDictation(mode: DictMode, keycode: CGKeyCode?, pollForRelease: Bool 
     case .proceed:
         break
     case .resetStaleTrigger:
-        appendLog("[dictation] reconciled stale trigger mode=\(_dictTrigMode) phase=\(recorder.state.rawValue)")
+        appendLog("[dictation] reconciled stale trigger mode=\(_dictTrigger.mode.rawValue) phase=\(recorder.state.rawValue)")
         resetDictTrigMode()
     case .resetStaleOverlay:
         appendLog("[dictation] reconciled stale overlay phase=\(recorder.state.rawValue)")
@@ -1547,44 +1567,36 @@ func triggerDictation(mode: DictMode, keycode: CGKeyCode?, pollForRelease: Bool 
         return
     }
 
-    switch _dictTrigMode {
-    case .lock:
-        resetDictTrigMode()
-        if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
-
-    case .pushToTalk:
-        _dictPTTimer?.invalidate(); _dictPTTimer = nil
-        _dictTrigMode = .lock   // hands-free: keep recording until next tap
-
-    case .idle:
-        let now = Date().timeIntervalSinceReferenceDate
-        let isDouble = (now - _dictLastPress) < _dictDoubleTapWindow
-        _dictLastPress = now
-
+    let action = _dictTrigger.press(at: Date().timeIntervalSinceReferenceDate)
+    appendLog("[dictation] press transition action=\(String(describing: action)) triggerMode=\(_dictTrigger.mode.rawValue) phase=\(recorder.state.rawValue)")
+    switch action {
+    case .startRecording:
         if !DictationOverlay.shared.isVisible {
             guard DictationOverlay.shared.show(mode: mode) else {
                 resetDictTrigMode()
                 return
             }
         }
-
-        if isDouble {
-            _dictTrigMode = .lock
-        } else {
-            _dictTrigMode = .pushToTalk
-            guard pollForRelease, let keycode else { return }
-            _dictPTTimer?.invalidate()
-            _dictPTTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) { t in
-                MainActor.assumeIsolated {
-                    guard _dictTrigMode == .pushToTalk else { t.invalidate(); return }
-                    if !CGEventSource.keyState(.hidSystemState, key: keycode) {
-                        t.invalidate(); _dictPTTimer = nil
-                        _dictTrigMode = .idle
-                        if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
-                    }
+        guard pollForRelease, let keycode else { return }
+        _dictPTTimer?.invalidate()
+        _dictPTTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) { timer in
+            MainActor.assumeIsolated {
+                guard _dictTrigger.mode == .pushToTalk else { timer.invalidate(); return }
+                if !CGEventSource.keyState(.hidSystemState, key: keycode) {
+                    timer.invalidate()
+                    releaseDictationTrigger()
                 }
             }
         }
+    case .lockRecording:
+        _dictPTTimer?.invalidate(); _dictPTTimer = nil
+        _dictDeferredStopTimer?.invalidate(); _dictDeferredStopTimer = nil
+    case .stopRecording:
+        _dictPTTimer?.invalidate(); _dictPTTimer = nil
+        _dictDeferredStopTimer?.invalidate(); _dictDeferredStopTimer = nil
+        if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
+    case .none, .deferStop:
+        appendLog("[dictation] unexpected press action=\(String(describing: action))")
     }
 }
 

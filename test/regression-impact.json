@@ -32,11 +32,13 @@
         "agent/DictationStore.swift",
         "agent/Sources/ClaudeCommandCore/VoiceSettings.swift",
         "agent/Sources/ClaudeCommandCore/DictationSessionHealth.swift",
+        "agent/Sources/ClaudeCommandCore/DictationTriggerCoordinator.swift",
         "agent/Tools/DictationModelProbe/main.swift"
       ],
       "evidence": [
         "agent/Tests/ClaudeCommandCoreTests/VoiceSettingsTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/DictationSessionHealthTests.swift",
+        "agent/Tests/ClaudeCommandCoreTests/DictationTriggerCoordinatorTests.swift",
         "test/test-dictation-model.sh",
         "test/test-shell.sh",
         "test/regression-contracts.json"

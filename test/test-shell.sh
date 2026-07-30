@@ -241,6 +241,7 @@ PERMISSIONS_SOURCE="$(cat "${DIR}/agent/Permissions.swift")"
 DICTATION_OVERLAY_SOURCE="$(cat "${DIR}/agent/DictationOverlay.swift")"
 RECORDER_SOURCE="$(cat "${DIR}/agent/Recorder.swift")"
 DICTATION_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationSessionHealth.swift")"
+DICTATION_TRIGGER_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationTriggerCoordinator.swift")"
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
   'helper_newchat ||'
 assert_contains "Native assistant shortcuts use tested core mapping" "$AGENT_SOURCE" \
@@ -259,6 +260,14 @@ assert_contains "voice event tap reports missing Accessibility" "$AGENT_SOURCE" 
   'waiting for Accessibility before installing media/voice hook'
 assert_contains "dictation trigger reconciles stale state before recording" "$AGENT_SOURCE" \
   'dictationTriggerHealthAction('
+assert_contains "dictation release paths share one state transition" "$AGENT_SOURCE" \
+  'releaseDictationTrigger()'
+assert_contains "dictation quick tap keeps double-tap lock available" "$DICTATION_TRIGGER_SOURCE" \
+  'mode = .awaitingSecondTap'
+assert_contains "held dictation release remains immediate" "$DICTATION_TRIGGER_SOURCE" \
+  'return .stopRecording'
+assert_not_contains "dictation no longer relies on stale last-press timestamp" "$AGENT_SOURCE" \
+  '_dictLastPress'
 assert_contains "dictation shows a centered capture warning" "$DICTATION_OVERLAY_SOURCE" \
   'title: "Microphone isn'"'"'t recording"'
 assert_contains "dictation watchdog recovers zero-buffer capture" "$DICTATION_OVERLAY_SOURCE" \

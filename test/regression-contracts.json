@@ -83,6 +83,25 @@
         }
       ],
       "runtimeEvidence": "Persistent logs record shortcut press/release state plus capture phase."
+    },
+    {
+      "id": "DICT-006",
+      "risk": "Quick release stops dictation before a second tap can lock recording.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationTriggerCoordinatorTests.swift",
+          "contains": "testSecondTapLocksExistingRecordingAndCancelsDeferredStop"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationTriggerCoordinatorTests.swift",
+          "contains": "testHeldDictationStartsAndStopsImmediatelyOnRelease"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "dictation release paths share one state transition"
+        }
+      ],
+      "runtimeEvidence": "Persistent logs record press, release, and deferred-release actions with trigger mode and capture phase."
     }
   ],
   "requiredGates": [
