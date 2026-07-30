@@ -61,4 +61,4 @@ done
 print -- "regression attestation passed"
 print -- "  commit: ${COMMIT}"
 print -- "  version: ${VERSION}"
-print -- "  gates: 25"
+print -- "  gates: ${#GATE_VALUES}"

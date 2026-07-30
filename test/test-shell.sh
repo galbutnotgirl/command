@@ -342,6 +342,8 @@ assert_contains "voice dispatch probe returns typed event and capture metrics" "
   'public struct VoiceDispatchProbeResult'
 assert_contains "dictation insert probe returns typed pipeline paste and restore metrics" "$DICTATION_INSERT_PROBE_SOURCE" \
   'public struct DictationInsertProbeResult'
+assert_contains "regression verifier reports actual gate count" "$(cat "${DIR}/verify-regression-attestation.sh")" \
+  'gates: ${#GATE_VALUES}'
 assert_contains "installed dictation check executes production lifecycle" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   "printf 'dictationlifecycleprobe\\n'"
 assert_contains "installed dictation check injects live capture failure" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
