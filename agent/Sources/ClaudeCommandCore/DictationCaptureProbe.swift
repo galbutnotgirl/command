@@ -19,6 +19,7 @@ public struct DictationCaptureProbeResult: Codable, Equatable, Sendable {
     public let sampleRate: Double
     public let channelCount: Int
     public let durationMilliseconds: Int
+    public let capturePhase: String?
     public let failure: String?
 
     public init(
@@ -29,6 +30,7 @@ public struct DictationCaptureProbeResult: Codable, Equatable, Sendable {
         sampleRate: Double = 0,
         channelCount: Int = 0,
         durationMilliseconds: Int = 0,
+        capturePhase: String? = nil,
         failure: String? = nil
     ) {
         self.ok = status == .passed
@@ -39,6 +41,7 @@ public struct DictationCaptureProbeResult: Codable, Equatable, Sendable {
         self.sampleRate = max(0, sampleRate)
         self.channelCount = max(0, channelCount)
         self.durationMilliseconds = max(0, durationMilliseconds)
+        self.capturePhase = capturePhase
         self.failure = failure
     }
 

@@ -49,6 +49,21 @@ final class DictationCaptureProbeTests: XCTestCase {
         }
     }
 
+    func testBusyProbeCarriesCapturePhase() throws {
+        let result = DictationCaptureProbeResult(
+            status: .recorderBusy,
+            authorization: "authorized",
+            capturePhase: "loading",
+            failure: "Dictation recorder is busy (phase: loading)."
+        )
+
+        let decoded = try DictationCaptureProbeCoding.decode(
+            DictationCaptureProbeCoding.encode(result)
+        )
+        XCTAssertEqual(decoded.capturePhase, "loading")
+        XCTAssertEqual(decoded.status, .recorderBusy)
+    }
+
     func testProbeResultRoundTripsAsSingleLineJSON() throws {
         let result = DictationCaptureProbeResult.completed(
             authorization: "authorized",

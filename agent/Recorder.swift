@@ -304,7 +304,8 @@ final class Recorder: ObservableObject {
             completion(DictationCaptureProbeResult(
                 status: .recorderBusy,
                 authorization: authorization,
-                failure: "Dictation recorder is busy."
+                capturePhase: state.rawValue,
+                failure: "Dictation recorder is busy (phase: \(state.rawValue))."
             ))
             return
         }

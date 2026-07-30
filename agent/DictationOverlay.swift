@@ -121,12 +121,20 @@ final class DictationOverlay: NSObject {
     @discardableResult
     func show(mode: DictMode) -> Bool {
         prevBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        let attemptedPhase = recorder.state
         guard recorder.start(mode: mode) else {
             appendLog("[dictation] overlay start rejected mode=\(mode) phase=\(recorder.state.rawValue)")
-            showUnavailable(
-                title: "Dictation didn't start",
-                detail: "Release your shortcut and try again. Command reset any stale recording state."
-            )
+            if attemptedPhase == .loading {
+                showUnavailable(
+                    title: "Dictation is loading",
+                    detail: "Command is preparing on-device transcription. Release your shortcut and try again in a moment."
+                )
+            } else {
+                showUnavailable(
+                    title: "Dictation didn't start",
+                    detail: "Release your shortcut and try again. Command reset any stale recording state."
+                )
+            }
             return false
         }
         isVisible = true

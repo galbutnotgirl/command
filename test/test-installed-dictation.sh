@@ -37,7 +37,21 @@ fi
 history_before="$(history_digest)"
 total_buffers=0
 for (( run = 1; run <= RUNS; run++ )); do
-  reply="$(printf 'dictationprobe\n' | nc -U -w 7 "$SOCKET" 2>/dev/null || true)"
+  reply=""
+  for (( readiness_attempt = 1; readiness_attempt <= 50; readiness_attempt++ )); do
+    reply="$(printf 'dictationprobe\n' | nc -U -w 7 "$SOCKET" 2>/dev/null || true)"
+    loading_phase="$(python3 -c '
+import json, sys
+try:
+    result = json.loads(sys.argv[1])
+except Exception:
+    print("no")
+else:
+    print("yes" if result.get("status") == "recorderBusy" and result.get("capturePhase") == "loading" else "no")
+' "$reply")"
+    [[ "$loading_phase" == "yes" ]] || break
+    sleep 0.1
+  done
   if [[ -z "$reply" ]]; then
     print -u2 -- "FAIL: microphone probe ${run}/${RUNS} returned no response"
     exit 1

@@ -273,6 +273,12 @@ assert_contains "installed microphone probe captures through AVAudioEngine" "$RE
   'func runCaptureProbe('
 assert_contains "installed microphone probe rejects zero buffers" "$DICTATION_PROBE_SOURCE" \
   'capturedBuffers > 0 ? .passed : .noAudioBuffers'
+assert_contains "installed microphone probe reports busy capture phase" "$RECORDER_SOURCE" \
+  'capturePhase: state.rawValue'
+assert_contains "installed microphone check waits only for model loading" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  'result.get("status") == "recorderBusy" and result.get("capturePhase") == "loading"'
+assert_contains "dictation startup rejection explains model loading" "$DICTATION_OVERLAY_SOURCE" \
+  'title: "Dictation is loading"'
 DICTATION_PROBE_RUNTIME_SOURCE="$(sed -n '/func runCaptureProbe(/,/private func beginStreaming/p' "${DIR}/agent/Recorder.swift")"
 assert_not_contains "installed microphone probe cannot dispatch transcript" "$DICTATION_PROBE_RUNTIME_SOURCE" \
   'onFinal?'
