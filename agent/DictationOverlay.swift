@@ -399,16 +399,13 @@ final class DictationOverlay: NSObject {
                     pasteEventPosted: false
                 )
             }
-            if targetBundle == Bundle.main.bundleIdentifier {
-                NSApp.activate(ignoringOtherApps: true)
-            } else {
-                activate(targetBundle)
-            }
-            waitForActive(targetBundle)
-            let targetActive = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == targetBundle
-            let pasted = postKey(kV, cmd: true, to: targetBundle)
+            activate(targetBundle)
+            let targetActive = waitForActive(targetBundle)
+            let pasted = targetActive && postKey(kV, cmd: true, to: targetBundle)
             appendLog("[dictation] insert target=\(targetBundle) active=\(targetActive) pastePosted=\(pasted)")
-            if !pasted, notifyOnFailure {
+            if !targetActive, notifyOnFailure {
+                notify("Dictation copied", "Transcript is on clipboard, but previous app did not come forward.")
+            } else if !pasted, notifyOnFailure {
                 notify("Dictation copied", "Transcript is on clipboard, but Command could not paste into previous app.")
             }
             return DictationInsertDispatchOutcome(

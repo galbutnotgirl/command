@@ -368,6 +368,14 @@ assert_contains "installed dictation check proves real paste delivery" "$(cat "$
   "printf 'dictationinsertprobe\\n'"
 assert_contains "installed dictation check requires exact receiver and state restoration" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   '"clipboardWritten", "targetActive", "pasteEventPosted", "receiverMatched",'
+assert_contains "dictation paste waits for confirmed target activation" "$DICTATION_OVERLAY_SOURCE" \
+  'let targetActive = waitForActive(targetBundle)'
+assert_contains "dictation never claims paste after failed activation" "$DICTATION_OVERLAY_SOURCE" \
+  'let pasted = targetActive && postKey(kV, cmd: true, to: targetBundle)'
+assert_contains "target activation tolerates busy LaunchServices" "$AGENT_SOURCE" \
+  'func waitForActive(_ bundle: String, attempts: Int = 120) -> Bool'
+assert_contains "installed paste probe cannot reopen settings over receiver" "$AGENT_SOURCE" \
+  'if _installedDictationInsertProbeIsActive { return true }'
 assert_contains "tagged voice events continue through installed event callback" "$AGENT_SOURCE" \
   'let isVoiceDispatchProbe = probeDisposition == .voiceDispatch'
 assert_contains "voice dispatch probe overrides only tagged event target" "$AGENT_SOURCE" \

@@ -93,14 +93,17 @@ func activate(_ bundle: String) {
     try? t.run()
 }
 
-// Poll until `bundle` is the frontmost app, then return. Caps at ~300ms.
-func waitForActive(_ bundle: String) {
-    guard !bundle.isEmpty else { return }
-    for _ in 0..<30 {
+// Poll until `bundle` is frontmost. LaunchServices activation can exceed 300 ms
+// on a busy Mac; posting paste before focus lands silently drops dictation.
+@discardableResult
+func waitForActive(_ bundle: String, attempts: Int = 120) -> Bool {
+    guard !bundle.isEmpty else { return false }
+    for _ in 0..<max(1, attempts) {
         if NSRunningApplication.runningApplications(withBundleIdentifier: bundle)
-            .first?.isActive == true { return }
+            .first?.isActive == true { return true }
         usleep(10_000)
     }
+    return false
 }
 
 // Post a user-facing banner (LSUIElement agent has no UI of its own otherwise).
@@ -1997,6 +2000,8 @@ private final class DictationProbeResponseBox: @unchecked Sendable {
     }
 }
 
+private var _installedDictationInsertProbeIsActive = false
+
 private final class DictationInsertProbeResponseBox: @unchecked Sendable {
     private let lock = NSLock()
     private var execution: DictationFinalDeliveryExecution?
@@ -2102,8 +2107,8 @@ private final class InstalledDictationInsertProbeHarness {
         panel.alphaValue = 0.01
         panel.level = .floating
 
+        _installedDictationInsertProbeIsActive = true
         _ = NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
         panel.center()
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(textView)
@@ -2140,9 +2145,9 @@ private final class InstalledDictationInsertProbeHarness {
         var previousRestored = previousBundle.isEmpty || previousBundle == targetBundle
         if !previousRestored {
             activate(previousBundle)
-            waitForActive(previousBundle)
-            previousRestored = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == previousBundle
+            previousRestored = waitForActive(previousBundle)
         }
+        _installedDictationInsertProbeIsActive = false
         applyDockPolicy()
         return (restored, previousRestored)
     }
@@ -3546,6 +3551,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if _installedDictationInsertProbeIsActive { return true }
         openLastSettingsTab()
         return true
     }
