@@ -1819,12 +1819,15 @@ func startMediaKeyHook() {
                 guard MODIFIER_ONLY_KEYCODES.contains(kc) else { return passthrough }
                 // Local Settings monitor records modifier chords. Keep runtime
                 // dispatch paused until recorder commits or cancels.
-                if settingsModel.recordingAction != nil { return passthrough }
+                if settingsModel.recordingAction != nil && !isVoiceDispatchProbe { return passthrough }
                 let isDown = isModifierKeyDown(keycode: kc, flags: event.flags)
                 let activeMods = physicalModifierMask(cgFlags: event.flags)
                 let cm = chordModifiers(activeModifiers: activeMods, primaryKeycode: kc)
                 if isDown {
-                    if let voiceTarget = voiceHotkeyTarget(keycode: kc, mods: cm) {
+                    let voiceTarget: VoiceHotkeyTarget? = isVoiceDispatchProbe
+                        ? .builtIn(.diagnostic)
+                        : voiceHotkeyTarget(keycode: kc, mods: cm)
+                    if let voiceTarget {
                         if _voiceHeldKeycodes.contains(kc) { return nil }
                         appendLog("[eventTap] modifier voice down kc=\(kc) mods=\(cm)")
                         _voiceHeldKeycodes.insert(kc)

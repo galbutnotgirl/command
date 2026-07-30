@@ -340,6 +340,8 @@ assert_contains "tagged voice events continue through installed event callback" 
   'let isVoiceDispatchProbe = probeDisposition == .voiceDispatch'
 assert_contains "voice dispatch probe overrides only tagged event target" "$AGENT_SOURCE" \
   'VoiceHotkeyTarget.builtIn(.diagnostic)'
+assert_contains "modifier-only voice dispatch probe bypasses user shortcut target" "$AGENT_SOURCE" \
+  'let voiceTarget: VoiceHotkeyTarget? = isVoiceDispatchProbe'
 assert_contains "installed dictation check repeats failure recovery" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   'RECOVERY_RUNS="${COMMAND_DICTATION_RECOVERY_RUNS:-3}"'
 assert_contains "installed recovery cycles require increasing sessions" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
