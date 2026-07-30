@@ -127,7 +127,7 @@ gui_session_is_locked() {
     locked) return 0 ;;
     unlocked) return 1 ;;
   esac
-  ioreg -n Root -d1 2>/dev/null | grep -q '"CGSSessionScreenIsLocked"=Yes'
+  ioreg -n Root -d1 2>/dev/null | grep -F '"CGSSessionScreenIsLocked"=Yes' >/dev/null
 }
 
 [[ "$COMMIT" != "unknown" ]] || fail "repository commit is unavailable"

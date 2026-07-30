@@ -376,6 +376,8 @@ assert_contains "installed dictation receiver reports PID for scoped cleanup" "$
   'ProcessInfo.processInfo.processIdentifier'
 assert_contains "installed qualification rejects locked GUI session" "$(cat "${DIR}/qualify-installed-build.sh")" \
   'focus and paste delivery cannot run behind loginwindow'
+assert_not_contains "locked GUI detection does not trip pipefail through grep early exit" \
+  'grep -q' "$(sed -n '/gui_session_is_locked()/,/^}/p' "${DIR}/qualify-installed-build.sh")"
 assert_contains "dictation paste waits for confirmed target activation" "$DICTATION_OVERLAY_SOURCE" \
   'let targetActive = waitForActive(targetBundle)'
 assert_contains "dictation never claims paste after failed activation" "$DICTATION_OVERLAY_SOURCE" \
