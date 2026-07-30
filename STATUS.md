@@ -22,6 +22,9 @@ recent change if something in there needs undoing).
   Probe events are swallowed before configured actions, clipboard writes, or assistant routing.
 - Event-tap passthrough returns borrowed events without retaining them. Prior retained passthrough
   leaked one event reference for ordinary keyboard traffic and could degrade long-running input.
+- Dictation failure recovery landed in `9e83e76` and normal-finalization cleanup in `8ee7f09`.
+  Exact incremental qualification passed `8ee7f09`: all ten ordered steps, live recovery before
+  and after restart, stable runtime soak, and three final-word fixtures.
 - Rollback checkpoints: `checkpoint/2026-07-30-0114-dictation-lifecycle-probe`,
   `checkpoint/2026-07-30-0138-installed-hotkey-health`, and
   `checkpoint/2026-07-30-0205-dictation-fault-recovery`.
