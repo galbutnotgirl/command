@@ -42,6 +42,10 @@ With installed Command running under launchd, run `./test/test-installed-restart
 `./test/test-installed-runtime.sh`. Restart must return `ok`, replace PID, recover socket,
 preserve UserDefaults, and produce no crash report before idle soak begins.
 
+Run `./test/test-installed-hotkeys.sh` before and after restart. Expected and successful Carbon
+registration counts must match, event tap must be installed and enabled with Accessibility trust,
+and all tagged HID events must reach callback without firing configured actions or replacing PID.
+
 Run `./test/test-installed-dictation.sh` before and after restart. It performs repeated raw
 microphone-buffer probes, then drives production trigger and release paths through model
 streaming, recorder buffers, stop-tail drain, ASR finish, and clean terminal health. Diagnostic
@@ -67,10 +71,10 @@ Optional local packaging check:
 Review `test/regression-contracts.json` for behavior touched by this release. `./release.sh --publish --notarize` requires full gates and runs cached Parakeet final-word fixtures automatically; `--skip-checks` cannot publish.
 
 Run `time ./qualify-installed-build.sh` on exact clean release commit no more
-than 24 hours before publishing. `release.sh --publish` verifies all eight
+than 24 hours before publishing. `release.sh --publish` verifies all ten
 installed checks before gates and again before tagging; stale, mismatched,
 failed, clean-install, or edited reports stop publication. Dictation lifecycle
-checks run on both sides of qualification's launchd restart.
+and hotkey-input checks run on both sides of qualification's launchd restart.
 
 Run `./test/test-regression-impact.sh` and review `test/regression-impact.json`. Every changed runtime area since latest `v*` tag must include matching automated evidence before release preflight can pass.
 

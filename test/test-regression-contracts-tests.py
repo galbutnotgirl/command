@@ -96,6 +96,14 @@ class RegressionContractValidatorTests(unittest.TestCase):
         document["coverageRequirements"]["dictation"] = 1
         self.assertTrue(any("cannot drop below 8" in item for item in self.failures(document)))
 
+    def testInstalledInputCoverageMinimumsCannotBeLowered(self) -> None:
+        document = copy.deepcopy(self.document)
+        document["coverageRequirements"]["app-runtime"] = 2
+        self.assertTrue(any("app-runtime cannot drop below 3" in item for item in self.failures(document)))
+        document = copy.deepcopy(self.document)
+        document["coverageRequirements"]["shortcuts-and-input"] = 1
+        self.assertTrue(any("shortcuts-and-input cannot drop below 2" in item for item in self.failures(document)))
+
     def testMandatoryGateDeclarationCannotBeRemoved(self) -> None:
         document = copy.deepcopy(self.document)
         document["requiredGates"] = []

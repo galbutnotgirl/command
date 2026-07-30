@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
   "coverageRequirements": {
-    "app-runtime": 2,
+    "app-runtime": 3,
     "dictation": 8,
-    "shortcuts-and-input": 1,
+    "shortcuts-and-input": 2,
     "assistant-routing": 1,
     "clipboard-history": 1,
     "settings-and-import": 1,
@@ -217,6 +217,26 @@
       "runtimeEvidence": "Diagnostics list every enabled alias; live press logs record matching action, keycode, modifiers, and dispatch route."
     },
     {
+      "id": "SHORT-002",
+      "areas": ["shortcuts-and-input", "app-runtime"],
+      "risk": "Configured hotkeys appear valid while Carbon registration is incomplete, HID event tap is missing or disabled, tagged events never reach callback, or passthrough events leak retains until input stops working.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/HotkeyHealthProbeTests.swift",
+          "contains": "testPassedProbeCarriesInstalledInputMetrics"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "event tap passthrough does not retain borrowed events"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "installed hotkey check requires full tagged delivery"
+        }
+      ],
+      "runtimeEvidence": "Before and after restart, test/test-installed-hotkeys.sh must match expected and successful Carbon registrations, verify trusted enabled event tap, deliver every tagged HID event through installed callback, and keep launchd PID stable without firing user actions."
+    },
+    {
       "id": "ROUTE-001",
       "areas": ["assistant-routing"],
       "risk": "Claude or ChatGPT routing opens wrong surface, fails to paste, or reports success after submit failure.",
@@ -311,7 +331,7 @@
     {
       "id": "INSTALL-002",
       "areas": ["install-update-release"],
-      "risk": "Source tests pass but installed app is reported validated without proving exact build identity, microphone capture, restart recovery, runtime stability, or final-word decoding.",
+      "risk": "Source tests pass but installed app is reported validated without proving exact build identity, hotkey input, microphone capture, restart recovery, runtime stability, or final-word decoding.",
       "automatedEvidence": [
         {
           "file": "test/test-qualification-orchestration.sh",
@@ -326,7 +346,7 @@
           "contains": "installed qualification forbids clean install"
         }
       ],
-      "runtimeEvidence": "dist/installed-qualification.json must report passed, exact current commit, incremental install, and eight successful qualification steps."
+      "runtimeEvidence": "dist/installed-qualification.json must report passed, exact current commit, incremental install, and ten successful qualification steps."
     },
     {
       "id": "INSTALL-003",
@@ -335,7 +355,7 @@
       "automatedEvidence": [
         {
           "file": "test/test-installed-qualification-report.py",
-          "contains": "test_accepts_exact_recent_eight_step_report"
+          "contains": "test_accepts_exact_recent_ten_step_report"
         },
         {
           "file": "test/test-installed-qualification-report.py",
@@ -350,7 +370,7 @@
           "contains": "public release rechecks qualification before tagging"
         }
       ],
-      "runtimeEvidence": "release.sh --publish fails unless a recent report matches exact HEAD, branch, and version with all eight incremental installed checks passed; the gate reruns immediately before tagging."
+      "runtimeEvidence": "release.sh --publish fails unless a recent report matches exact HEAD, branch, and version with all ten incremental installed checks passed; the gate reruns immediately before tagging."
     },
     {
       "id": "HOTKEY-001",

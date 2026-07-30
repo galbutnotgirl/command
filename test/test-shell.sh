@@ -257,6 +257,7 @@ RECORDER_SOURCE="$(cat "${DIR}/agent/Recorder.swift")"
 DICTATION_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationSessionHealth.swift")"
 DICTATION_PROBE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationCaptureProbe.swift")"
 DICTATION_LIFECYCLE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationLifecycleProbe.swift")"
+HOTKEY_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/HotkeyHealthProbe.swift")"
 DICTATION_TRIGGER_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationTriggerCoordinator.swift")"
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
   'helper_newchat ||'
@@ -282,6 +283,21 @@ assert_contains "installed microphone probe is reachable through owner-only sock
   'case "dictationprobe": return runInstalledDictationProbe()'
 assert_contains "installed production lifecycle probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "dictationlifecycleprobe": return runInstalledDictationLifecycleProbe()'
+assert_contains "installed hotkey health probe is reachable through owner-only socket" "$AGENT_SOURCE" \
+  'case "hotkeyhealthprobe":'
+assert_contains "installed hotkey health probe posts tagged HID events" "$AGENT_SOURCE" \
+  'event.post(tap: .cghidEventTap)'
+assert_contains "event tap acknowledges health events before dispatch" "$AGENT_SOURCE" \
+  'if acknowledgeHotkeyProbeEvent(event) { return nil }'
+assert_contains "event tap passthrough does not retain borrowed events" "$AGENT_SOURCE" \
+  'let passthrough = Unmanaged.passUnretained(event)'
+assert_not_contains "event tap no longer leaks retained passthrough events" 'Unmanaged.passRetained(event)' "$AGENT_SOURCE"
+assert_contains "hotkey health probe returns typed metrics" "$HOTKEY_HEALTH_SOURCE" \
+  'public struct HotkeyHealthProbeResult'
+assert_contains "shortcut recording invalidates registration health" "$AGENT_SOURCE" \
+  '_hotkeyRegistrationSnapshot.actualCarbonRegistrations = 0'
+assert_contains "installed hotkey check requires full tagged delivery" "$(cat "${DIR}/test/test-installed-hotkeys.sh")" \
+  'result["deliveredEvents"] != result["requestedEvents"]'
 assert_contains "installed restart can identify socket-owning process" "$AGENT_SOURCE" \
   'case "runtimepid": return "\(ProcessInfo.processInfo.processIdentifier)"'
 assert_contains "installed restart requires socket PID to match launchd" "$(cat "${DIR}/test/test-installed-restart.sh")" \
@@ -385,9 +401,13 @@ assert_contains "installed qualification verifies microphone before restart" "$Q
   'run_step "Microphone capture before restart"'
 assert_contains "installed qualification verifies microphone after restart" "$QUALIFICATION_SOURCE" \
   'run_step "Microphone capture after restart"'
+assert_contains "installed qualification verifies hotkey input before restart" "$QUALIFICATION_SOURCE" \
+  'run_step "Hotkey input before restart"'
+assert_contains "installed qualification verifies hotkey input after restart" "$QUALIFICATION_SOURCE" \
+  'run_step "Hotkey input after restart"'
 assert_contains "installed qualification records exact commit" "$QUALIFICATION_SOURCE" \
   '"commit": commit'
-assert_contains "qualification verifier requires eight ordered checks" "$QUALIFICATION_VERIFIER_SOURCE" \
+assert_contains "qualification verifier requires ten ordered checks" "$QUALIFICATION_VERIFIER_SOURCE" \
   'if names != EXPECTED_STEPS:'
 assert_contains "public release verifies installed qualification before gates" "$RELEASE_SOURCE" \
   'public release requires a recent installed qualification for this exact commit'
@@ -512,7 +532,7 @@ assert_contains "build exits after termination signal before rollback" "$BUILD_A
 
 AGENT_SOURCE="$(<"${DIR}/agent/main.swift")"
 assert_contains "modifier chords bypass Carbon for every action" "$AGENT_SOURCE" \
-  'eventTapOwnsShortcut(keycode: hk.keycode, isVoice: isBuiltInVoiceAction(hk.action))'
+  'eventTapOwnsShortcut(keycode: hk.keycode, isVoice: isVoice)'
 assert_contains "modifier chords exclude their primary modifier bit" "$AGENT_SOURCE" \
   'chordModifiers(activeModifiers: activeMods, primaryKeycode: kc)'
 assert_contains "modifier chords route through normal action dispatch" "$AGENT_SOURCE" \

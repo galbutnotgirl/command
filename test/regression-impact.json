@@ -54,10 +54,12 @@
         "agent/main.swift",
         "agent/SettingsWindow.swift",
         "agent/Sources/ClaudeCommandCore/ActionModels.swift",
+        "agent/Sources/ClaudeCommandCore/HotkeyHealthProbe.swift",
         "agent/Sources/ClaudeCommandCore/KeyCodes.swift"
       ],
       "evidence": [
         "agent/Tests/ClaudeCommandCoreTests/ActionModelsTests.swift",
+        "agent/Tests/ClaudeCommandCoreTests/HotkeyHealthProbeTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/KeyCodesTests.swift",
         "test/test-shell.sh",
         "test/regression-contracts.json"

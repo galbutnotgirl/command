@@ -5,9 +5,23 @@ been built, current state, and what's next. Written so a fresh agent (human or A
 Claude, whoever) can pick up this project cold. Update this
 file at the end of any substantial work session; don't let it go stale.
 
-Repo: `galbutnotgirl/command`. Current version: **1.2.0-alpha.8**
+Repo: `galbutnotgirl/command`. Current version: **1.2.0-beta.1**
 (`git checkout checkpoint-before-trigger-refactor` rolls back to just before the biggest
 recent change if something in there needs undoing).
+
+## Installed regression gates (2026-07-30)
+
+- Exact-commit qualification now runs ten ordered checks and blocks public publication when
+  report is stale, edited, mismatched, incomplete, or from clean install.
+- Installed dictation checks run before and after restart: repeated raw microphone captures plus
+  production trigger, model stream, recorder, stop-tail, ASR finish, and terminal cleanup.
+- Installed hotkey checks run before and after restart: Accessibility trust, enabled HID event tap,
+  expected versus successful Carbon registrations, and tagged event delivery through callback.
+  Probe events are swallowed before configured actions, clipboard writes, or assistant routing.
+- Event-tap passthrough returns borrowed events without retaining them. Prior retained passthrough
+  leaked one event reference for ordinary keyboard traffic and could degrade long-running input.
+- Rollback checkpoints: `checkpoint/2026-07-30-0114-dictation-lifecycle-probe` and
+  `checkpoint/2026-07-30-0138-installed-hotkey-health`.
 
 ## Modifier chords and uninstaller (2026-07-28)
 

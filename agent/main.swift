@@ -1220,6 +1220,16 @@ var hotkeyActions: [UInt32: String] = [:]
 var hotkeyKeycodes: [UInt32: UInt32] = [:]   // hotkey ID → Carbon keycode for PTT polling
 var hotkeyRefs: [EventHotKeyRef?] = []
 
+private struct HotkeyRegistrationSnapshot {
+    var expectedCarbonRegistrations = 0
+    var actualCarbonRegistrations = 0
+    var registrationFailures = 0
+    var expectedEventTapAliases = 0
+    var configuredVoiceAliases = 0
+}
+
+private var _hotkeyRegistrationSnapshot = HotkeyRegistrationSnapshot()
+
 let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
     var hkID = EventHotKeyID()
     GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
@@ -1325,12 +1335,19 @@ func registerFromConfig() {
     hotkeyRefs.removeAll()
     hotkeyActions.removeAll()
     hotkeyKeycodes.removeAll()
+    _hotkeyRegistrationSnapshot = HotkeyRegistrationSnapshot()
     let sig = OSType(0x434D4447) // 'CMDG'
     for (i, hk) in loadHotkeys().enumerated() {
         guard hk.keycode != 0 else { continue }  // keycode 0 = 'A' key; 0 means unbound
+        let isVoice = isBuiltInVoiceAction(hk.action)
+        if isVoice { _hotkeyRegistrationSnapshot.configuredVoiceAliases += 1 }
         // HID tap owns every modifier chord plus media voice keys. Carbon owns ordinary keys
         // like external-keyboard Home, which is more reliable for Kinesis keyboards.
-        if eventTapOwnsShortcut(keycode: hk.keycode, isVoice: isBuiltInVoiceAction(hk.action)) { continue }
+        if eventTapOwnsShortcut(keycode: hk.keycode, isVoice: isVoice) {
+            _hotkeyRegistrationSnapshot.expectedEventTapAliases += 1
+            continue
+        }
+        _hotkeyRegistrationSnapshot.expectedCarbonRegistrations += 1
         let hkID = UInt32(i + 1)
         let id = EventHotKeyID(signature: sig, id: hkID)
         hotkeyActions[hkID] = hk.action
@@ -1339,10 +1356,12 @@ func registerFromConfig() {
         let status = RegisterEventHotKey(hk.keycode, hk.mods, id, GetApplicationEventTarget(), 0, &ref)
         if status == noErr {
             hotkeyRefs.append(ref)
-            if isBuiltInVoiceAction(hk.action) {
+            _hotkeyRegistrationSnapshot.actualCarbonRegistrations += 1
+            if isVoice {
                 appendLog("[hotkeys] registered voice action=\(hk.action) keycode=\(hk.keycode) mods=\(hk.mods) via carbon")
             }
         } else {
+            _hotkeyRegistrationSnapshot.registrationFailures += 1
             appendLog("[hotkeys] RegisterEventHotKey failed action=\(hk.action) keycode=\(hk.keycode) mods=\(hk.mods) status=\(status)")
             hotkeyActions.removeValue(forKey: hkID)
             hotkeyKeycodes.removeValue(forKey: hkID)
@@ -1354,7 +1373,14 @@ func registerFromConfig() {
     for ca in loadCustomActions() where ca.enabled {
         for trig in ca.triggers where trig.enabled {
             for shortcut in trig.shortcuts {
-                if eventTapOwnsShortcut(keycode: shortcut.keycode, isVoice: trig.kind == .voice) { continue }
+                guard shortcut.keycode != 0 else { continue }
+                let isVoice = trig.kind == .voice
+                if isVoice { _hotkeyRegistrationSnapshot.configuredVoiceAliases += 1 }
+                if eventTapOwnsShortcut(keycode: shortcut.keycode, isVoice: isVoice) {
+                    _hotkeyRegistrationSnapshot.expectedEventTapAliases += 1
+                    continue
+                }
+                _hotkeyRegistrationSnapshot.expectedCarbonRegistrations += 1
                 let hkID = UInt32(100 + triggerSlot)
                 triggerSlot += 1
                 let id = EventHotKeyID(signature: sig, id: hkID)
@@ -1364,10 +1390,12 @@ func registerFromConfig() {
                 let status = RegisterEventHotKey(shortcut.keycode, shortcut.mods, id, GetApplicationEventTarget(), 0, &ref)
                 if status == noErr {
                     hotkeyRefs.append(ref)
-                    if trig.kind == .voice {
+                    _hotkeyRegistrationSnapshot.actualCarbonRegistrations += 1
+                    if isVoice {
                         appendLog("[hotkeys] registered custom voice action=\(ca.name) keycode=\(shortcut.keycode) mods=\(shortcut.mods) via carbon")
                     }
                 } else {
+                    _hotkeyRegistrationSnapshot.registrationFailures += 1
                     appendLog("[hotkeys] RegisterEventHotKey failed custom=\(ca.name) trigger=\(trig.kind.rawValue) keycode=\(shortcut.keycode) mods=\(shortcut.mods) status=\(status)")
                     hotkeyActions.removeValue(forKey: hkID)
                     hotkeyKeycodes.removeValue(forKey: hkID)
@@ -1375,6 +1403,7 @@ func registerFromConfig() {
             }
         }
     }
+    appendLog("[hotkeys] registration health carbon=\(_hotkeyRegistrationSnapshot.actualCarbonRegistrations)/\(_hotkeyRegistrationSnapshot.expectedCarbonRegistrations) eventTapAliases=\(_hotkeyRegistrationSnapshot.expectedEventTapAliases) voiceAliases=\(_hotkeyRegistrationSnapshot.configuredVoiceAliases) failures=\(_hotkeyRegistrationSnapshot.registrationFailures)")
 }
 
 func reregisterHotkeys() { registerFromConfig() }
@@ -1385,6 +1414,7 @@ func unregisterAllHotkeys() {
     for ref in hotkeyRefs { if let r = ref { UnregisterEventHotKey(r) } }
     hotkeyRefs.removeAll()
     hotkeyActions.removeAll()
+    _hotkeyRegistrationSnapshot.actualCarbonRegistrations = 0
 }
 
 // ---- Media-key intercept (F7/F8/F9 = prev/play/next) ----------------------
@@ -1405,6 +1435,45 @@ let MEDIA_TO_CARBON: [Int: UInt32] = [
 private var _mediaEventTap: CFMachPort?
 private var _mediaHookRetryScheduled = false
 private var _mediaHookWaitingForAccessibility = false
+private let HOTKEY_EVENT_PROBE_PREFIX: Int64 = 0x434D000000000000 // "CM" + random payload
+private let HOTKEY_EVENT_PROBE_MASK = Int64(bitPattern: 0xFFFF000000000000)
+
+private final class HotkeyEventProbeBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var deliveredEvents = 0
+    let marker: Int64
+    let delivery = DispatchSemaphore(value: 0)
+
+    init(marker: Int64) {
+        self.marker = marker
+    }
+
+    func recordDelivery() {
+        lock.lock()
+        deliveredEvents += 1
+        lock.unlock()
+        delivery.signal()
+    }
+
+    func count() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return deliveredEvents
+    }
+}
+
+private let _hotkeyEventProbeLock = NSLock()
+private var _activeHotkeyEventProbe: HotkeyEventProbeBox?
+
+private func acknowledgeHotkeyProbeEvent(_ event: CGEvent) -> Bool {
+    let marker = event.getIntegerValueField(.eventSourceUserData)
+    guard marker & HOTKEY_EVENT_PROBE_MASK == HOTKEY_EVENT_PROBE_PREFIX else { return false }
+    _hotkeyEventProbeLock.lock()
+    let probe = _activeHotkeyEventProbe
+    _hotkeyEventProbeLock.unlock()
+    if probe?.marker == marker { probe?.recordDelivery() }
+    return true
+}
 // NX_SYSDEFINED events fire repeating isDown=true while held (no autorepeat flag).
 // Track held state per keyCode to swallow repeats without breaking double-tap detection.
 private var _nxHeld: [Int: Bool] = [:]
@@ -1680,7 +1749,8 @@ func startMediaKeyHook() {
     guard let tap = CGEvent.tapCreate(tap: .cghidEventTap, place: .headInsertEventTap,
                                       options: .defaultTap, eventsOfInterest: eventMask,
         callback: { _, type, event, _ -> Unmanaged<CGEvent>? in
-            let passthrough = Unmanaged.passRetained(event)
+            if acknowledgeHotkeyProbeEvent(event) { return nil }
+            let passthrough = Unmanaged.passUnretained(event)
 
             // --- media-key mode (NX_SYSDEFINED subtype 8) ---
             if type.rawValue == 14,
@@ -2153,6 +2223,181 @@ func runInstalledDictationLifecycleProbe() -> String {
     )
 }
 
+private struct InstalledHotkeyRuntimeSnapshot {
+    let accessibilityTrusted: Bool
+    let eventTapInstalled: Bool
+    let eventTapEnabled: Bool
+    let registrations: HotkeyRegistrationSnapshot
+}
+
+private func installedHotkeyRuntimeSnapshot() -> InstalledHotkeyRuntimeSnapshot {
+    var snapshot: InstalledHotkeyRuntimeSnapshot?
+    DispatchQueue.main.sync {
+        let tap = _mediaEventTap
+        snapshot = InstalledHotkeyRuntimeSnapshot(
+            accessibilityTrusted: AXIsProcessTrusted(),
+            eventTapInstalled: tap != nil,
+            eventTapEnabled: tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false,
+            registrations: _hotkeyRegistrationSnapshot
+        )
+    }
+    return snapshot ?? InstalledHotkeyRuntimeSnapshot(
+        accessibilityTrusted: false,
+        eventTapInstalled: false,
+        eventTapEnabled: false,
+        registrations: HotkeyRegistrationSnapshot()
+    )
+}
+
+private func encodeHotkeyHealthProbeResult(_ result: HotkeyHealthProbeResult) -> String {
+    guard let data = try? HotkeyHealthProbeCoding.encode(result) else {
+        return #"{"ok":false,"status":"eventCreationFailed","failure":"Could not encode hotkey health probe result."}"#
+    }
+    return String(decoding: data, as: UTF8.self)
+}
+
+private func makeHotkeyHealthProbeResult(
+    status: HotkeyHealthProbeStatus,
+    startedAt: Date,
+    runtime: InstalledHotkeyRuntimeSnapshot,
+    requestedEvents: Int,
+    deliveredEvents: Int = 0,
+    failure: String? = nil
+) -> String {
+    let registrations = runtime.registrations
+    return encodeHotkeyHealthProbeResult(HotkeyHealthProbeResult(
+        status: status,
+        accessibilityTrusted: runtime.accessibilityTrusted,
+        eventTapInstalled: runtime.eventTapInstalled,
+        eventTapEnabled: runtime.eventTapEnabled,
+        expectedCarbonRegistrations: registrations.expectedCarbonRegistrations,
+        actualCarbonRegistrations: registrations.actualCarbonRegistrations,
+        registrationFailures: registrations.registrationFailures,
+        expectedEventTapAliases: registrations.expectedEventTapAliases,
+        configuredVoiceAliases: registrations.configuredVoiceAliases,
+        requestedEvents: requestedEvents,
+        deliveredEvents: deliveredEvents,
+        durationMilliseconds: Int(Date().timeIntervalSince(startedAt) * 1_000),
+        failure: failure
+    ))
+}
+
+func runInstalledHotkeyHealthProbe(requestedEvents: Int) -> String {
+    let startedAt = Date()
+    let eventCount = min(max(requestedEvents, 2), 200)
+    let initial = installedHotkeyRuntimeSnapshot()
+    guard initial.accessibilityTrusted else {
+        return makeHotkeyHealthProbeResult(
+            status: .accessibilityUnavailable,
+            startedAt: startedAt,
+            runtime: initial,
+            requestedEvents: eventCount,
+            failure: "Accessibility is not trusted."
+        )
+    }
+    guard initial.eventTapInstalled else {
+        return makeHotkeyHealthProbeResult(
+            status: .eventTapMissing,
+            startedAt: startedAt,
+            runtime: initial,
+            requestedEvents: eventCount,
+            failure: "Media and voice event tap is not installed."
+        )
+    }
+    guard initial.eventTapEnabled else {
+        return makeHotkeyHealthProbeResult(
+            status: .eventTapDisabled,
+            startedAt: startedAt,
+            runtime: initial,
+            requestedEvents: eventCount,
+            failure: "Media and voice event tap is disabled."
+        )
+    }
+    let registrations = initial.registrations
+    guard registrations.registrationFailures == 0,
+          registrations.actualCarbonRegistrations == registrations.expectedCarbonRegistrations else {
+        return makeHotkeyHealthProbeResult(
+            status: .registrationMismatch,
+            startedAt: startedAt,
+            runtime: initial,
+            requestedEvents: eventCount,
+            failure: "Carbon hotkey registration count does not match configured aliases."
+        )
+    }
+
+    let marker = HOTKEY_EVENT_PROBE_PREFIX | Int64.random(in: 1..<(1 << 48))
+    let probe = HotkeyEventProbeBox(marker: marker)
+    _hotkeyEventProbeLock.lock()
+    guard _activeHotkeyEventProbe == nil else {
+        _hotkeyEventProbeLock.unlock()
+        return makeHotkeyHealthProbeResult(
+            status: .probeBusy,
+            startedAt: startedAt,
+            runtime: initial,
+            requestedEvents: eventCount,
+            failure: "Another hotkey health probe is active."
+        )
+    }
+    _activeHotkeyEventProbe = probe
+    _hotkeyEventProbeLock.unlock()
+    defer {
+        _hotkeyEventProbeLock.lock()
+        if _activeHotkeyEventProbe === probe { _activeHotkeyEventProbe = nil }
+        _hotkeyEventProbeLock.unlock()
+    }
+
+    guard let source = CGEventSource(stateID: .combinedSessionState) else {
+        return makeHotkeyHealthProbeResult(
+            status: .eventCreationFailed,
+            startedAt: startedAt,
+            runtime: initial,
+            requestedEvents: eventCount,
+            failure: "Could not create event source."
+        )
+    }
+    for index in 0..<eventCount {
+        guard let event = CGEvent(
+            keyboardEventSource: source,
+            virtualKey: 0,
+            keyDown: index.isMultiple(of: 2)
+        ) else {
+            return makeHotkeyHealthProbeResult(
+                status: .eventCreationFailed,
+                startedAt: startedAt,
+                runtime: installedHotkeyRuntimeSnapshot(),
+                requestedEvents: eventCount,
+                deliveredEvents: probe.count(),
+                failure: "Could not create tagged keyboard event."
+            )
+        }
+        event.setIntegerValueField(.eventSourceUserData, value: marker)
+        event.post(tap: .cghidEventTap)
+    }
+
+    let deadline = DispatchTime.now() + .seconds(3)
+    while probe.count() < eventCount, probe.delivery.wait(timeout: deadline) == .success {}
+    let delivered = probe.count()
+    let final = installedHotkeyRuntimeSnapshot()
+    guard delivered == eventCount else {
+        return makeHotkeyHealthProbeResult(
+            status: .eventDeliveryTimedOut,
+            startedAt: startedAt,
+            runtime: final,
+            requestedEvents: eventCount,
+            deliveredEvents: delivered,
+            failure: "Tagged HID events did not reach installed event-tap callback."
+        )
+    }
+    appendLog("[hotkeys] installed health passed events=\(delivered)/\(eventCount) carbon=\(registrations.actualCarbonRegistrations)/\(registrations.expectedCarbonRegistrations) eventTapAliases=\(registrations.expectedEventTapAliases)")
+    return makeHotkeyHealthProbeResult(
+        status: .passed,
+        startedAt: startedAt,
+        runtime: final,
+        requestedEvents: eventCount,
+        deliveredEvents: delivered
+    )
+}
+
 func handle(_ line: String) -> String {
     let parts = line.split(separator: " ", maxSplits: 1).map(String.init)
     switch parts.first ?? "" {
@@ -2224,6 +2469,9 @@ func handle(_ line: String) -> String {
     case "runtimepid": return "\(ProcessInfo.processInfo.processIdentifier)"
     case "dictationprobe": return runInstalledDictationProbe()
     case "dictationlifecycleprobe": return runInstalledDictationLifecycleProbe()
+    case "hotkeyhealthprobe":
+        let requested = Int(parts.count > 1 ? parts[1] : "") ?? 20
+        return runInstalledHotkeyHealthProbe(requestedEvents: requested)
     case "restart":
         // Reply before beginning the detached handoff so callers can distinguish
         // an accepted restart from a dead socket.

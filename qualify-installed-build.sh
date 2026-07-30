@@ -10,12 +10,14 @@ DIR="${0:A:h}"
 VERSION="$(tr -d ' \t\n' < "${DIR}/VERSION")"
 REPORT="${COMMAND_QUALIFY_REPORT_PATH:-${DIR}/dist/installed-qualification.json}"
 PROBE_RUNS="${COMMAND_QUALIFY_PROBE_RUNS:-5}"
+HOTKEY_EVENTS="${COMMAND_QUALIFY_HOTKEY_EVENTS:-100}"
 SOAK_SECONDS="${COMMAND_QUALIFY_SOAK_SECONDS:-15}"
 
 RELEASE_SCRIPT="${COMMAND_QUALIFY_RELEASE_SCRIPT:-${DIR}/release.sh}"
 INSTALL_SCRIPT="${COMMAND_QUALIFY_INSTALL_SCRIPT:-${DIR}/install-agent.sh}"
 IDENTITY_SCRIPT="${COMMAND_QUALIFY_IDENTITY_SCRIPT:-${DIR}/test/test-installed-build-identity.sh}"
 DICTATION_SCRIPT="${COMMAND_QUALIFY_DICTATION_SCRIPT:-${DIR}/test/test-installed-dictation.sh}"
+HOTKEY_SCRIPT="${COMMAND_QUALIFY_HOTKEY_SCRIPT:-${DIR}/test/test-installed-hotkeys.sh}"
 RESTART_SCRIPT="${COMMAND_QUALIFY_RESTART_SCRIPT:-${DIR}/test/test-installed-restart.sh}"
 RUNTIME_SCRIPT="${COMMAND_QUALIFY_RUNTIME_SCRIPT:-${DIR}/test/test-installed-runtime.sh}"
 MODEL_SCRIPT="${COMMAND_QUALIFY_MODEL_SCRIPT:-${DIR}/test/test-dictation-model.sh}"
@@ -115,19 +117,25 @@ run_step() {
   || fail "signing identity override is forbidden during qualification"
 [[ "$PROBE_RUNS" == <-> ]] && (( PROBE_RUNS >= 1 && PROBE_RUNS <= 20 )) \
   || fail "COMMAND_QUALIFY_PROBE_RUNS must be between 1 and 20"
+[[ "$HOTKEY_EVENTS" == <-> ]] && (( HOTKEY_EVENTS >= 2 && HOTKEY_EVENTS <= 200 )) \
+  || fail "COMMAND_QUALIFY_HOTKEY_EVENTS must be between 2 and 200"
 [[ "$SOAK_SECONDS" == <-> ]] && (( SOAK_SECONDS >= 1 && SOAK_SECONDS <= 300 )) \
   || fail "COMMAND_QUALIFY_SOAK_SECONDS must be between 1 and 300"
 for required_script in "$RELEASE_SCRIPT" "$INSTALL_SCRIPT" "$IDENTITY_SCRIPT" \
-  "$DICTATION_SCRIPT" "$RESTART_SCRIPT" "$RUNTIME_SCRIPT" "$MODEL_SCRIPT"; do
+  "$DICTATION_SCRIPT" "$HOTKEY_SCRIPT" "$RESTART_SCRIPT" "$RUNTIME_SCRIPT" "$MODEL_SCRIPT"; do
   [[ -x "$required_script" ]] || fail "required executable missing: ${required_script}"
 done
 
 run_step "Full release gates and signed build" "$RELEASE_SCRIPT" || exit $?
 run_step "Incremental install" "$INSTALL_SCRIPT" || exit $?
 run_step "Installed build identity" "$IDENTITY_SCRIPT" || exit $?
+run_step "Hotkey input before restart" env \
+  COMMAND_HOTKEY_PROBE_EVENTS="$HOTKEY_EVENTS" "$HOTKEY_SCRIPT" || exit $?
 run_step "Microphone capture before restart" env \
   COMMAND_DICTATION_PROBE_RUNS="$PROBE_RUNS" "$DICTATION_SCRIPT" || exit $?
 run_step "Restart installed app" "$RESTART_SCRIPT" || exit $?
+run_step "Hotkey input after restart" env \
+  COMMAND_HOTKEY_PROBE_EVENTS="$HOTKEY_EVENTS" "$HOTKEY_SCRIPT" || exit $?
 run_step "Microphone capture after restart" env \
   COMMAND_DICTATION_PROBE_RUNS="$PROBE_RUNS" "$DICTATION_SCRIPT" || exit $?
 run_step "Installed runtime soak" env \

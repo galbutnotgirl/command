@@ -46,7 +46,7 @@ print -- "${name} argc=$# clean=${COMMAND_CLEAN_INSTALL:-unset}" >> "$COMMAND_TE
 exit 0
 SH
 chmod +x "$FAKE_BIN/fake-step"
-for name in release install identity dictation restart runtime model; do
+for name in release install identity hotkey dictation restart runtime model; do
   ln -s fake-step "$FAKE_BIN/$name"
 done
 
@@ -88,6 +88,7 @@ run_qualifier() {
   COMMAND_QUALIFY_RELEASE_SCRIPT="$FAKE_BIN/release" \
   COMMAND_QUALIFY_INSTALL_SCRIPT="$FAKE_BIN/install" \
   COMMAND_QUALIFY_IDENTITY_SCRIPT="$FAKE_BIN/identity" \
+  COMMAND_QUALIFY_HOTKEY_SCRIPT="$FAKE_BIN/hotkey" \
   COMMAND_QUALIFY_DICTATION_SCRIPT="$FAKE_BIN/dictation" \
   COMMAND_QUALIFY_RESTART_SCRIPT="$FAKE_BIN/restart" \
   COMMAND_QUALIFY_RUNTIME_SCRIPT="$FAKE_BIN/runtime" \
@@ -99,10 +100,10 @@ run_qualifier() {
 
 : > "$LOG"
 SUCCESS_OUTPUT="$(run_qualifier)"
-EXPECTED_ORDER=$'release argc=0 clean=unset\ninstall argc=0 clean=unset\nidentity argc=0 clean=unset\ndictation argc=0 clean=unset\nrestart argc=0 clean=unset\ndictation argc=0 clean=unset\nruntime argc=0 clean=unset\nmodel argc=0 clean=unset'
+EXPECTED_ORDER=$'release argc=0 clean=unset\ninstall argc=0 clean=unset\nidentity argc=0 clean=unset\nhotkey argc=0 clean=unset\ndictation argc=0 clean=unset\nrestart argc=0 clean=unset\nhotkey argc=0 clean=unset\ndictation argc=0 clean=unset\nruntime argc=0 clean=unset\nmodel argc=0 clean=unset'
 assert_true "qualification executes every step in fixed order" test "$(cat "$LOG")" = "$EXPECTED_ORDER"
 assert_contains "qualification reports success" "[qualify] PASSED" "$SUCCESS_OUTPUT"
-assert_true "success report binds exact fixture commit and eight passed steps" python3 - "$REPORT" "$FIXTURE" <<'PY'
+assert_true "success report binds exact fixture commit and ten passed steps" python3 - "$REPORT" "$FIXTURE" <<'PY'
 import json, subprocess, sys
 document = json.load(open(sys.argv[1], encoding="utf-8"))
 commit = subprocess.check_output(["git", "-C", sys.argv[2], "rev-parse", "HEAD"], text=True).strip()
@@ -110,7 +111,7 @@ assert document["result"] == "passed"
 assert document["commit"] == commit
 assert document["installMode"] == "incremental"
 assert document["publicReleasePublished"] is False
-assert len(document["steps"]) == 8
+assert len(document["steps"]) == 10
 assert all(step["status"] == "passed" for step in document["steps"])
 PY
 
@@ -121,7 +122,7 @@ FAILURE_STATUS=$?
 set -e
 assert_true "qualification propagates failing step status" test "$FAILURE_STATUS" -eq 42
 assert_contains "qualification names failed restart step" "FAILED at Restart installed app" "$FAILURE_OUTPUT"
-assert_not_contains "qualification stops before post-restart microphone probe" $'restart argc=0 clean=unset\ndictation' "$(cat "$LOG")"
+assert_not_contains "qualification stops before post-restart input probes" $'restart argc=0 clean=unset\nhotkey' "$(cat "$LOG")"
 assert_true "failure report identifies failed step" python3 - "$REPORT" <<'PY'
 import json, sys
 document = json.load(open(sys.argv[1], encoding="utf-8"))

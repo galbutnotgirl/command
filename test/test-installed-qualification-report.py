@@ -16,8 +16,10 @@ STEPS = [
     "Full release gates and signed build",
     "Incremental install",
     "Installed build identity",
+    "Hotkey input before restart",
     "Microphone capture before restart",
     "Restart installed app",
+    "Hotkey input after restart",
     "Microphone capture after restart",
     "Installed runtime soak",
     "Final-word model fixtures",
@@ -85,10 +87,10 @@ class InstalledQualificationReportTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(expected, result.stderr)
 
-    def test_accepts_exact_recent_eight_step_report(self) -> None:
+    def test_accepts_exact_recent_ten_step_report(self) -> None:
         result = self.run_verifier(self.report)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("steps: 8/8", result.stdout)
+        self.assertIn("steps: 10/10", result.stdout)
 
     def test_rejects_missing_report(self) -> None:
         result = self.run_verifier()

@@ -39,8 +39,10 @@ With installed Claude and ChatGPT apps available:
 With Command installed and running under launchd:
 
 ```bash
+./test/test-installed-hotkeys.sh
 ./test/test-installed-dictation.sh
 ./test/test-installed-restart.sh
+./test/test-installed-hotkeys.sh
 ./test/test-installed-dictation.sh
 ./test/test-installed-runtime.sh
 ```
@@ -49,6 +51,9 @@ Restart test verifies socket acknowledgement, replacement launchd PID, recovered
 UserDefaults, and no crash report. Runtime test then performs a 15-second idle soak with repeated
 socket pings and verifies stable PID, bounded open descriptors, no new crash reports, and no new
 fatal or SwiftUI cycle diagnostics. Override duration with `COMMAND_SOAK_SECONDS` for longer runs.
+Installed hotkey test compares configured Carbon aliases with successful registrations, requires
+trusted enabled event tap, and injects tagged HID events that callback swallows before dispatch.
+Running before and after restart catches dead input hooks without firing user actions.
 Installed dictation test performs repeated raw microphone-buffer captures and one production
 lifecycle through trigger, model stream, recorder, stop-tail drain, ASR finish, and clean terminal
 health without changing history. Run on both sides of restart to catch process-local state bugs.

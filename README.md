@@ -205,10 +205,11 @@ Release:
 Public releases require a successful `time ./qualify-installed-build.sh` run
 from same commit within prior 24 hours. Release script verifies its report
 before building and again immediately before tagging. Installed qualification
-runs repeated raw microphone-buffer probes plus production dictation lifecycle
-through trigger, model stream, recorder, stop-tail drain, ASR finish, and clean
-terminal state before and after app restart. Diagnostic lifecycle never writes
-history, clipboard content, or assistant actions. Physical-key dispatch remains
+checks Carbon registration plus tagged HID event delivery through enabled event
+tap, then runs repeated raw microphone-buffer probes and production dictation
+lifecycle through trigger, model stream, recorder, stop-tail drain, ASR finish,
+and clean terminal state before and after app restart. Probes never write
+history, clipboard content, or assistant actions. Physical hardware remains
 manual; cached final-word fixtures verify spoken-tail retention separately.
 
 ## License
