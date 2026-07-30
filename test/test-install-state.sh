@@ -55,7 +55,7 @@ write_fixture_attestation() {
   mkdir -p "$SOURCE_APP/Contents/Resources"
   python3 - "$SOURCE_APP/Contents/Resources/regression-gates-attestation.json" "$version" <<'PY'
 import json, pathlib, sys
-gates = "regression-impact regression-contracts swift clipboard-watcher node assistant-contract shell build-transaction release-transaction install-state uninstall updater-swap restart release-policy qualification-orchestration qualification-report regression-attestation static-analysis docs pages string-review dictation-model".split()
+gates = "regression-impact regression-contracts swift dictation-delivery clipboard-watcher node assistant-contract shell build-transaction release-transaction install-state uninstall updater-swap restart release-policy qualification-orchestration qualification-report regression-attestation static-analysis docs pages string-review dictation-model".split()
 pathlib.Path(sys.argv[1]).write_text(json.dumps({
     "schemaVersion": 1,
     "result": "passed",

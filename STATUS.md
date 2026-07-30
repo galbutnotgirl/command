@@ -11,6 +11,10 @@ recent change if something in there needs undoing).
 
 ## Installed regression gates (2026-07-30)
 
+- Shared dictation delivery pipeline now owns final/partial selection, minimum-duration decision,
+  processing handoff, and exact delivery. Recorder, overlay, and cached Parakeet fixture use same
+  code. Non-empty raw speech falls back to raw delivery when processing returns blank, preventing
+  completion sound with lost text. Dedicated CI/release gate and DICT-011 track this seam.
 - Qualified-install enforcement prevents direct development builds from replacing working app.
   Full release gates create commit-bound regression attestation only after Swift, native
   Clipboard History, provider compatibility, shell/transaction/install/update, docs, static,
@@ -36,7 +40,8 @@ recent change if something in there needs undoing).
   `checkpoint/2026-07-30-0138-installed-hotkey-health`, and
   `checkpoint/2026-07-30-0205-dictation-fault-recovery`, and
   `checkpoint/2026-07-30-0236-voice-dispatch-endurance`, and
-  `checkpoint/2026-07-30-0259-qualified-install-gate`.
+  `checkpoint/2026-07-30-0259-qualified-install-gate`, and
+  `checkpoint/2026-07-30-0331-dictation-delivery-pipeline`.
 
 ## Modifier chords and uninstaller (2026-07-28)
 
@@ -242,9 +247,10 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   service exists. Local regression proves replacement PID, recovered socket, preserved UserDefaults,
   and zero crash reports; CI separately covers launchd success, fallback, and invalid input.
 - **Dictation model integration**: `./test/test-dictation-model.sh` generates local speech,
-  feeds it through Parakeet's streaming manager in 4096-frame buffers, and verifies its final
-  phrase survives immediate stream completion. It rejects zero-audio fixtures before invoking
-  Parakeet. It runs on release Mac with cached models, not CI.
+  feeds it through Parakeet's streaming manager in 4096-frame buffers, then runs model output
+  through production transcript decision and delivery pipeline. Immediate, paused, and quiet
+  final phrases must survive. It rejects zero-audio fixtures before invoking Parakeet and runs
+  on release Mac with cached models, not CI.
 - **Installed provider contract**: ChatGPT 26.707.72221 and Claude 1.24012.0 pass 9/9
   packaged-resource and Claude Chat/Cowork/Code deep-link checks. Actual prompt
   insertion remains a manual release gate because contract inspection does not prove field focus.

@@ -35,6 +35,7 @@ Run the same checks CI and release preflight use:
 python3 ./test/test-regression-impact.py --base HEAD^
 python3 ./test/test-regression-contracts.py
 cd agent && swift test
+swift test --filter DictationDeliveryPipelineTests
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
 ./test/test-build-transaction.sh
@@ -51,7 +52,7 @@ python3 ./test/test_string_review.py
 ./test/test-release-asset.sh
 ```
 
-Critical failures and their proof live in [`test/regression-contracts.json`](test/regression-contracts.json). Runtime ownership and accepted evidence paths live in [`test/regression-impact.json`](test/regression-impact.json). Any runtime change must update matching tests or regression record in same commit. Dictation changes also require `./test/test-dictation-model.sh` on a Mac with cached Parakeet models.
+Critical failures and their proof live in [`test/regression-contracts.json`](test/regression-contracts.json). Runtime ownership and accepted evidence paths live in [`test/regression-impact.json`](test/regression-impact.json). Any runtime change must update matching tests or regression record in same commit. Dictation changes require focused delivery-pipeline tests plus `./test/test-dictation-model.sh` on a Mac with cached Parakeet models.
 
 `test/test-docs.py` validates README/docs links, rendered HTML structure, metadata, sitemap, bundled-doc asset lists, maintainer release coverage, About controls, Markdown/HTML parity, local media assets, and repo support/security policy links.
 

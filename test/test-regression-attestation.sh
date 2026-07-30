@@ -45,7 +45,7 @@ write_attestation() {
   local result="${1:-passed}" version="${2:-1.2.3-test}" commit="${3:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
   python3 - "$ATTESTATION" "$result" "$version" "$commit" <<'PY'
 import json, pathlib, sys
-gates = "regression-impact regression-contracts swift clipboard-watcher node assistant-contract shell build-transaction release-transaction install-state uninstall updater-swap restart release-policy qualification-orchestration qualification-report regression-attestation static-analysis docs pages string-review dictation-model".split()
+gates = "regression-impact regression-contracts swift dictation-delivery clipboard-watcher node assistant-contract shell build-transaction release-transaction install-state uninstall updater-swap restart release-policy qualification-orchestration qualification-report regression-attestation static-analysis docs pages string-review dictation-model".split()
 pathlib.Path(sys.argv[1]).write_text(json.dumps({
     "schemaVersion": 1,
     "result": sys.argv[2],

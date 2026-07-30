@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "coverageRequirements": {
     "app-runtime": 5,
-    "dictation": 10,
+    "dictation": 11,
     "shortcuts-and-input": 3,
     "assistant-routing": 1,
     "clipboard-history": 1,
@@ -214,6 +214,30 @@
         }
       ],
       "runtimeEvidence": "Before and after restart, test/test-installed-dictation.sh must send swallowed tagged Fn key-down and key-up through the installed HID event-tap action path, capture four or more live buffers, reach clean terminal health with every resource released, then pass three consecutive injected-failure and immediate-retry cycles with increasing session IDs, stable PID, and unchanged history."
+    },
+    {
+      "id": "DICT-011",
+      "areas": ["dictation", "app-runtime"],
+      "risk": "Recorder and model succeed, but selected transcript is dropped between finalization, processing, history, and dispatch, or blank processor output erases captured speech, so user hears completion sound without receiving text.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationDeliveryPipelineTests.swift",
+          "contains": "testPipelineCarriesFinalWordsThroughProcessingAndDelivery"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/DictationDeliveryPipelineTests.swift",
+          "contains": "testPipelineFallsBackToRawWhenProcessingReturnsEmpty"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "dictation overlay uses shared delivery pipeline"
+        },
+        {
+          "file": "test/test-dictation-model.sh",
+          "contains": "run_probe \"$QUIET_AUDIO\""
+        }
+      ],
+      "runtimeEvidence": "Cached Parakeet fixtures must print delivery=delivered while preserving bright yellow lantern, cobalt compass, and silver shoreline through model finalization, transcript selection, activity decision, processing hook, and delivery handoff."
     },
     {
       "id": "APP-001",
@@ -479,6 +503,10 @@
     },
     {
       "file": ".github/workflows/test.yml",
+      "contains": "swift test --filter DictationDeliveryPipelineTests"
+    },
+    {
+      "file": ".github/workflows/test.yml",
       "contains": "./test/test-qualification-orchestration.sh"
     },
     {
@@ -500,6 +528,10 @@
     {
       "file": "release.sh",
       "contains": "python3 \"${DIR}/test/test-regression-contracts-tests.py\""
+    },
+    {
+      "file": "release.sh",
+      "contains": "swift test --filter DictationDeliveryPipelineTests"
     },
     {
       "file": "release.sh",

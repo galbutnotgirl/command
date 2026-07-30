@@ -245,16 +245,27 @@ final class DictationOverlay: NSObject {
                     self.hide()
                     return
                 }
-                let processed = await TranscriptProcessor.process(
-                    rawText,
-                    vocab: .shared,
-                    settings: .shared,
-                    log: { DebugLog.shared.append($0) }
+                let result = await runDictationDeliveryPipeline(
+                    rawText: rawText,
+                    process: { text in
+                        await TranscriptProcessor.process(
+                            text,
+                            vocab: .shared,
+                            settings: .shared,
+                            log: { DebugLog.shared.append($0) }
+                        )
+                    },
+                    deliver: { raw, processed in
+                        HistoryStore.shared.add(raw: raw, processed: processed, mode: mode)
+                        self.hide()
+                        self.dispatch(text: processed, mode: mode)
+                    }
                 )
-                appendLog("[dictation] processing complete rawChars=\(rawText.count) processedChars=\(processed.count)")
-                HistoryStore.shared.add(raw: rawText, processed: processed, mode: mode)
-                self.hide()
-                self.dispatch(text: processed, mode: mode)
+                appendLog("[dictation] delivery status=\(result.status.rawValue) rawChars=\(result.rawText.count) processedChars=\(result.processedText.count)")
+                if !result.delivered {
+                    self.hide()
+                    appendLog("[dictation] processed transcript suppressed before history and dispatch")
+                }
             }
         }
 

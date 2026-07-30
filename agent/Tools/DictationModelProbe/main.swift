@@ -77,13 +77,27 @@ enum DictationModelProbe {
             let final = try await manager.finish()
             let partial = await tracker.value()
             updateTask.cancel()
-            let best = preferredDictationTranscript(final: final, lastPartial: partial)
+            let decision = dictationTranscriptDecision(
+                final: final,
+                lastPartial: partial,
+                recordedSeconds: Double(file.length) / file.processingFormat.sampleRate,
+                minimumDuration: 0
+            )
+            let best = decision.selectedText
+            let delivery = await runDictationDeliveryPipeline(
+                rawText: best,
+                process: { $0 },
+                deliver: { _, _ in }
+            )
             print("final=\(final)")
             print("lastPartial=\(partial)")
             print("preferred=\(best)")
+            print("delivery=\(delivery.status.rawValue)")
             print("gain=\(gain)")
 
-            guard normalized(best).contains(expected) else {
+            guard decision.shouldDeliver,
+                  delivery.delivered,
+                  normalized(delivery.processedText).contains(expected) else {
                 FileHandle.standardError.write(Data("missing expected final words: \(expected)\n".utf8))
                 exit(1)
             }

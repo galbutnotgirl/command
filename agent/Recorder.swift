@@ -625,14 +625,20 @@ final class Recorder: ObservableObject {
                 // Use whichever is longer: finish() should be complete, but if it
                 // returns less than the last partial (e.g. model flush gap), keep the
                 // partial — it's less likely to have dropped tail words than finish().
-                let best = preferredDictationTranscript(final: text, lastPartial: self.lastTranscript)
+                let decision = dictationTranscriptDecision(
+                    final: text,
+                    lastPartial: self.lastTranscript,
+                    recordedSeconds: self.totalAudioSeconds,
+                    minimumDuration: self.minimumDictationDuration()
+                )
+                let best = decision.selectedText
                 appendLog("[dictation] finish session=\(finishingSession) finalChars=\(text.count) partialChars=\(self.lastTranscript.count) selectedChars=\(best.count)")
                 await capturedStreamTask?.value
                 guard self.sessionID == finishingSession else { return }
                 self.captureStartupBegan = false
                 self.state = .idle
                 self.audioLevel = 0
-                if self.shouldDispatchDictation(best) {
+                if decision.shouldDeliver {
                     self.transitionSessionHealth(to: .completed, finalCharacters: best.count)
                     self.onFinal?(best, mode)
                 } else {
@@ -648,11 +654,18 @@ final class Recorder: ObservableObject {
                 self.captureStartupBegan = false
                 self.state = .idle
                 self.audioLevel = 0
-                if self.shouldDispatchDictation(self.lastTranscript) {
-                    self.transitionSessionHealth(to: .completed, finalCharacters: self.lastTranscript.count)
-                    self.onFinal?(self.lastTranscript, mode)
+                let decision = dictationTranscriptDecision(
+                    final: "",
+                    lastPartial: self.lastTranscript,
+                    recordedSeconds: self.totalAudioSeconds,
+                    minimumDuration: self.minimumDictationDuration()
+                )
+                let selected = decision.selectedText
+                if decision.shouldDeliver {
+                    self.transitionSessionHealth(to: .completed, finalCharacters: selected.count)
+                    self.onFinal?(selected, mode)
                 } else {
-                    self.transitionSessionHealth(to: .empty, finalCharacters: self.lastTranscript.count)
+                    self.transitionSessionHealth(to: .empty, finalCharacters: selected.count)
                     self.appendEmptyDiagnostics(session: finishingSession, mode: mode)
                     self.onFinishedWithoutText?(mode)
                 }
@@ -723,11 +736,6 @@ final class Recorder: ObservableObject {
     private func minimumDictationDuration() -> Double {
         let value = UserDefaults.standard.object(forKey: VoiceSettingsKeys.minDictationDuration) as? Double
         return min(max(value ?? VoiceSettingsDefaults.minDictationDuration, 0), 1.5)
-    }
-
-    private func shouldDispatchDictation(_ text: String) -> Bool {
-        let gate = DictationActivityGate(minimumDuration: minimumDictationDuration())
-        return gate.shouldDispatch(text: text, recordedSeconds: totalAudioSeconds)
     }
 
     private func appendEmptyDiagnostics(session: Int, mode: DictMode) {

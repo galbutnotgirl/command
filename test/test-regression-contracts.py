@@ -14,7 +14,7 @@ MANIFEST = ROOT / "test" / "regression-contracts.json"
 IMPACT_CONFIG = ROOT / "test" / "regression-impact.json"
 BASELINE_AREA_MINIMUMS = {
     "app-runtime": 5,
-    "dictation": 10,
+    "dictation": 11,
     "shortcuts-and-input": 3,
     "assistant-routing": 1,
     "clipboard-history": 1,
@@ -27,10 +27,12 @@ MANDATORY_GATES = {
     (".github/workflows/test.yml", "python3 ./test/test-regression-contracts.py"),
     (".github/workflows/test.yml", "python3 ./test/test-regression-contracts-tests.py"),
     (".github/workflows/test.yml", "python3 ./test/test-regression-impact.py --base"),
+    (".github/workflows/test.yml", "swift test --filter DictationDeliveryPipelineTests"),
     (".github/workflows/test.yml", "./test/test-qualification-orchestration.sh"),
     (".github/workflows/test.yml", "python3 ./test/test-installed-qualification-report.py"),
     ("release.sh", 'python3 "${DIR}/test/test-regression-contracts.py"'),
     ("release.sh", 'python3 "${DIR}/test/test-regression-contracts-tests.py"'),
+    ("release.sh", "swift test --filter DictationDeliveryPipelineTests"),
     ("release.sh", '"${DIR}/test/test-regression-impact.sh"'),
     ("release.sh", '"${DIR}/test/test-qualification-orchestration.sh"'),
     ("release.sh", 'python3 "${DIR}/test/test-installed-qualification-report.py"'),

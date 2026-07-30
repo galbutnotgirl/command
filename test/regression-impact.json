@@ -32,6 +32,7 @@
         "agent/Processor.swift",
         "agent/DictationStore.swift",
         "agent/Sources/ClaudeCommandCore/VoiceSettings.swift",
+        "agent/Sources/ClaudeCommandCore/DictationDeliveryPipeline.swift",
         "agent/Sources/ClaudeCommandCore/DictationCaptureProbe.swift",
         "agent/Sources/ClaudeCommandCore/DictationLifecycleProbe.swift",
         "agent/Sources/ClaudeCommandCore/DictationRecoveryProbe.swift",
@@ -42,6 +43,7 @@
       ],
       "evidence": [
         "agent/Tests/ClaudeCommandCoreTests/VoiceSettingsTests.swift",
+        "agent/Tests/ClaudeCommandCoreTests/DictationDeliveryPipelineTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/DictationCaptureProbeTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/DictationLifecycleProbeTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/DictationRecoveryProbeTests.swift",

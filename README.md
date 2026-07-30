@@ -184,6 +184,7 @@ Verify mode pings the app dispatch socket, and checks bundled docs.
 
 ```bash
 cd agent && swift test
+cd agent && swift test --filter DictationDeliveryPipelineTests
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
 ./test/test-install-state.sh

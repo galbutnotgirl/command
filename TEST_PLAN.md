@@ -13,6 +13,7 @@ Run from repository root on clean `main`:
 python3 ./test/test-regression-impact.py --base HEAD^
 python3 ./test/test-regression-contracts.py
 (cd agent && swift test)
+(cd agent && swift test --filter DictationDeliveryPipelineTests)
 swift build --package-path agent --product CommandClipboardWatcher
 ./test/test-clipboard-watcher.sh
 (cd vendor/claude-command-capture && node --test)
@@ -64,7 +65,9 @@ health without changing history. Tagged Fn down/up next travels through installe
 voice action routing into diagnostic capture. It then runs three failure/retry cycles after live
 microphone buffers, verifying every capture resource releases and session IDs keep increasing.
 Run on both sides of restart to catch process-local state bugs.
-Physical-key dispatch remains a manual check; cached final-word fixtures cover spoken-tail output.
+Physical-key dispatch remains a manual check. Focused delivery tests prove selected raw text reaches
+processing, history preparation, and dispatch exactly once; blank processor output falls back to raw
+speech. Cached final-word fixtures now pass model output through same decision and delivery code.
 
 With Parakeet models cached on release Mac:
 
@@ -177,11 +180,11 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-30)
 
-- Automated local suites: 210 Swift, 58 Node, 151 shell, 15 build-transaction,
-  17 release-transaction, 30 install-state, 12 updater, 9 restart-handoff,
-  9 release-policy, 87 static syntax/configuration, and 2 string-review;
+- Automated local suites: 221 Swift, 58 Node, 169 shell, 17 build-transaction,
+  17 release-transaction, 41 install-state, 14 updater, 9 restart-handoff,
+  9 release-policy, 91 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
-- Ten critical dictation regressions have stable IDs, 29 source/test evidence links, runtime
+- Eleven critical dictation regressions have stable IDs, 33 source/test evidence links, runtime
   evidence contracts, CI enforcement, and public-release enforcement. Latest session health is
   persisted through start, model load, listening, first buffer, finish, and terminal outcome.
 - Settings pickers and toggles have explicit hidden accessibility labels, and static analysis
@@ -191,7 +194,7 @@ Preserve user settings for incremental tests. Use clean install only for onboard
   files; an ad-hoc success run replaced the staged build cleanly with no leftovers.
 - Release zip and checksum are also staged and committed as a pair only after validation and
   optional notarization complete; interrupted or failed packaging restores prior assets.
-- AddressSanitizer and ThreadSanitizer passed all 210 Swift tests after latest recorder, async
+- AddressSanitizer and ThreadSanitizer passed all 221 Swift tests after latest recorder, async
   stream, and event-dispatch changes; rerun both after future recorder, async stream, or
   shared-state changes.
 - Current accessibility-label build passes a 60-second launchd/socket runtime soak with stable

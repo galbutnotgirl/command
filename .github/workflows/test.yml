@@ -45,6 +45,10 @@ jobs:
         working-directory: agent
         run: swift test
 
+      - name: Dictation finalization and delivery pipeline
+        working-directory: agent
+        run: swift test --filter DictationDeliveryPipelineTests
+
       - name: Native Clipboard History helper smoke test
         run: |
           swift build --package-path agent --product CommandClipboardWatcher

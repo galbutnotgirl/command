@@ -138,6 +138,8 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   python3 "${DIR}/test/test-regression-contracts.py" || fail "regression contracts failed — restore tracked evidence before release."
   python3 "${DIR}/test/test-regression-contracts-tests.py" || fail "regression contract self-tests failed — fix fail-closed validation before release."
   (cd "${DIR}/agent" && swift test) || fail "Swift tests failed — fix app/core tests before release."
+  (cd "${DIR}/agent" && swift test --filter DictationDeliveryPipelineTests) \
+    || fail "dictation delivery pipeline tests failed — transcript may not reach history or dispatch."
   (cd "${DIR}/agent" && swift build --product CommandClipboardWatcher) \
     || fail "native Clipboard History helper build failed."
   "${DIR}/test/test-clipboard-watcher.sh" || fail "native Clipboard History helper smoke test failed."

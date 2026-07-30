@@ -253,6 +253,8 @@ AGENT_SOURCE="$(cat "${DIR}/agent/main.swift")"
 SETTINGS_SOURCE="$(cat "${DIR}/agent/SettingsWindow.swift")"
 PERMISSIONS_SOURCE="$(cat "${DIR}/agent/Permissions.swift")"
 DICTATION_OVERLAY_SOURCE="$(cat "${DIR}/agent/DictationOverlay.swift")"
+DICTATION_DELIVERY_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationDeliveryPipeline.swift")"
+DICTATION_MODEL_PROBE_SOURCE="$(cat "${DIR}/agent/Tools/DictationModelProbe/main.swift")"
 DICTATION_FAILURE_SOURCE="$(sed -n '/recorder.onFailure =/,/private func playStopSound/p' "${DIR}/agent/DictationOverlay.swift")"
 RECORDER_SOURCE="$(cat "${DIR}/agent/Recorder.swift")"
 DICTATION_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationSessionHealth.swift")"
@@ -361,7 +363,18 @@ assert_before "diagnostic failures suppress user warning panels" "$DICTATION_FAI
   'DictationCaptureWarningPanel.shared.show('
 assert_before "diagnostic dictation bypasses processing and history" "$DICTATION_OVERLAY_SOURCE" \
   'if mode == .diagnostic {' \
-  'HistoryStore.shared.add(raw: rawText'
+  'runDictationDeliveryPipeline('
+assert_contains "recorder finalization uses shared transcript decision" "$RECORDER_SOURCE" \
+  'dictationTranscriptDecision('
+assert_contains "dictation overlay uses shared delivery pipeline" "$DICTATION_OVERLAY_SOURCE" \
+  'runDictationDeliveryPipeline('
+assert_before "dictation pipeline prepares history before dispatch" "$DICTATION_OVERLAY_SOURCE" \
+  'HistoryStore.shared.add(raw: raw, processed: processed, mode: mode)' \
+  'self.dispatch(text: processed, mode: mode)'
+assert_contains "empty processed transcript falls back to captured raw text" "$DICTATION_DELIVERY_SOURCE" \
+  'case deliveredRawFallback'
+assert_contains "model fixture runs shared delivery pipeline" "$DICTATION_MODEL_PROBE_SOURCE" \
+  'runDictationDeliveryPipeline('
 assert_contains "installed microphone check waits only for model loading" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
   'result.get("status") == "recorderBusy" and result.get("capturePhase") == "loading"'
 assert_contains "dictation startup rejection explains model loading" "$DICTATION_OVERLAY_SOURCE" \

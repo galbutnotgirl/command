@@ -22,6 +22,7 @@ Run:
 
 ```bash
 cd agent && swift test
+swift test --filter DictationDeliveryPipelineTests
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
 ./test/test-build-transaction.sh
@@ -73,7 +74,7 @@ Optional local packaging check:
 ./test/test-release-asset.sh
 ```
 
-Review `test/regression-contracts.json` for behavior touched by this release. `./release.sh --publish --notarize` requires full gates and runs cached Parakeet final-word fixtures automatically; `--skip-checks` cannot publish.
+Review `test/regression-contracts.json` for behavior touched by this release. `./release.sh --publish --notarize` requires focused dictation-delivery coverage plus cached Parakeet final-word fixtures; `--skip-checks` cannot publish.
 
 Full release gates generate signed `regression-gates-attestation.json` after all required
 checks pass. Confirm qualified zip contains it and `verify-regression-attestation.sh` accepts
