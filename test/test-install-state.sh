@@ -152,9 +152,12 @@ assert_true "incremental install stops launchd and Command before bundle sync" \
   zsh -c 'IFS=: read -r bootout pkill rsync <<< "$1"; (( bootout > 0 && pkill > bootout && rsync > pkill ))' _ "$LIFECYCLE_ORDER"
 
 /usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 9.9.10-test' "$SOURCE_APP/Contents/Info.plist"
+mkdir -p "$SOURCE_APP/Contents/Resources"
+print -- "new-build-only" > "$SOURCE_APP/Contents/Resources/new-build-only.txt"
 codesign --force --sign - --identifier com.claudecommand "$SOURCE_APP" >/dev/null 2>&1
 mkdir -p "$FAKE_HOME/.claude/state"
 print -- "stale socket marker" > "$FAKE_HOME/.claude/state/command-agent.sock"
+READINESS_APP_INODE="$(stat -f %i "$FAKE_HOME/Applications/Command.app")"
 : > "$LIFECYCLE_LOG"
 # Ad-hoc fixture signatures include content hash, so permit identity change only
 # inside this isolated test. Real qualification forbids this override.
@@ -165,6 +168,10 @@ assert_contains "startup readiness failure restores previous app" \
   "new Command process did not answer ping; previous app restored" "$READINESS_OUTPUT"
 READINESS_RESTORED_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$FAKE_HOME/Applications/Command.app/Contents/Info.plist")"
 assert_true "startup readiness rollback restores previous version" test "$READINESS_RESTORED_VERSION" = "9.9.9-test"
+assert_true "startup readiness rollback preserves app directory identity" \
+  test "$(stat -f %i "$FAKE_HOME/Applications/Command.app")" = "$READINESS_APP_INODE"
+assert_true "startup readiness rollback removes new-only files" \
+  test ! -e "$FAKE_HOME/Applications/Command.app/Contents/Resources/new-build-only.txt"
 assert_true "installer removes stale socket before launch" test ! -e "$FAKE_HOME/.claude/state/command-agent.sock"
 rm -rf "$SOURCE_APP"
 /usr/bin/ditto "$FAKE_HOME/Applications/Command.app" "$SOURCE_APP"

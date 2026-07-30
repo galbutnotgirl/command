@@ -330,6 +330,10 @@ assert_contains "fresh install keeps Clipboard History opt-in" "$INSTALL_SOURCE"
   'defaults write com.claudecommand cliphistoryEnabled -bool false'
 assert_contains "installer removes stale dispatch socket before launch" "$INSTALL_SOURCE" \
   'rm -f "$SOCKET"'
+assert_contains "installer rollback preserves app directory identity" "$INSTALL_SOURCE" \
+  '/usr/bin/find "$APP" -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+assert_contains "installer rollback restores bundle metadata with ditto" "$INSTALL_SOURCE" \
+  '/usr/bin/ditto "$BACKUP_APP" "$APP"'
 assert_contains "installer readiness requires ping response" "$INSTALL_SOURCE" \
   '[ "$reply" = "pong" ]'
 assert_contains "installer rolls back app when fresh process is not ready" "$INSTALL_SOURCE" \

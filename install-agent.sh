@@ -79,6 +79,17 @@ fi
 # from new process answering ping, never old path merely existing.
 rm -f "$SOCKET"
 
+# Restore bundle contents without replacing top-level .app directory. Keeping
+# that directory at same path/inode helps macOS retain TCC grants while ditto
+# preserves bundle metadata consistently across supported macOS versions.
+restore_backup_bundle() {
+    [ -n "$BACKUP_APP" ] && [ -d "$BACKUP_APP" ] || return 1
+    mkdir -p "$APP" || return 1
+    /usr/bin/find "$APP" -mindepth 1 -maxdepth 1 -exec rm -rf {} + || return 1
+    /usr/bin/ditto "$BACKUP_APP" "$APP" || return 1
+    /usr/bin/codesign --verify --deep --strict "$APP" >/dev/null 2>&1
+}
+
 if [ -d "$APP" ]; then
     BACKUP_ROOT="$(mktemp -d "${INSTALL_DIR}/.command-update-backup.XXXXXX")" || {
         print -- "[agent] ERROR could not create update backup; install canceled"
@@ -93,7 +104,7 @@ if [ -d "$APP" ]; then
 
     restore_previous_app() {
         local reason="$1"
-        if ! rsync -a --delete "${BACKUP_APP}/" "${APP}/"; then
+        if ! restore_backup_bundle; then
             print -- "[agent] ERROR update failed (${reason}) and previous app could not be restored"
             rm -rf "$BACKUP_ROOT"
             exit 1
@@ -178,8 +189,7 @@ restore_after_readiness_failure() {
     pkill -x Command 2>/dev/null || true
     rm -f "$SOCKET"
     if [ -n "$BACKUP_APP" ] && [ -d "$BACKUP_APP" ]; then
-        if rsync -a --delete "${BACKUP_APP}/" "${APP}/" \
-            && /usr/bin/codesign --verify --deep --strict "$APP" >/dev/null 2>&1; then
+        if restore_backup_bundle; then
             rm -rf "$BACKUP_ROOT"
             launchctl bootstrap "gui/${UID_NUM}" "$PLIST" 2>/dev/null || true
             launchctl kickstart "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
