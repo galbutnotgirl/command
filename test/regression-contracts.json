@@ -1,8 +1,20 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "coverageRequirements": {
+    "app-runtime": 2,
+    "dictation": 6,
+    "shortcuts-and-input": 1,
+    "assistant-routing": 1,
+    "clipboard-history": 1,
+    "settings-and-import": 1,
+    "background-actions": 1,
+    "install-update-release": 1,
+    "hotkey-configuration": 1
+  },
   "regressions": [
     {
       "id": "DICT-001",
+      "areas": ["dictation"],
       "risk": "Pressing dictation shortcut does not start microphone capture.",
       "automatedEvidence": [
         {
@@ -22,6 +34,7 @@
     },
     {
       "id": "DICT-002",
+      "areas": ["dictation"],
       "risk": "Microphone opens but delivers no audio buffers while user keeps speaking.",
       "automatedEvidence": [
         {
@@ -37,6 +50,7 @@
     },
     {
       "id": "DICT-003",
+      "areas": ["dictation"],
       "risk": "Final spoken words are dropped when shortcut is released.",
       "automatedEvidence": [
         {
@@ -56,6 +70,7 @@
     },
     {
       "id": "DICT-004",
+      "areas": ["dictation"],
       "risk": "Parakeet final flush returns less text than latest partial transcript.",
       "automatedEvidence": [
         {
@@ -63,14 +78,15 @@
           "contains": "testPreferredTranscriptKeepsLongerTail"
         },
         {
-          "file": "agent/Tools/DictationModelProbe/main.swift",
-          "contains": "preferredDictationTranscript"
+          "file": "test/test-dictation-model.sh",
+          "contains": "run_probe \"$PAUSE_AUDIO\""
         }
       ],
       "runtimeEvidence": "Session health stores final character count and logs compare final, partial, and selected lengths."
     },
     {
       "id": "DICT-005",
+      "areas": ["dictation"],
       "risk": "Shortcut press is received but trigger state remains stuck across later attempts.",
       "automatedEvidence": [
         {
@@ -86,6 +102,7 @@
     },
     {
       "id": "DICT-006",
+      "areas": ["dictation"],
       "risk": "Quick release stops dictation before a second tap can lock recording.",
       "automatedEvidence": [
         {
@@ -102,6 +119,162 @@
         }
       ],
       "runtimeEvidence": "Persistent logs record press, release, and deferred-release actions with trigger mode and capture phase."
+    },
+    {
+      "id": "APP-001",
+      "areas": ["app-runtime"],
+      "risk": "Command restarts without restoring launchd ownership, hotkey event tap, or dispatch socket.",
+      "automatedEvidence": [
+        {
+          "file": "test/test-restart-app.sh",
+          "contains": "loaded service is kickstarted once"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "voice event tap waits for Accessibility instead of giving up"
+        }
+      ],
+      "runtimeEvidence": "launchctl reports Command running, command-agent.sock responds, and post-restart logs record hotkey registration plus event-tap installation."
+    },
+    {
+      "id": "APP-002",
+      "areas": ["app-runtime"],
+      "risk": "Fresh installs skip onboarding or normal updates reopen onboarding and lose user flow state.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/OnboardingLogicTests.swift",
+          "contains": "testFreshInstallStartsAtWelcomeEvenWhenSystemPermissionsAlreadyExist"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/OnboardingLogicTests.swift",
+          "contains": "testHealthySubsequentLaunchStaysMenuBarOnly"
+        }
+      ],
+      "runtimeEvidence": "Fresh-install diagnostics show onboarding pending; incremental install preserves onboardingCompleted and opens as menu-bar app."
+    },
+    {
+      "id": "SHORT-001",
+      "areas": ["shortcuts-and-input"],
+      "risk": "Primary or alternate shortcuts disappear, collide, misrender modifiers, or dispatch a different action.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/ActionModelsTests.swift",
+          "contains": "testConflictDetectionRejectsOtherOwnerAndDuplicateAlias"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/KeyCodesTests.swift",
+          "contains": "testCommandFnChordKeepsFnAsPrimaryKey"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "alternate shortcut add shows a visible recording slot"
+        }
+      ],
+      "runtimeEvidence": "Diagnostics list every enabled alias; live press logs record matching action, keycode, modifiers, and dispatch route."
+    },
+    {
+      "id": "ROUTE-001",
+      "areas": ["assistant-routing"],
+      "risk": "Claude or ChatGPT routing opens wrong surface, fails to paste, or reports success after submit failure.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/AssistantShortcutsTests.swift",
+          "contains": "testProjectlessCodexUsesCommandOptionO"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/ProviderModelsTests.swift",
+          "contains": "testPrimaryAssistantPreferenceMapsToProviderAndDestination"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "auto-submit failures become command failures"
+        }
+      ],
+      "runtimeEvidence": "Command history records requested provider, destination, paste result, submit result, and any actionable failure."
+    },
+    {
+      "id": "CLIP-001",
+      "areas": ["clipboard-history"],
+      "risk": "Clipboard history stops capturing, loses local data during update, or routes filtered URLs and assistant actions incorrectly.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/ClipboardURLTests.swift",
+          "contains": "testPickerRoutesConfiguredURLAndAssistantActions"
+        },
+        {
+          "file": "test/test-install-state.sh",
+          "contains": "incremental install preserves Clipboard History data"
+        }
+      ],
+      "runtimeEvidence": "Doctor reports stored item count; native watcher metadata advances after copy; incremental install retains cliphistory index."
+    },
+    {
+      "id": "SET-001",
+      "areas": ["settings-and-import"],
+      "risk": "Import overwrites unrelated settings, rejects older exports, or leaves partial files after failure.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/ImportMergeTests.swift",
+          "contains": "testImportFileMutationsRollBackExistingAndNewFilesAfterFailure"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/ImportValidationTests.swift",
+          "contains": "testLegacyTopLevelPayloadsRemainImportable"
+        }
+      ],
+      "runtimeEvidence": "Import preview reports same, added, updated, and current-only counts before atomic commit; rollback leaves original files unchanged."
+    },
+    {
+      "id": "BG-001",
+      "areas": ["background-actions"],
+      "risk": "Background action loses provider, prompt, workspace, attachment, or silently treats CLI failure as success.",
+      "automatedEvidence": [
+        {
+          "file": "vendor/claude-command-capture/test/submit.test.js",
+          "contains": "submitCapture marks failures and notifies with the log path"
+        },
+        {
+          "file": "vendor/claude-command-capture/test/submit.test.js",
+          "contains": "Codex submissions record provider, workspace, and image attachment"
+        }
+      ],
+      "runtimeEvidence": "Background history record stores provider, rendered prompt, workspace, attachment, exit status, result, and log path."
+    },
+    {
+      "id": "INSTALL-001",
+      "areas": ["install-update-release"],
+      "risk": "Incremental update loses permissions or mutable user data, or failed update leaves broken app instead of rollback.",
+      "automatedEvidence": [
+        {
+          "file": "test/test-install-state.sh",
+          "contains": "incremental install rejects signing identity change"
+        },
+        {
+          "file": "test/test-install-state.sh",
+          "contains": "partial copy failure restores previous app"
+        },
+        {
+          "file": "test/test-updater-swap.sh",
+          "contains": "signature mismatch restores prior app"
+        }
+      ],
+      "runtimeEvidence": "Installed bundle keeps designated requirement and path; pre/post state sentinels remain; failed swap restores valid prior signature."
+    },
+    {
+      "id": "HOTKEY-001",
+      "areas": ["hotkey-configuration"],
+      "risk": "Generated default hotkeys collide, reference missing actions, or overwrite user-customized bindings.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/ActionModelsTests.swift",
+          "contains": "testNewUserDefaultsDoNotCollideWhenBound"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/ActionModelsTests.swift",
+          "contains": "testCustomizedExperimentalBindingIsNeverMigrated"
+        }
+      ],
+      "runtimeEvidence": "Diagnostics list generated defaults and preserved overrides; reloadhotkeys reports registered bindings without conflicts."
     }
   ],
   "requiredGates": [
@@ -111,11 +284,19 @@
     },
     {
       "file": ".github/workflows/test.yml",
+      "contains": "python3 ./test/test-regression-contracts-tests.py"
+    },
+    {
+      "file": ".github/workflows/test.yml",
       "contains": "python3 ./test/test-regression-impact.py --base"
     },
     {
       "file": "release.sh",
       "contains": "python3 \"${DIR}/test/test-regression-contracts.py\""
+    },
+    {
+      "file": "release.sh",
+      "contains": "python3 \"${DIR}/test/test-regression-contracts-tests.py\""
     },
     {
       "file": "release.sh",

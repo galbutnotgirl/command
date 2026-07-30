@@ -74,6 +74,7 @@
       "evidence": [
         "agent/Tests/ClaudeCommandCoreTests/AssistantShortcutsTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/ProviderModelsTests.swift",
+        "vendor/claude-command-capture/test/*.js",
         "vendor/claude-command-capture/test/**/*.js",
         "test/test-assistant-contract.sh",
         "test/test-shell.sh",
@@ -122,6 +123,7 @@
       ],
       "evidence": [
         "agent/Tests/ClaudeCommandCoreTests/HandoffModelsTests.swift",
+        "vendor/claude-command-capture/test/*.js",
         "vendor/claude-command-capture/test/**/*.js",
         "test/test-shell.sh",
         "test/regression-contracts.json"
@@ -151,6 +153,7 @@
         "agent/Tests/ClaudeCommandCoreTests/UpdateLogicTests.swift",
         "test/test-build-transaction.sh",
         "test/test-install-state.sh",
+        "test/test-regression-contracts-tests.py",
         "test/test-regression-impact.sh",
         "test/test-release-policy.sh",
         "test/test-release-transaction.sh",

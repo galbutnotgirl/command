@@ -125,6 +125,7 @@ if [ "$SKIP_CHECKS" = "0" ]; then
       || fail "runtime regression ownership audit failed."
   fi
   python3 "${DIR}/test/test-regression-contracts.py" || fail "regression contracts failed — restore tracked evidence before release."
+  python3 "${DIR}/test/test-regression-contracts-tests.py" || fail "regression contract self-tests failed — fix fail-closed validation before release."
   (cd "${DIR}/agent" && swift test) || fail "Swift tests failed — fix app/core tests before release."
   (cd "${DIR}/vendor/claude-command-capture" && node --test) || fail "Node tests failed — fix background runner tests before release."
   "${DIR}/test/test-shell.sh" || fail "shell tests failed — fix scripts before release."

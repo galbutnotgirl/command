@@ -55,6 +55,10 @@ expect_fail_with "assistant routing change requires routing evidence" "assistant
   python3 "$CHECKER" --paths send-to-claude.sh
 expect_ok "assistant routing change accepts contract test" \
   python3 "$CHECKER" --paths send-to-claude.sh test/test-assistant-contract.sh
+expect_fail_with "background runtime change requires background evidence" "background-actions:" \
+  python3 "$CHECKER" --paths vendor/claude-command-capture/src/submit.js
+expect_ok "background runtime accepts direct Node test evidence" \
+  python3 "$CHECKER" --paths vendor/claude-command-capture/src/submit.js vendor/claude-command-capture/test/submit.test.js
 expect_fail_with "installer change requires install evidence" "install-update-release:" \
   python3 "$CHECKER" --paths install-agent.sh
 expect_ok "installer change accepts install-state test" \

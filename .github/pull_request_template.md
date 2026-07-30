@@ -33,6 +33,7 @@ Paste relevant results:
 ./test/test-regression-impact.sh
 python3 ./test/test-regression-impact.py --base HEAD^
 python3 ./test/test-regression-contracts.py
+python3 ./test/test-regression-contracts-tests.py
 cd agent && swift test
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
