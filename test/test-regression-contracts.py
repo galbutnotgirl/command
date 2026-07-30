@@ -28,11 +28,13 @@ MANDATORY_GATES = {
     (".github/workflows/test.yml", "python3 ./test/test-regression-contracts-tests.py"),
     (".github/workflows/test.yml", "python3 ./test/test-regression-impact.py --base"),
     (".github/workflows/test.yml", "swift test --filter DictationDeliveryPipelineTests"),
+    (".github/workflows/test.yml", "swift test --filter 'Dictation(CaptureWatchdog|WatchdogProbe)Tests'"),
     (".github/workflows/test.yml", "./test/test-qualification-orchestration.sh"),
     (".github/workflows/test.yml", "python3 ./test/test-installed-qualification-report.py"),
     ("release.sh", 'python3 "${DIR}/test/test-regression-contracts.py"'),
     ("release.sh", 'python3 "${DIR}/test/test-regression-contracts-tests.py"'),
     ("release.sh", "swift test --filter DictationDeliveryPipelineTests"),
+    ("release.sh", "swift test --filter 'Dictation(CaptureWatchdog|WatchdogProbe)Tests'"),
     ("release.sh", '"${DIR}/test/test-regression-impact.sh"'),
     ("release.sh", '"${DIR}/test/test-qualification-orchestration.sh"'),
     ("release.sh", 'python3 "${DIR}/test/test-installed-qualification-report.py"'),
@@ -40,6 +42,15 @@ MANDATORY_GATES = {
     ("release.sh", '"${DIR}/test/test-dictation-model.sh"'),
     ("release.sh", "--skip-checks cannot be used with --publish"),
 }
+
+
+def is_integration_evidence(relative: str) -> bool:
+    """Return true for proofs that execute behavior beyond one Swift unit-test file."""
+    return (
+        (relative.startswith("test/test-") and relative.endswith((".sh", ".py")))
+        or fnmatch.fnmatchcase(relative, "vendor/claude-command-capture/test/*.js")
+        or fnmatch.fnmatchcase(relative, "vendor/claude-command-capture/test/**/*.js")
+    )
 
 
 def fail(message: str) -> None:
@@ -89,8 +100,8 @@ def validate_contracts(document: dict, impact: dict, root: Path = ROOT) -> tuple
         failures.append("coverageRequirements must be an object")
         requirements = {}
     required_areas = set(requirements)
-    if document.get("schemaVersion") != 2:
-        failures.append("schemaVersion must be 2")
+    if document.get("schemaVersion") != 3:
+        failures.append("schemaVersion must be 3")
     if impact.get("schemaVersion") != 1 or not impact_areas or "" in impact_areas:
         failures.append("regression impact areas are missing or invalid")
     for area in sorted(impact_areas - required_areas):
@@ -141,6 +152,8 @@ def validate_contracts(document: dict, impact: dict, root: Path = ROOT) -> tuple
             failures.append(f"{identifier}: needs at least two automated evidence links")
             evidence = evidence if isinstance(evidence, list) else []
         area_evidence = {area: False for area in areas if area in impact_areas}
+        evidence_files: set[str] = set()
+        has_integration_evidence = False
         for proof in evidence:
             evidence_count += 1
             if not isinstance(proof, dict):
@@ -151,6 +164,8 @@ def validate_contracts(document: dict, impact: dict, root: Path = ROOT) -> tuple
             if not isinstance(relative, str) or not relative:
                 failures.append(f"{identifier}: evidence file missing: {relative}")
                 continue
+            evidence_files.add(relative)
+            has_integration_evidence = has_integration_evidence or is_integration_evidence(relative)
             path = (root / relative).resolve()
             try:
                 path.relative_to(root)
@@ -173,6 +188,10 @@ def validate_contracts(document: dict, impact: dict, root: Path = ROOT) -> tuple
                 impact_area = impact_by_name[area]
                 if any(fnmatch.fnmatchcase(relative, pattern) for pattern in impact_area.get("evidence", [])):
                     area_evidence[area] = True
+        if len(evidence_files) < 2:
+            failures.append(f"{identifier}: evidence must span at least two distinct files")
+        if not has_integration_evidence:
+            failures.append(f"{identifier}: needs release-executed integration evidence")
         for area, covered in area_evidence.items():
             if not covered:
                 failures.append(f"{identifier}: no evidence accepted by feature area: {area}")

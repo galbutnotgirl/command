@@ -1359,6 +1359,14 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   restarts Command through its loaded launchd job instead of opening a detached Finder process.
   Restart-on-failure supervision therefore survives updates; `open` remains a tested fallback when
   no launchd job is loaded.
+- **Independent regression proof**: critical regression contracts now require evidence from at
+  least two distinct files plus one release-executed integration test. Onboarding, settings/import,
+  background actions, and hotkey defaults gained independent proof sources. Runtime impact checks
+  no longer accept editing the contract registry itself as behavior evidence, and negative tests
+  keep both rules fail-closed.
+- **Watchdog gate declaration parity**: focused dictation startup-watchdog tests were already run by
+  local release and CI and signed into build attestations; the contract manifest now declares both
+  commands as mandatory too, preventing either focused gate from disappearing unnoticed.
 
 ## Next up (roughly in the order they came up)
 

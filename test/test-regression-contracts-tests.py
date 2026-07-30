@@ -54,6 +54,38 @@ class RegressionContractValidatorTests(unittest.TestCase):
         document["regressions"][0]["automatedEvidence"] = document["regressions"][0]["automatedEvidence"][:1]
         self.assertTrue(any("at least two automated evidence" in item for item in self.failures(document)))
 
+    def testTwoMarkersFromSameFileDoNotCountAsIndependentProof(self) -> None:
+        document = copy.deepcopy(self.document)
+        regression = next(entry for entry in document["regressions"] if entry["id"] == "APP-002")
+        regression["automatedEvidence"] = [
+            {
+                "file": "agent/Tests/ClaudeCommandCoreTests/OnboardingLogicTests.swift",
+                "contains": "testFreshInstallStartsAtWelcomeEvenWhenSystemPermissionsAlreadyExist",
+            },
+            {
+                "file": "agent/Tests/ClaudeCommandCoreTests/OnboardingLogicTests.swift",
+                "contains": "testHealthySubsequentLaunchStaysMenuBarOnly",
+            },
+        ]
+        failures = self.failures(document)
+        self.assertTrue(any("at least two distinct files" in item for item in failures))
+        self.assertTrue(any("release-executed integration evidence" in item for item in failures))
+
+    def testUnitTestsAloneDoNotCountAsRuntimeProof(self) -> None:
+        document = copy.deepcopy(self.document)
+        regression = next(entry for entry in document["regressions"] if entry["id"] == "SET-001")
+        regression["automatedEvidence"] = [
+            {
+                "file": "agent/Tests/ClaudeCommandCoreTests/ImportMergeTests.swift",
+                "contains": "testImportFileMutationsRollBackExistingAndNewFilesAfterFailure",
+            },
+            {
+                "file": "agent/Tests/ClaudeCommandCoreTests/ImportValidationTests.swift",
+                "contains": "testLegacyTopLevelPayloadsRemainImportable",
+            },
+        ]
+        self.assertTrue(any("release-executed integration evidence" in item for item in self.failures(document)))
+
     def testStaleEvidenceMarkerFails(self) -> None:
         document = copy.deepcopy(self.document)
         document["regressions"][0]["automatedEvidence"][0]["contains"] = "missing-marker"

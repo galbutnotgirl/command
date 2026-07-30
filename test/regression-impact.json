@@ -21,7 +21,7 @@
       "evidence": [
         "agent/Tests/**/*.swift",
         "test/test-shell.sh",
-        "test/regression-contracts.json"
+        "test/test-install-state.sh"
       ]
     },
     {
@@ -55,8 +55,7 @@
         "agent/Tests/ClaudeCommandCoreTests/DictationTriggerCoordinatorTests.swift",
         "test/test-dictation-model.sh",
         "test/test-installed-state-preservation.py",
-        "test/test-shell.sh",
-        "test/regression-contracts.json"
+        "test/test-shell.sh"
       ]
     },
     {
@@ -74,8 +73,7 @@
         "agent/Tests/ClaudeCommandCoreTests/HotkeyHealthProbeTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/VoiceDispatchProbeTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/KeyCodesTests.swift",
-        "test/test-shell.sh",
-        "test/regression-contracts.json"
+        "test/test-shell.sh"
       ]
     },
     {
@@ -96,8 +94,7 @@
         "vendor/claude-command-capture/test/*.js",
         "vendor/claude-command-capture/test/**/*.js",
         "test/test-assistant-contract.sh",
-        "test/test-shell.sh",
-        "test/regression-contracts.json"
+        "test/test-shell.sh"
       ]
     },
     {
@@ -112,8 +109,7 @@
         "agent/Tests/ClaudeCommandCoreTests/ClipboardURLTests.swift",
         "test/test-installed-state-preservation.py",
         "test/test-clipboard-watcher.sh",
-        "test/test-shell.sh",
-        "test/regression-contracts.json"
+        "test/test-shell.sh"
       ]
     },
     {
@@ -130,8 +126,7 @@
         "agent/Tests/ClaudeCommandCoreTests/TemplatesTests.swift",
         "test/test-installed-state-preservation.py",
         "test/test-shell.sh",
-        "test/test_string_review.py",
-        "test/regression-contracts.json"
+        "test/test_string_review.py"
       ]
     },
     {
@@ -146,8 +141,7 @@
         "agent/Tests/ClaudeCommandCoreTests/HandoffModelsTests.swift",
         "vendor/claude-command-capture/test/*.js",
         "vendor/claude-command-capture/test/**/*.js",
-        "test/test-shell.sh",
-        "test/regression-contracts.json"
+        "test/test-shell.sh"
       ]
     },
     {
@@ -191,8 +185,7 @@
         "test/test-release-transaction.sh",
         "test/test-restart-app.sh",
         "test/test-uninstall.sh",
-        "test/test-updater-swap.sh",
-        "test/regression-contracts.json"
+        "test/test-updater-swap.sh"
       ]
     },
     {
@@ -201,8 +194,9 @@
       "evidence": [
         "agent/Tests/ClaudeCommandCoreTests/ActionModelsTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/KeyCodesTests.swift",
+        "test/test-install-state.sh",
         "test/test-shell.sh",
-        "test/regression-contracts.json"
+        "test/test-installed-hotkeys.sh"
       ]
     }
   ]

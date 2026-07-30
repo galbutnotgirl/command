@@ -37,6 +37,8 @@ expect_ok "all runtime files have regression ownership" \
   python3 "$CHECKER" --audit-only
 expect_fail_with "general app runtime change requires app evidence" "app-runtime:" \
   python3 "$CHECKER" --paths agent/MenuBar.swift
+expect_fail_with "contract registry alone cannot satisfy runtime evidence" "app-runtime:" \
+  python3 "$CHECKER" --paths agent/MenuBar.swift test/regression-contracts.json
 expect_ok "general app runtime change accepts Swift evidence" \
   python3 "$CHECKER" --paths agent/MenuBar.swift agent/Tests/ClaudeCommandCoreTests/ActionModelsTests.swift
 expect_fail_with "dictation runtime change requires dictation evidence" "dictation:" \

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "coverageRequirements": {
     "app-runtime": 6,
     "dictation": 12,
@@ -291,6 +291,10 @@
         {
           "file": "agent/Tests/ClaudeCommandCoreTests/OnboardingLogicTests.swift",
           "contains": "testHealthySubsequentLaunchStaysMenuBarOnly"
+        },
+        {
+          "file": "test/test-install-state.sh",
+          "contains": "incremental install preserves onboarding"
         }
       ],
       "runtimeEvidence": "Fresh-install diagnostics show onboarding pending; incremental install preserves onboardingCompleted and opens as menu-bar app."
@@ -383,6 +387,10 @@
         {
           "file": "agent/Tests/ClaudeCommandCoreTests/ImportValidationTests.swift",
           "contains": "testLegacyTopLevelPayloadsRemainImportable"
+        },
+        {
+          "file": "test/test-installed-state-preservation.py",
+          "contains": "test_policy_covers_all_owned_configuration_and_history"
         }
       ],
       "runtimeEvidence": "Import preview reports same, added, updated, and current-only counts before atomic commit; rollback leaves original files unchanged."
@@ -399,6 +407,10 @@
         {
           "file": "vendor/claude-command-capture/test/submit.test.js",
           "contains": "Codex submissions record provider, workspace, and image attachment"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/HandoffModelsTests.swift",
+          "contains": "testCodexSkillAndMenuTitleUseCodexSyntax"
         }
       ],
       "runtimeEvidence": "Background history record stores provider, rendered prompt, workspace, attachment, exit status, result, and log path."
@@ -531,6 +543,10 @@
         {
           "file": "agent/Tests/ClaudeCommandCoreTests/ActionModelsTests.swift",
           "contains": "testCustomizedExperimentalBindingIsNeverMigrated"
+        },
+        {
+          "file": "test/test-install-state.sh",
+          "contains": "incremental install preserves hotkeys"
         }
       ],
       "runtimeEvidence": "Diagnostics list generated defaults and preserved overrides; reloadhotkeys reports registered bindings without conflicts."
@@ -552,6 +568,10 @@
     {
       "file": ".github/workflows/test.yml",
       "contains": "swift test --filter DictationDeliveryPipelineTests"
+    },
+    {
+      "file": ".github/workflows/test.yml",
+      "contains": "swift test --filter 'Dictation(CaptureWatchdog|WatchdogProbe)Tests'"
     },
     {
       "file": ".github/workflows/test.yml",
@@ -580,6 +600,10 @@
     {
       "file": "release.sh",
       "contains": "swift test --filter DictationDeliveryPipelineTests"
+    },
+    {
+      "file": "release.sh",
+      "contains": "swift test --filter 'Dictation(CaptureWatchdog|WatchdogProbe)Tests'"
     },
     {
       "file": "release.sh",

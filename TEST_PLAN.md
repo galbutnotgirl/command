@@ -87,6 +87,11 @@ With Parakeet models cached on release Mac:
 
 `release.sh --publish` runs this Parakeet probe automatically and refuses `--skip-checks`. Known critical failures and required proof are tracked in [`test/regression-contracts.json`](test/regression-contracts.json); `test-regression-contracts.py` fails when evidence or release wiring disappears.
 
+Each tracked regression must cite at least two distinct evidence files and at least one
+release-executed integration proof. Multiple methods in one unit-test file do not count as
+independent proof. Editing `test/regression-contracts.json` alone also cannot satisfy runtime
+impact coverage; a matching behavior test must change with runtime code.
+
 Full `release.sh` gates create `regression-gates-attestation.json` only after every required
 test passes, then sign it inside app. Local installer, in-app updater, and detached swapper
 verify commit, branch marker, version, suite, and gate list before replacing installed app.
@@ -194,8 +199,9 @@ Preserve user settings for incremental tests. Use clean install only for onboard
   17 release-transaction, 41 install-state, 14 updater, 9 restart-handoff,
   9 installed-state preservation, 9 release-policy, 94 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
-- Twenty-six tracked regressions have 77 source/test evidence links; thirteen dictation regressions
-  retain 41 links. Each contract has runtime evidence, CI enforcement, and public-release
+- Twenty-six tracked regressions have 81 source/test evidence links; thirteen dictation regressions
+  retain 41 links. Every contract spans at least two files, includes release-executed integration
+  evidence, and has runtime evidence, CI enforcement, and public-release
   enforcement. Latest session health is
   persisted through start, model load, listening, first buffer, finish, and terminal outcome.
 - Settings pickers and toggles have explicit hidden accessibility labels, and static analysis
