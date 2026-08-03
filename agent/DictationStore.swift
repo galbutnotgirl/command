@@ -106,46 +106,68 @@ final class VocabularyStore: ObservableObject {
         }
     }
 
-    private func persist() {
+    private func persist() -> Bool {
         let f = VocabFile(
             replacements: replacements.map { .init(wrong: $0.wrong, correct: $0.correct) },
             vocab: vocab,
             fillers: fillers.map { .init(phrase: $0.phrase, customPattern: $0.customPattern, enabled: $0.enabled) }
         )
-        try? JSONEncoder().encode(f).write(to: fileURL, options: .atomic)
+        do {
+            return persistStateData(
+                try JSONEncoder().encode(f),
+                to: fileURL,
+                label: "Dictation vocabulary"
+            )
+        } catch {
+            reportStateSaveFailure(label: "Dictation vocabulary", error: error)
+            return false
+        }
+    }
+
+    private func update(_ mutation: () -> Void) {
+        let oldReplacements = replacements
+        let oldVocab = vocab
+        let oldFillers = fillers
+        mutation()
+        if !persist() {
+            replacements = oldReplacements
+            vocab = oldVocab
+            fillers = oldFillers
+        }
     }
 
     func addReplacement(wrong: String, correct: String) {
         let w = wrong.trimmingCharacters(in: .whitespaces)
         let c = correct.trimmingCharacters(in: .whitespaces)
         guard !w.isEmpty, !c.isEmpty else { return }
-        replacements.removeAll { $0.wrong.lowercased() == w.lowercased() }
-        replacements.append(Replacement(wrong: w, correct: c))
-        persist()
+        update {
+            replacements.removeAll { $0.wrong.lowercased() == w.lowercased() }
+            replacements.append(Replacement(wrong: w, correct: c))
+        }
     }
 
-    func removeReplacement(id: UUID) { replacements.removeAll { $0.id == id }; persist() }
+    func removeReplacement(id: UUID) { update { replacements.removeAll { $0.id == id } } }
 
     func addVocab(_ term: String) {
         let t = term.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty, !vocab.contains(where: { $0.lowercased() == t.lowercased() }) else { return }
-        vocab.append(t); persist()
+        update { vocab.append(t) }
     }
 
-    func removeVocab(at offsets: IndexSet) { vocab.remove(atOffsets: offsets); persist() }
+    func removeVocab(at offsets: IndexSet) { update { vocab.remove(atOffsets: offsets) } }
 
     func toggleFiller(id: UUID) {
         guard let i = fillers.firstIndex(where: { $0.id == id }) else { return }
-        fillers[i].enabled.toggle(); persist()
+        update { fillers[i].enabled.toggle() }
     }
 
     func addFiller(phrase: String) {
         let p = phrase.trimmingCharacters(in: .whitespaces)
         guard !p.isEmpty, !fillers.contains(where: { $0.phrase.lowercased() == p.lowercased() }) else { return }
-        fillers.append(FillerEntry(phrase: p)); persist()
+        update { fillers.append(FillerEntry(phrase: p)) }
     }
 
-    func removeFiller(id: UUID) { fillers.removeAll { $0.id == id }; persist() }
+    func removeFiller(id: UUID) { update { fillers.removeAll { $0.id == id } } }
 }
 
 // ─── Processing settings ───────────────────────────────────────────────────────
@@ -198,14 +220,15 @@ final class HistoryStore: ObservableObject {
         case .customAction: modeLabel = "custom"
         case .diagnostic: modeLabel = "diagnostic"
         }
-        let r = Record(timestamp: Date(), raw: raw, processed: processed, mode: modeLabel)
-        records.insert(r, at: 0)
-        if records.count > Self.maxRecords { records = Array(records.prefix(Self.maxRecords)) }
-        save()
+        update {
+            let r = Record(timestamp: Date(), raw: raw, processed: processed, mode: modeLabel)
+            records.insert(r, at: 0)
+            if records.count > Self.maxRecords { records = Array(records.prefix(Self.maxRecords)) }
+        }
     }
 
-    func remove(id: UUID) { records.removeAll { $0.id == id }; save() }
-    func clearAll()        { records.removeAll(); save() }
+    func remove(id: UUID) { update { records.removeAll { $0.id == id } } }
+    func clearAll()        { update { records.removeAll() } }
 
     func suggestions(ignoring existing: Set<String>) -> [(wrong: String, correct: String, count: Int)] {
         var tally: [String: Int] = [:]
@@ -240,8 +263,13 @@ final class HistoryStore: ObservableObject {
               let decoded = try? JSONDecoder().decode([Record].self, from: data) else { return }
         records = decoded
     }
-    private func save() {
-        guard let data = try? JSONEncoder().encode(records) else { return }
-        try? data.write(to: storeURL)
+    private func update(_ mutation: () -> Void) {
+        let previous = records
+        mutation()
+        guard let data = try? JSONEncoder().encode(records),
+              persistStateData(data, to: storeURL, label: "Dictation history") else {
+            records = previous
+            return
+        }
     }
 }

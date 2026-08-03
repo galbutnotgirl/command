@@ -1,14 +1,6 @@
 import Foundation
 
-public struct ImportFileMutation {
-    public let url: URL
-    public let data: Data
-
-    public init(url: URL, data: Data) {
-        self.url = url
-        self.data = data
-    }
-}
+public typealias ImportFileMutation = StateFileMutation
 
 public enum ImportTransactionError: LocalizedError {
     case invalidJSONObject
@@ -46,65 +38,30 @@ public func applyImportFileMutations(
         try data.write(to: url, options: .atomic)
     }
 ) throws {
-    guard !mutations.isEmpty else { return }
-
-    var seen = Set<String>()
-    for mutation in mutations {
-        let path = mutation.url.standardizedFileURL.path
-        guard seen.insert(path).inserted else {
-            throw ImportTransactionError.duplicateDestination(path)
-        }
-    }
-
-    struct Snapshot {
-        let url: URL
-        let existed: Bool
-        let data: Data?
-    }
-
-    var snapshots: [Snapshot] = []
-    for mutation in mutations {
-        let url = mutation.url.standardizedFileURL
-        let existed = fileManager.fileExists(atPath: url.path)
-        do {
-            let data = existed ? try Data(contentsOf: url) : nil
-            snapshots.append(Snapshot(url: url, existed: existed, data: data))
-        } catch {
-            throw ImportTransactionError.snapshotFailed(url.path, error.localizedDescription)
-        }
-    }
-
-    var activeURL: URL?
     do {
-        for mutation in mutations {
-            let url = mutation.url.standardizedFileURL
-            activeURL = url
-            try fileManager.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try writer(mutation.data, url)
-        }
-    } catch {
-        var rollbackFailures: [String] = []
-        for snapshot in snapshots.reversed() {
-            do {
-                if snapshot.existed, let data = snapshot.data {
-                    try data.write(to: snapshot.url, options: .atomic)
-                } else if fileManager.fileExists(atPath: snapshot.url.path) {
-                    try fileManager.removeItem(at: snapshot.url)
-                }
-            } catch {
-                rollbackFailures.append(snapshot.url.path)
-            }
-        }
-        let destination = activeURL?.path
-            ?? mutations.last?.url.path
-            ?? "settings file"
-        throw ImportTransactionError.writeFailed(
-            destination,
-            error.localizedDescription,
-            rollbackFailures: rollbackFailures
+        try applyStateFileMutations(
+            mutations,
+            fileManager: fileManager,
+            writer: writer
         )
+    } catch let error as StateFileTransactionError {
+        switch error {
+        case .duplicateDestination(let path):
+            throw ImportTransactionError.duplicateDestination(path)
+        case .snapshotFailed(let path, let reason):
+            throw ImportTransactionError.snapshotFailed(path, reason)
+        case .writeFailed(let path, let reason, let rollbackFailures):
+            throw ImportTransactionError.writeFailed(
+                path,
+                reason,
+                rollbackFailures: rollbackFailures
+            )
+        case .verificationFailed(let path, let rollbackFailures):
+            throw ImportTransactionError.writeFailed(
+                path,
+                "saved data could not be verified",
+                rollbackFailures: rollbackFailures
+            )
+        }
     }
 }

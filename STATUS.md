@@ -9,6 +9,25 @@ Repo: `galbutnotgirl/command`. Current version: **1.2.0-beta.1**
 (`git checkout checkpoint-before-trigger-refactor` rolls back to just before the biggest
 recent change if something in there needs undoing).
 
+## Settings persistence and coverage hardening (2026-08-03)
+
+- Shortcut, custom-action, prompt, context-rule, Compose, vocabulary, dictation-history,
+  background, and retention settings now use one verified atomic transaction layer. Every write
+  snapshots current files, verifies exact read-back, and restores all prior files after write or
+  verification failure. Compose prompt and behavior files commit together instead of leaving a
+  half-saved configuration.
+- Settings now reports save failures visibly and keeps edit sheets open. Mutable UI models restore
+  prior in-memory values when persistence fails, preventing controls from showing changes that
+  never reached disk. Background dispatch stops when required background settings cannot save.
+- Settings initial window geometry is testable core policy, constrained by visible screen bounds,
+  and preserves minimum dimensions needed by scrollable Compose and Custom Action sheets.
+- Suite inventory fails closed if any protected Swift or Node test count drops. Current floor is
+  242 Swift and 58 Node tests. Main CI plus release gates repeatedly run 45 high-risk dictation,
+  shortcut, import, and persistence cases to expose order-dependent or intermittent failures.
+- Regression inventory now tracks 29 contracts with 95 evidence links. SET-002 covers silent or
+  partial settings writes; SET-003 covers clipped or cramped Settings geometry.
+- Rollback checkpoint: `checkpoint/2026-07-31-0951-stability-testing`.
+
 ## Installed regression gates (2026-07-30)
 
 - Installed dictation delivery now has direct focused-field proof. Qualification sends a known

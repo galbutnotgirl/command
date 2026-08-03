@@ -31,17 +31,19 @@ func loadBindings() -> [HotkeyBinding] {
     }
     let bindings = COMMAND_ACTIONS.map { byAction[$0.id] ?? HotkeyBinding(action: $0.id, keycode: 0, mods: 0, enabled: true) }
     if shouldPersistMigration {
-        writeBindings(bindings)
+        _ = writeBindings(bindings)
     }
     return bindings
 }
 
-func saveBindings(_ bindings: [HotkeyBinding]) {
-    writeBindings(bindings)
+@discardableResult
+func saveBindings(_ bindings: [HotkeyBinding]) -> Bool {
+    guard writeBindings(bindings) else { return false }
     DispatchQueue.main.async { reregisterHotkeys() }   // live — no agent restart
+    return true
 }
 
-private func writeBindings(_ bindings: [HotkeyBinding]) {
+private func writeBindings(_ bindings: [HotkeyBinding]) -> Bool {
     let arr = bindings.filter { !$0.shortcuts.isEmpty }
         .map { binding -> [String: Any] in
             var row = encodeShortcutFields(binding.shortcuts)
@@ -49,12 +51,16 @@ private func writeBindings(_ bindings: [HotkeyBinding]) {
             row["enabled"] = binding.enabled
             return row
         }
-    if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
-        try? FileManager.default.createDirectory(
-            at: URL(fileURLWithPath: CFG).deletingLastPathComponent(),
-            withIntermediateDirectories: true
+    do {
+        let data = try JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted, .sortedKeys])
+        return persistStateData(
+            data,
+            to: URL(fileURLWithPath: CFG),
+            label: "Shortcuts"
         )
-        try? data.write(to: URL(fileURLWithPath: CFG))
+    } catch {
+        reportStateSaveFailure(label: "Shortcuts", error: error)
+        return false
     }
 }
 
@@ -153,7 +159,8 @@ private func encodeTrigger(_ t: ActionTrigger) -> [String: Any] {
     return d
 }
 
-func saveCustomActions(_ actions: [CustomAction]) {
+@discardableResult
+func saveCustomActions(_ actions: [CustomAction]) -> Bool {
     let arr = actions.map { ca -> [String: Any] in
         ["id": ca.id, "name": ca.name, "prompt": ca.prompt,
          "isAutoSubmit": ca.isAutoSubmit, "sessionMode": ca.sessionMode,
@@ -163,8 +170,17 @@ func saveCustomActions(_ actions: [CustomAction]) {
          "provider": ca.provider.rawValue,
          "triggers": ca.triggers.map(encodeTrigger)]
     }
-    if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
-        try? data.write(to: URL(fileURLWithPath: CUSTOM_ACTIONS_PATH))
+    do {
+        let data = try JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted, .sortedKeys])
+        guard persistStateData(
+            data,
+            to: URL(fileURLWithPath: CUSTOM_ACTIONS_PATH),
+            label: "Custom actions"
+        ) else { return false }
+    } catch {
+        reportStateSaveFailure(label: "Custom actions", error: error)
+        return false
     }
     DispatchQueue.main.async { reregisterHotkeys() }
+    return true
 }

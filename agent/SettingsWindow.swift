@@ -120,8 +120,10 @@ final class SettingsModel: ObservableObject {
     @Published var recordingAction: String? = nil
     @Published var recordingShortcutIndex: Int = 0
     @Published var bindingConflict: String? = nil
+    @Published var stateSaveFailure: String? = nil
     private var recordingModifierKeycodes: [UInt32] = []
     private var recordingModifierPeak: [UInt32] = []
+    private var saveFailureObserver: NSObjectProtocol?
     @Published var claudeDestination: String
     @Published var codexDestination: String = UserDefaults.standard.string(forKey: "codexDestination") ?? "recent"
     @Published var defaultProvider: String = UserDefaults.standard.string(forKey: "defaultProvider") ?? "codex"
@@ -142,6 +144,19 @@ final class SettingsModel: ObservableObject {
         if raw != canonical {
             UserDefaults.standard.set(canonical, forKey: "claudeDestination")
         }
+        saveFailureObserver = NotificationCenter.default.addObserver(
+            forName: .commandSettingsSaveFailed,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            self?.stateSaveFailure = notification.userInfo?["message"] as? String
+        }
+    }
+
+    deinit {
+        if let saveFailureObserver {
+            NotificationCenter.default.removeObserver(saveFailureObserver)
+        }
     }
 
     func refresh() {
@@ -152,6 +167,7 @@ final class SettingsModel: ObservableObject {
     }
 
     func setBinding(action: String, shortcutIndex: Int = 0, keycode: UInt32, mods: UInt32) {
+        let previous = bindings
         if let i = bindings.firstIndex(where: { $0.action == action }) {
             var values = bindings[i].shortcuts
             let shortcut = HotkeyShortcut(keycode: keycode, mods: mods)
@@ -159,25 +175,32 @@ final class SettingsModel: ObservableObject {
             else if shortcutIndex == values.count { values.append(shortcut) }
             bindings[i].shortcuts = normalizedShortcuts(values)
         }
-        saveBindings(bindings); refresh()
+        guard saveBindings(bindings) else { bindings = previous; return }
+        refresh()
     }
     func setEnabled(action: String, enabled: Bool) {
+        let previous = bindings
         if let i = bindings.firstIndex(where: { $0.action == action }) {
             bindings[i].enabled = enabled
         }
-        saveBindings(bindings); refresh()
+        guard saveBindings(bindings) else { bindings = previous; return }
+        refresh()
     }
     func resetBindings(actions: Set<String>) {
+        let previous = bindings
         bindings = resettingShortcutBindings(bindings, actions: actions)
-        saveBindings(bindings); refresh()
+        guard saveBindings(bindings) else { bindings = previous; return }
+        refresh()
     }
     func clearBinding(_ action: String, shortcutIndex: Int = 0) {
+        let previous = bindings
         if let i = bindings.firstIndex(where: { $0.action == action }) {
             if shortcutIndex < bindings[i].shortcuts.count {
                 bindings[i].shortcuts.remove(at: shortcutIndex)
             }
         }
-        saveBindings(bindings); refresh()
+        guard saveBindings(bindings) else { bindings = previous; return }
+        refresh()
     }
 
     // Begin capturing the next combo for `action`. Hotkeys are paused so the
@@ -306,14 +329,17 @@ final class SettingsModel: ObservableObject {
 
     // ---- custom action CRUD ----
     func addCustomAction(_ ca: CustomAction) {
+        let previous = customActions
         customActions.append(ca)
-        saveCustomActions(customActions)
+        persistCustomActions(orRestore: previous)
     }
     func deleteCustomAction(id: String) {
+        let previous = customActions
         customActions.removeAll { $0.id == id }
-        saveCustomActions(customActions)
+        persistCustomActions(orRestore: previous)
     }
     func updateCustomAction(_ ca: CustomAction) {
+        let previous = customActions
         // Preserve the existing triggers — the edit sheet only touches the
         // shared body (name/prompt/skill/delivery/defaults), not the trigger list.
         if let i = customActions.firstIndex(where: { $0.id == ca.id }) {
@@ -321,21 +347,24 @@ final class SettingsModel: ObservableObject {
             updated.triggers = customActions[i].triggers
             customActions[i] = updated
         }
-        saveCustomActions(customActions)
+        persistCustomActions(orRestore: previous)
     }
 
     // ---- trigger CRUD (one action, many ways to fire it) ----
     func addTrigger(actionID: String, kind: ActionKind) {
         guard let i = customActions.firstIndex(where: { $0.id == actionID }) else { return }
+        let previous = customActions
         customActions[i].triggers.append(ActionTrigger(kind: kind))
-        saveCustomActions(customActions)
+        persistCustomActions(orRestore: previous)
     }
     func removeTrigger(actionID: String, triggerID: String) {
         guard let i = customActions.firstIndex(where: { $0.id == actionID }) else { return }
+        let previous = customActions
         customActions[i].triggers.removeAll { $0.id == triggerID }
-        saveCustomActions(customActions)
+        persistCustomActions(orRestore: previous)
     }
     func setTriggerBinding(triggerID: String, shortcutIndex: Int = 0, keycode: UInt32, mods: UInt32) {
+        let previous = customActions
         for i in customActions.indices {
             if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
                 var values = customActions[i].triggers[j].shortcuts
@@ -346,9 +375,10 @@ final class SettingsModel: ObservableObject {
                 break
             }
         }
-        saveCustomActions(customActions)
+        persistCustomActions(orRestore: previous)
     }
     func clearTriggerBinding(triggerID: String, shortcutIndex: Int = 0) {
+        let previous = customActions
         for i in customActions.indices {
             if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }),
                shortcutIndex < customActions[i].triggers[j].shortcuts.count {
@@ -356,18 +386,20 @@ final class SettingsModel: ObservableObject {
                 break
             }
         }
-        saveCustomActions(customActions)
+        persistCustomActions(orRestore: previous)
     }
     func setTriggerKind(triggerID: String, kind: ActionKind) {
+        let previous = customActions
         for i in customActions.indices {
             if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
                 customActions[i].triggers[j].kind = kind
                 break
             }
         }
-        saveCustomActions(customActions)
+        persistCustomActions(orRestore: previous)
     }
     func setTriggerDelivery(triggerID: String, delivery: ActionDelivery?) {
+        let previous = customActions
         for i in customActions.indices {
             if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
                 customActions[i].triggers[j].deliveryOverride = delivery
@@ -375,34 +407,43 @@ final class SettingsModel: ObservableObject {
                 break
             }
         }
-        saveCustomActions(customActions)
+        persistCustomActions(orRestore: previous)
     }
     func setTriggerDestination(triggerID: String, destination: ClaudeDestination?) {
+        let previous = customActions
         for i in customActions.indices {
             if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
                 customActions[i].triggers[j].destinationOverride = destination
                 break
             }
         }
-        saveCustomActions(customActions)
+        persistCustomActions(orRestore: previous)
     }
     func setTriggerProvider(triggerID: String, provider: AIProviderChoice?) {
+        let previous = customActions
         for i in customActions.indices {
             if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
                 customActions[i].triggers[j].providerOverride = provider
                 break
             }
         }
-        saveCustomActions(customActions)
+        persistCustomActions(orRestore: previous)
     }
     func setTriggerAutoSubmit(triggerID: String, autoSubmit: Bool?) {
+        let previous = customActions
         for i in customActions.indices {
             if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
                 customActions[i].triggers[j].isAutoSubmitOverride = autoSubmit
                 break
             }
         }
-        saveCustomActions(customActions)
+        persistCustomActions(orRestore: previous)
+    }
+
+    private func persistCustomActions(orRestore previous: [CustomAction]) {
+        if !saveCustomActions(customActions) {
+            customActions = previous
+        }
     }
 
     private func commitRecordedShortcut(action: String, shortcutIndex: Int,
@@ -576,7 +617,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         w.title = "Command"
         w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         w.isReleasedWhenClosed = false
-        w.minSize = NSSize(width: 960, height: 600)
+        w.minSize = NSSize(
+            width: SettingsWindowGeometry.minimum.width,
+            height: SettingsWindowGeometry.minimum.height
+        )
         w.setFrameAutosaveName(frameAutosaveName)
         w.delegate = self
         window = w
@@ -590,9 +634,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private func sizeWindow(for tab: SettingsTab) {
         guard let w = window, !w.isVisible else { return }
         if UserDefaults.standard.object(forKey: "NSWindow Frame \(frameAutosaveName)") != nil { return }
-        let cap = ((w.screen ?? NSScreen.main)?.visibleFrame.height ?? 900) - 40
-        let h = min(860, cap)
-        w.setContentSize(NSSize(width: 1040, height: h))
+        let visibleFrame = (w.screen ?? NSScreen.main)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let size = SettingsWindowGeometry.initialContentSize(
+            visibleWidth: visibleFrame.width,
+            visibleHeight: visibleFrame.height
+        )
+        w.setContentSize(NSSize(width: size.width, height: size.height))
         w.center()
     }
 
@@ -620,6 +668,14 @@ struct SettingsRootView: View {
         // has no Xcode asset-catalog AccentColor to override it. One tint here fixes
         // all of them at once instead of patching each Color.accentColor reference.
         .tint(Color(nsColor: purpleAccent))
+        .alert("Couldn’t Save Changes", isPresented: Binding(
+            get: { model.stateSaveFailure != nil },
+            set: { if !$0 { model.stateSaveFailure = nil } }
+        )) {
+            Button("OK") { model.stateSaveFailure = nil }
+        } message: {
+            Text(model.stateSaveFailure ?? "Changes were not saved.")
+        }
     }
 
     private var sidebar: some View {
@@ -1279,10 +1335,18 @@ struct BuiltInComposeSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Save") {
-                    templates.setBuiltInComposeTemplate(prompt)
-                    saveBuiltInComposeSettings(BuiltInComposeSettings(autoSubmitDefault: defaultAutoSubmit,
-                                                                     autoSubmitOverrides: overrides))
-                    isPresented = false
+                    let settings = BuiltInComposeSettings(
+                        autoSubmitDefault: defaultAutoSubmit,
+                        autoSubmitOverrides: overrides
+                    )
+                    if let updated = saveBuiltInComposeConfiguration(
+                        template: prompt,
+                        templates: templates.templates,
+                        settings: settings
+                    ) {
+                        templates.templates = updated
+                        isPresented = false
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
             }
@@ -1293,11 +1357,21 @@ struct BuiltInComposeSheet: View {
         .alert("Reset built-in Compose?", isPresented: $confirmingReset) {
             Button("Cancel", role: .cancel) {}
             Button("Reset", role: .destructive) {
-                templates.resetBuiltInComposeTemplates()
                 let defaults = DEFAULT_BUILTIN_COMPOSE_SETTINGS
-                saveBuiltInComposeSettings(defaults)
+                var resetTemplates = templates.templates
+                for index in resetTemplates.indices {
+                    guard BUILT_IN_COMPOSE_TEMPLATE_ACTIONS.contains(resetTemplates[index].action),
+                          let original = DEFAULT_COMMAND_TEMPLATES.first(where: {
+                              $0.action == resetTemplates[index].action
+                          }) else { continue }
+                    resetTemplates[index] = original
+                }
+                guard persistBuiltInComposeConfiguration(
+                    templates: resetTemplates,
+                    settings: defaults
+                ) else { return }
+                templates.templates = resetTemplates
                 model.resetBindings(actions: Set(BUILTIN_COMPOSE_ROWS.map(\.action)))
-                templates.load()
                 model.refresh()
                 prompt = templates.builtInComposeTemplate
                 defaultAutoSubmit = defaults.autoSubmitDefault

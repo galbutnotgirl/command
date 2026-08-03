@@ -67,7 +67,8 @@ struct HandoffConfig {
 
     // Patch only the keys this UI owns; everything else in the file (baseArgs,
     // the ignored Electron hotkeys block, future fields) is preserved.
-    func save() {
+    @discardableResult
+    func save() -> Bool {
         var d: [String: Any] = [:]
         if let data = FileManager.default.contents(atPath: Self.settingsFile),
            let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -99,9 +100,16 @@ struct HandoffConfig {
         codex["cwd"] = codexCwd
         providers["codex"] = codex
         d["providers"] = providers
-        guard let out = try? JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted, .sortedKeys]) else { return }
-        try? FileManager.default.createDirectory(atPath: HANDOFF_BASE, withIntermediateDirectories: true)
-        try? out.write(to: URL(fileURLWithPath: Self.settingsFile), options: .atomic)
+        do {
+            return persistStateData(
+                try JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted, .sortedKeys]),
+                to: URL(fileURLWithPath: Self.settingsFile),
+                label: "Background settings"
+            )
+        } catch {
+            reportStateSaveFailure(label: "Background settings", error: error)
+            return false
+        }
     }
 }
 
@@ -185,7 +193,7 @@ func markHandoffSubmissionFailed(_ s: HandoffSubmission, reason: String = "Marke
     d["error"] = reason
     d["finishedAt"] = formatHandoffDate(Date())
     guard let out = try? JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted]) else { return }
-    try? out.write(to: URL(fileURLWithPath: path), options: .atomic)
+    persistStateData(out, to: URL(fileURLWithPath: path), label: "Background run status")
 }
 
 // ---- retention (mirrors the clipboard-history retentionDays model) ----------
@@ -208,17 +216,13 @@ func readCommandRetentionDays() -> Int {
 func writeCommandRetentionDays(_ days: Int) {
     var cfg = readCommandConfig()
     cfg["commandRetentionDays"] = max(1, days)
-    if let data = try? JSONSerialization.data(withJSONObject: cfg, options: [.prettyPrinted]) {
-        try? data.write(to: URL(fileURLWithPath: COMMAND_CONFIG))
-    }
+    persistCommandConfig(cfg, label: "Command history retention")
 }
 
 func writeHandoffRetentionDays(_ days: Int) {
     var cfg = readCommandConfig()
     cfg["handoffRetentionDays"] = max(1, days)
-    if let data = try? JSONSerialization.data(withJSONObject: cfg, options: [.prettyPrinted]) {
-        try? data.write(to: URL(fileURLWithPath: COMMAND_CONFIG))
-    }
+    persistCommandConfig(cfg, label: "Background history retention")
 }
 
 // Deletes finished (succeeded/failed) submissions older than the retention
@@ -255,7 +259,11 @@ func appendForegroundCommandHistory(action: String, source: String, destination:
     if let error, !error.isEmpty { d["error"] = error }
     if let workspace, !workspace.isEmpty { d["workspace"] = workspace }
     guard let data = try? JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted]) else { return }
-    try? data.write(to: URL(fileURLWithPath: "\(dir)/\(id).json"), options: .atomic)
+    persistStateData(
+        data,
+        to: URL(fileURLWithPath: "\(dir)/\(id).json"),
+        label: "Command history"
+    )
 }
 
 func loadForegroundCommandHistory(limit: Int? = nil) -> [ForegroundCommandRecord] {
@@ -345,7 +353,10 @@ private func submitHandoffPrompt(_ prompt: String, source: String, kind: String,
             return
         }
     }
-    config.save()
+    guard config.save() else {
+        notify(failureTitle, "Could not save background settings. Open Settings and try again.")
+        return
+    }
     let scriptDir = (bundledResource("capture-handoff.sh") as NSString).deletingLastPathComponent
     var core = (scriptDir as NSString).appendingPathComponent("claude-command-capture")
     if !FileManager.default.fileExists(atPath: core) {
@@ -537,8 +548,7 @@ struct HandoffSettingsView: View {
                 Button("Save") {
                     config.claudeExtraArgs = claudeArgsText.split(separator: "\n").map(String.init)
                     config.codexExtraArgs = codexArgsText.split(separator: "\n").map(String.init)
-                    config.save()
-                    saved = true
+                    saved = config.save()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { saved = false }
                 }
                 .keyboardShortcut("s", modifiers: .command)

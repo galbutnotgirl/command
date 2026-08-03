@@ -96,12 +96,24 @@ func readRetentionDays() -> Int {
     return DEFAULT_RETENTION_DAYS
 }
 
+@discardableResult
+func persistCommandConfig(_ config: [String: Any], label: String) -> Bool {
+    do {
+        return persistStateData(
+            try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys]),
+            to: URL(fileURLWithPath: COMMAND_CONFIG),
+            label: label
+        )
+    } catch {
+        reportStateSaveFailure(label: label, error: error)
+        return false
+    }
+}
+
 func writeRetentionDays(_ days: Int) {
     var cfg = readCommandConfig()
     cfg["retentionDays"] = max(1, days)
-    if let data = try? JSONSerialization.data(withJSONObject: cfg, options: [.prettyPrinted]) {
-        try? data.write(to: URL(fileURLWithPath: COMMAND_CONFIG))
-    }
+    persistCommandConfig(cfg, label: "Clipboard history retention")
 }
 
 // ---- clipboard history clearing ---------------------------------------------
@@ -136,20 +148,28 @@ func clearClipHistory(withinSeconds seconds: Int) -> Int {
     }
 
     var kept: [[String: Any]] = []
+    var filesToDelete: [String] = []
     for it in items {
         let drop = seconds <= 0 ? true : itemTimestamp(it) >= (now - seconds)
         if drop {
-            if let f = it["file"] as? String {
-                try? FileManager.default.removeItem(atPath: dir.appendingPathComponent(f))
-            }
-            removed += 1
+            if let file = it["file"] as? String { filesToDelete.append(file) }
         } else {
             kept.append(it)
         }
     }
-    if let out = try? JSONSerialization.data(withJSONObject: kept) {
-        try? out.write(to: URL(fileURLWithPath: CLIP_INDEX), options: [.atomic])
+    do {
+        let out = try JSONSerialization.data(withJSONObject: kept)
+        guard persistStateData(out, to: URL(fileURLWithPath: CLIP_INDEX), label: "Clipboard history") else {
+            return 0
+        }
+    } catch {
+        reportStateSaveFailure(label: "Clipboard history", error: error)
+        return 0
     }
+    for file in filesToDelete {
+        try? FileManager.default.removeItem(atPath: dir.appendingPathComponent(file))
+    }
+    removed = items.count - kept.count
     return removed
 }
 

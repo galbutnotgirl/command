@@ -137,6 +137,8 @@ if [ "$SKIP_CHECKS" = "0" ]; then
   fi
   python3 "${DIR}/test/test-regression-contracts.py" || fail "regression contracts failed — restore tracked evidence before release."
   python3 "${DIR}/test/test-regression-contracts-tests.py" || fail "regression contract self-tests failed — fix fail-closed validation before release."
+  python3 "${DIR}/test/test-suite-inventory.py" || fail "test suite inventory failed — restore removed coverage before release."
+  python3 "${DIR}/test/test-suite-inventory-tests.py" || fail "test suite inventory self-tests failed — fix fail-closed coverage validation."
   (cd "${DIR}/agent" && swift test) || fail "Swift tests failed — fix app/core tests before release."
   (cd "${DIR}/agent" && swift test --filter DictationDeliveryPipelineTests) \
     || fail "dictation delivery pipeline tests failed — transcript may not reach history or dispatch."
@@ -144,6 +146,7 @@ if [ "$SKIP_CHECKS" = "0" ]; then
     || fail "dictation insert probe tests failed — processed text may not reach focused field."
   (cd "${DIR}/agent" && swift test --filter 'Dictation(CaptureWatchdog|WatchdogProbe)Tests') \
     || fail "dictation watchdog tests failed — stalled microphone capture may remain active."
+  "${DIR}/test/test-stability-stress.sh" || fail "high-risk deterministic stress tests failed."
   (cd "${DIR}/agent" && swift build --product CommandClipboardWatcher) \
     || fail "native Clipboard History helper build failed."
   (cd "${DIR}/agent" && swift build --product DictationPasteReceiver) \

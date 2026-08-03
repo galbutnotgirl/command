@@ -28,16 +28,23 @@ func loadCommandTemplates() -> [CommandTemplate] {
     return DEFAULT_COMMAND_TEMPLATES.map { byAction[$0.action] ?? $0 }
 }
 
-func saveCommandTemplates(_ templates: [CommandTemplate]) {
+func encodedCommandTemplates(_ templates: [CommandTemplate]) throws -> Data {
     var obj: [String: String] = [:]
     for t in templates { obj[t.action] = t.template }
-    if let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]) {
-        let url = URL(fileURLWithPath: COMMAND_TEMPLATES_PATH)
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
+    return try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys])
+}
+
+@discardableResult
+func saveCommandTemplates(_ templates: [CommandTemplate]) -> Bool {
+    do {
+        return persistStateData(
+            try encodedCommandTemplates(templates),
+            to: URL(fileURLWithPath: COMMAND_TEMPLATES_PATH),
+            label: "Prompt instructions"
         )
-        try? data.write(to: url)
+    } catch {
+        reportStateSaveFailure(label: "Prompt instructions", error: error)
+        return false
     }
 }
 
@@ -56,16 +63,57 @@ func loadEnrichRules() -> [EnrichRule] {
     }
 }
 
-func saveEnrichRules(_ rules: [EnrichRule]) {
+func encodedEnrichRules(_ rules: [EnrichRule]) throws -> Data {
     let arr = rules.map { ["match": $0.match.rawValue, "pattern": $0.pattern, "text": $0.text,
                             "displayName": $0.displayName, "pathPrefix": $0.pathPrefix] }
-    if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
-        let url = URL(fileURLWithPath: ENRICHMENT_RULES_PATH)
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
+    return try JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted, .sortedKeys])
+}
+
+@discardableResult
+func saveEnrichRules(_ rules: [EnrichRule]) -> Bool {
+    do {
+        return persistStateData(
+            try encodedEnrichRules(rules),
+            to: URL(fileURLWithPath: ENRICHMENT_RULES_PATH),
+            label: "Context rules"
         )
-        try? data.write(to: url)
+    } catch {
+        reportStateSaveFailure(label: "Context rules", error: error)
+        return false
+    }
+}
+
+func saveBuiltInComposeConfiguration(
+    template: String,
+    templates: [CommandTemplate],
+    settings: BuiltInComposeSettings
+) -> [CommandTemplate]? {
+    var updated = templates
+    for index in updated.indices where BUILT_IN_COMPOSE_TEMPLATE_ACTIONS.contains(updated[index].action) {
+        updated[index].template = template
+    }
+    return persistBuiltInComposeConfiguration(templates: updated, settings: settings) ? updated : nil
+}
+
+func persistBuiltInComposeConfiguration(
+    templates: [CommandTemplate],
+    settings: BuiltInComposeSettings
+) -> Bool {
+    do {
+        let mutations = [
+            StateFileMutation(
+                url: URL(fileURLWithPath: COMMAND_TEMPLATES_PATH),
+                data: try encodedCommandTemplates(templates)
+            ),
+            StateFileMutation(
+                url: URL(fileURLWithPath: BUILTIN_COMPOSE_SETTINGS_PATH),
+                data: try encodedBuiltInComposeSettings(settings)
+            ),
+        ]
+        return persistStateMutations(mutations, label: "Compose settings")
+    } catch {
+        reportStateSaveFailure(label: "Compose settings", error: error)
+        return false
     }
 }
 
@@ -84,15 +132,17 @@ final class TemplatesModel: ObservableObject {
 
     func setTemplate(action: String, template: String) {
         guard let i = templates.firstIndex(where: { $0.action == action }) else { return }
+        let previous = templates
         templates[i].template = template
-        saveCommandTemplates(templates)
+        if !saveCommandTemplates(templates) { templates = previous }
     }
 
     func resetTemplate(action: String) {
         guard let i = templates.firstIndex(where: { $0.action == action }),
               let def = DEFAULT_COMMAND_TEMPLATES.first(where: { $0.action == action }) else { return }
+        let previous = templates
         templates[i] = def
-        saveCommandTemplates(templates)
+        if !saveCommandTemplates(templates) { templates = previous }
     }
 
     var builtInComposeTemplate: String {
@@ -112,6 +162,7 @@ final class TemplatesModel: ObservableObject {
     }
 
     func setBuiltInComposeTemplate(_ template: String) {
+        let previous = templates
         var changed = false
         for i in templates.indices where builtInComposeActions.contains(templates[i].action) {
             if templates[i].template != template {
@@ -119,33 +170,38 @@ final class TemplatesModel: ObservableObject {
                 changed = true
             }
         }
-        if changed { saveCommandTemplates(templates) }
+        if changed, !saveCommandTemplates(templates) { templates = previous }
     }
 
     func resetBuiltInComposeTemplates() {
+        let previous = templates
         for i in templates.indices {
             guard builtInComposeActions.contains(templates[i].action),
                   let def = DEFAULT_COMMAND_TEMPLATES.first(where: { $0.action == templates[i].action }) else { continue }
             templates[i] = def
         }
-        saveCommandTemplates(templates)
+        if !saveCommandTemplates(templates) { templates = previous }
     }
 
     func addRule() {
+        let previous = rules
         rules.append(EnrichRule(match: .host, pattern: "", text: ""))
-        saveEnrichRules(rules)
+        if !saveEnrichRules(rules) { rules = previous }
     }
     func removeRule(id: UUID) {
+        let previous = rules
         rules.removeAll { $0.id == id }
-        saveEnrichRules(rules)
+        if !saveEnrichRules(rules) { rules = previous }
     }
     func updateRule(_ rule: EnrichRule) {
         guard let i = rules.firstIndex(where: { $0.id == rule.id }) else { return }
+        let previous = rules
         rules[i] = rule
-        saveEnrichRules(rules)
+        if !saveEnrichRules(rules) { rules = previous }
     }
     func resetRulesToDefault() {
+        let previous = rules
         rules = DEFAULT_ENRICH_RULES
-        saveEnrichRules(rules)
+        if !saveEnrichRules(rules) { rules = previous }
     }
 }

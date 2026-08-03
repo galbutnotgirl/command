@@ -251,7 +251,15 @@ assert_not_contains "Claude route variable never shadows zsh PATH array" "$(sed 
 SEND_SOURCE="$(cat "$SEND_SCRIPT")"
 AGENT_SOURCE="$(cat "${DIR}/agent/main.swift")"
 SETTINGS_SOURCE="$(cat "${DIR}/agent/SettingsWindow.swift")"
+STATE_PERSISTENCE_SOURCE="$(cat "${DIR}/agent/StatePersistence.swift")"
+STATE_TRANSACTION_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/StateFileTransaction.swift")"
+SETTINGS_GEOMETRY_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/SettingsWindowGeometry.swift")"
+ACTION_PERSISTENCE_SOURCE="$(cat "${DIR}/agent/Actions.swift")"
+TEMPLATE_PERSISTENCE_SOURCE="$(cat "${DIR}/agent/CommandTemplates.swift")"
+DICTATION_STORE_SOURCE="$(cat "${DIR}/agent/DictationStore.swift")"
+HANDOFF_SOURCE="$(cat "${DIR}/agent/Handoff.swift")"
 PERMISSIONS_SOURCE="$(cat "${DIR}/agent/Permissions.swift")"
+CLEAR_CLIP_SOURCE="$(sed -n '/func clearClipHistory/,/func serviceLoaded/p' "${DIR}/agent/Permissions.swift")"
 DICTATION_OVERLAY_SOURCE="$(cat "${DIR}/agent/DictationOverlay.swift")"
 DICTATION_DELIVERY_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationDeliveryPipeline.swift")"
 DICTATION_MODEL_PROBE_SOURCE="$(cat "${DIR}/agent/Tools/DictationModelProbe/main.swift")"
@@ -266,6 +274,31 @@ DICTATION_INSERT_PROBE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/Dic
 VOICE_DISPATCH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/VoiceDispatchProbe.swift")"
 HOTKEY_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/HotkeyHealthProbe.swift")"
 DICTATION_TRIGGER_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationTriggerCoordinator.swift")"
+assert_contains "state transactions verify every persisted file" "$STATE_TRANSACTION_SOURCE" \
+  'guard try reader(mutation.url) == mutation.data'
+assert_contains "state transaction failures restore every previous file" "$STATE_TRANSACTION_SOURCE" \
+  'let rollbackFailures = rollback(snapshots, fileManager: fileManager)'
+assert_contains "shortcut and custom action saves use verified persistence" "$ACTION_PERSISTENCE_SOURCE" \
+  'return persistStateData('
+assert_contains "Compose prompt and behavior save in one transaction" "$TEMPLATE_PERSISTENCE_SOURCE" \
+  'return persistStateMutations(mutations, label: "Compose settings")'
+assert_contains "settings failures surface visibly instead of being ignored" "$SETTINGS_SOURCE" \
+  '.alert("Couldn’t Save Changes"'
+assert_contains "Settings window sizing uses tested screen geometry" "$SETTINGS_SOURCE" \
+  'SettingsWindowGeometry.initialContentSize('
+assert_contains "Settings geometry preserves scrollable sheet minimums" "$SETTINGS_GEOMETRY_SOURCE" \
+  'public static let minimum = SettingsWindowDimensions(width: 960, height: 600)'
+assert_contains "state persistence records actionable diagnostics" "$STATE_PERSISTENCE_SOURCE" \
+  'appendLog("[settings] save failed'
+assert_contains "vocabulary changes roll back when persistence fails" "$DICTATION_STORE_SOURCE" \
+  'if !persist() {'
+assert_contains "background settings use verified persistence" "$HANDOFF_SOURCE" \
+  'label: "Background settings"'
+assert_contains "shared retention settings use verified persistence" "$PERMISSIONS_SOURCE" \
+  'func persistCommandConfig('
+assert_before "Clipboard History commits index before deleting item files" "$CLEAR_CLIP_SOURCE" \
+  'persistStateData(out, to: URL(fileURLWithPath: CLIP_INDEX)' \
+  'FileManager.default.removeItem(atPath: dir.appendingPathComponent(file))'
 assert_contains "ChatGPT invokes unified app Quick Chat command" "$SEND_SOURCE" \
   'helper_newchat ||'
 assert_contains "Native assistant shortcuts use tested core mapping" "$AGENT_SOURCE" \

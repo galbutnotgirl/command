@@ -119,13 +119,18 @@
       "name": "settings-and-import",
       "runtime": [
         "agent/SettingsWindow.swift",
+        "agent/StatePersistence.swift",
         "agent/BuiltInComposeSettings.swift",
         "agent/CommandTemplates.swift",
         "agent/Sources/ClaudeCommandCore/Import*.swift",
+        "agent/Sources/ClaudeCommandCore/SettingsWindowGeometry.swift",
+        "agent/Sources/ClaudeCommandCore/StateFileTransaction.swift",
         "agent/Sources/ClaudeCommandCore/Templates.swift"
       ],
       "evidence": [
         "agent/Tests/ClaudeCommandCoreTests/Import*.swift",
+        "agent/Tests/ClaudeCommandCoreTests/SettingsWindowGeometryTests.swift",
+        "agent/Tests/ClaudeCommandCoreTests/StateFileTransactionTests.swift",
         "agent/Tests/ClaudeCommandCoreTests/TemplatesTests.swift",
         "test/test-installed-state-preservation.py",
         "test/test-shell.sh",

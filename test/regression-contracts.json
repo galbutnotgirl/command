@@ -6,7 +6,7 @@
     "shortcuts-and-input": 3,
     "assistant-routing": 1,
     "clipboard-history": 2,
-    "settings-and-import": 2,
+    "settings-and-import": 4,
     "background-actions": 1,
     "install-update-release": 5,
     "hotkey-configuration": 1
@@ -432,6 +432,50 @@
       "runtimeEvidence": "Import preview reports same, added, updated, and current-only counts before atomic commit; rollback leaves original files unchanged."
     },
     {
+      "id": "SET-002",
+      "areas": ["settings-and-import"],
+      "risk": "A settings edit is partially written, silently fails, or leaves the in-memory UI showing values that were never persisted.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/StateFileTransactionTests.swift",
+          "contains": "testLaterWriteFailureRollsBackEveryExistingFile"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/StateFileTransactionTests.swift",
+          "contains": "testReadBackMismatchRestoresPreviousFile"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "Compose prompt and behavior save in one transaction"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "settings failures surface visibly instead of being ignored"
+        }
+      ],
+      "runtimeEvidence": "Shortcut, custom-action, context, and Compose saves use verified atomic writes; multi-file Compose changes roll back together and Settings displays an actionable error instead of retaining unsaved UI state."
+    },
+    {
+      "id": "SET-003",
+      "areas": ["settings-and-import"],
+      "risk": "Settings opens larger than the visible display, clips Compose controls, or regresses to a cramped default after layout edits.",
+      "automatedEvidence": [
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/SettingsWindowGeometryTests.swift",
+          "contains": "testShortScreenLeavesVisibleMargin"
+        },
+        {
+          "file": "agent/Tests/ClaudeCommandCoreTests/SettingsWindowGeometryTests.swift",
+          "contains": "testTinyVisibleFrameNeverDropsBelowUsableMinimum"
+        },
+        {
+          "file": "test/test-shell.sh",
+          "contains": "Settings window sizing uses tested screen geometry"
+        }
+      ],
+      "runtimeEvidence": "Initial Settings dimensions are derived from visible screen bounds, preserve usable minimums for scrollable sheets, and remain user-resizable after first launch."
+    },
+    {
       "id": "BG-001",
       "areas": ["background-actions"],
       "risk": "Background action loses provider, prompt, workspace, attachment, or silently treats CLI failure as success.",
@@ -603,6 +647,14 @@
     },
     {
       "file": ".github/workflows/test.yml",
+      "contains": "python3 ./test/test-suite-inventory.py"
+    },
+    {
+      "file": ".github/workflows/test.yml",
+      "contains": "./test/test-stability-stress.sh"
+    },
+    {
+      "file": ".github/workflows/test.yml",
       "contains": "swift test --filter DictationDeliveryPipelineTests"
     },
     {
@@ -640,6 +692,14 @@
     {
       "file": "release.sh",
       "contains": "python3 \"${DIR}/test/test-regression-contracts-tests.py\""
+    },
+    {
+      "file": "release.sh",
+      "contains": "python3 \"${DIR}/test/test-suite-inventory.py\""
+    },
+    {
+      "file": "release.sh",
+      "contains": "\"${DIR}/test/test-stability-stress.sh\""
     },
     {
       "file": "release.sh",

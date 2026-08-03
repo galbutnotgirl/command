@@ -12,9 +12,12 @@ Run from repository root on clean `main`:
 ./test/test-regression-impact.sh
 python3 ./test/test-regression-impact.py --base HEAD^
 python3 ./test/test-regression-contracts.py
+python3 ./test/test-suite-inventory.py
+python3 ./test/test-suite-inventory-tests.py
 (cd agent && swift test)
 (cd agent && swift test --filter DictationDeliveryPipelineTests)
 (cd agent && swift test --filter DictationInsertProbeTests)
+./test/test-stability-stress.sh
 swift build --package-path agent --product CommandClipboardWatcher
 ./test/test-clipboard-watcher.sh
 (cd vendor/claude-command-capture && node --test)
@@ -99,8 +102,10 @@ Each tracked regression must cite at least two distinct evidence files and at le
 release-executed integration proof. Multiple methods in one unit-test file do not count as
 independent proof. Editing `test/regression-contracts.json` alone also cannot satisfy runtime
 impact coverage; a matching behavior test must change with runtime code.
-Coverage counts are exact inventory, not loose minima. Removing or adding a contract requires an
+Regression-contract counts are exact inventory, not loose minima. Removing or adding a contract requires an
 explicit count update, and hard-coded baselines prevent lowering current protection silently.
+Suite inventory separately protects per-file and total Swift/Node test floors. Main CI repeats
+high-risk deterministic suites ten times; release gates repeat them five times.
 CI and release both compile installed dictation paste receiver used by focused-field qualification.
 
 Full `release.sh` gates create `regression-gates-attestation.json` only after every required
@@ -204,13 +209,13 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 - Verify focus order follows visual order, sheets return focus to their opener, and no control
   requires pointer input.
 
-## Current Evidence (2026-07-30)
+## Current Evidence (2026-08-03)
 
-- Automated local suites: 232 Swift, 58 Node, 204 shell, 17 build-transaction,
+- Automated local suites: 242 Swift, 58 Node, 216 shell, 17 build-transaction,
   17 release-transaction, 41 install-state, 14 updater, 9 restart-handoff,
   9 installed-state preservation, 9 release-policy, 94 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
-- Twenty-seven tracked regressions have 86 source/test evidence links; fourteen dictation regressions
+- Twenty-nine tracked regressions have 95 source/test evidence links; fourteen dictation regressions
   retain 46 links. Every contract spans at least two files, includes release-executed integration
   evidence, and has runtime evidence, CI enforcement, and public-release
   enforcement. Latest session health is
