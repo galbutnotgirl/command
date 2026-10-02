@@ -250,6 +250,9 @@ assert_not_contains "Claude route variable never shadows zsh PATH array" "$(sed 
 
 SEND_SOURCE="$(cat "$SEND_SCRIPT")"
 AGENT_SOURCE="$(cat "${DIR}/agent/main.swift")"
+MEDIA_KEY_MAPPING="$(sed -n '/^let MEDIA_TO_CARBON:/,/^]/p' "${DIR}/agent/main.swift")"
+assert_not_contains "Caps Lock media event must not alias Fn dictation" "$MEDIA_KEY_MAPPING" '4: 63'
+assert_contains "Fn retains physical modifier handling" "$AGENT_SOURCE" 'case 63: return flags.contains(.maskSecondaryFn)'
 SETTINGS_SOURCE="$(cat "${DIR}/agent/SettingsWindow.swift")"
 STATE_PERSISTENCE_SOURCE="$(cat "${DIR}/agent/StatePersistence.swift")"
 STATE_TRANSACTION_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/StateFileTransaction.swift")"

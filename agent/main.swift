@@ -1485,7 +1485,7 @@ func unregisterAllHotkeys() {
 
 // NX media key type → Carbon keycode for the same physical key.
 let MEDIA_TO_CARBON: [Int: UInt32] = [
-    4: 63,     // Fn/Globe on newer Mac keyboards
+    // NX_KEYTYPE_CAPS_LOCK (4) is not Fn/Globe. Fn uses flagsChanged (63).
     16: 100,   // NX_KEYTYPE_PLAY      → F8
     17: 101,   // NX_KEYTYPE_NEXT      → F9
     18: 98,    // NX_KEYTYPE_PREVIOUS  → F7 (some Macs)
