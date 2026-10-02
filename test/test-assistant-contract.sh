@@ -56,7 +56,7 @@ if [ -d "$CLAUDE_APP" ]; then
   [[ "$CLAUDE_URL_TYPES" == *"claude"* ]] && pass "Claude registers claude URL scheme" || fail "Claude registers claude URL scheme"
   CLAUDE_ASAR="$CLAUDE_APP/Contents/Resources/app.asar"
   if [ -f "$CLAUDE_ASAR" ] && node "$ASAR_CONTRACT" "$CLAUDE_ASAR" \
-      'New Conversation' 'CmdOrCtrl\+N' >/dev/null 2>&1; then
+      'New Conversation|New Chat' 'CmdOrCtrl\+N' >/dev/null 2>&1; then
     pass "Claude New Conversation resource contract is Command-N"
   else
     fail "Claude New Conversation resource contract is Command-N"
@@ -77,7 +77,7 @@ if [ -d "$CLAUDE_APP" ]; then
   fi
   if node "$ASAR_CONTRACT" "$CLAUDE_ASAR" \
       'surface:[A-Za-z_$][A-Za-z0-9_$]*\.searchParams\.get\("surface"\)' \
-      '="surface",[A-Za-z_$][A-Za-z0-9_$]*="cowork"' >/dev/null 2>&1; then
+      '="surface",[A-Za-z_$][A-Za-z0-9_$]*="cowork"|surface==="cowork"\?[A-Za-z_$][A-Za-z0-9_$]*\.searchParams\.set\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*\.surface\)' >/dev/null 2>&1; then
     pass "Claude unified New route accepts Cowork surface"
   else
     fail "Claude unified New route accepts Cowork surface"
