@@ -497,8 +497,8 @@ func focusedElementIsEditable() -> Bool {
 }
 let pickerW: CGFloat = 768
 let pickerH: CGFloat = 565   // fixed height
-let listColW: CGFloat = pickerW * 0.25
-let pickerRowH: CGFloat = 36  // readable text rows
+let listColW: CGFloat = 359
+let pickerRowH: CGFloat = 28  // compact rows
 
 final class PickerPanel: NSWindow {
     override var canBecomeKey: Bool { true }
@@ -536,6 +536,10 @@ final class ClipPicker: NSObject, NSWindowDelegate {
     var filterActionBlocks: [ActionBlock] = []   // kept alive while picker lives
     var all: [Clip] = [], shown: [Clip] = [], rows: [PickRow] = []
     var selected = 0, filterMode: FilterMode = .all, prevBundle = "", query = ""
+    // Keep the mixed/text history layout compact; dedicate space to previews only
+    // when the user explicitly selects the Images filter.
+    var imageOnlyLayout: Bool { filterMode == .images }
+    var columnWidth: CGFloat { imageOnlyLayout ? pickerW * 0.25 : listColW }
     var isPicking = false  // suppresses NSApp.hide during choose() so activate() works in macOS 14+
 
     func windowDidResignKey(_ notification: Notification) { if !isPicking { hide() } }
@@ -616,7 +620,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
             empty.translatesAutoresizingMaskIntoConstraints = false
             empty.addSubview(e)
             NSLayoutConstraint.activate([
-                empty.widthAnchor.constraint(equalToConstant: listColW),
+                empty.widthAnchor.constraint(equalToConstant: columnWidth),
                 e.leadingAnchor.constraint(equalTo: empty.leadingAnchor, constant: 14),
                 e.trailingAnchor.constraint(equalTo: empty.trailingAnchor, constant: -14),
                 e.topAnchor.constraint(equalTo: empty.topAnchor, constant: 12),
@@ -626,7 +630,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         } else {
             for (i, c) in shown.enumerated() {
                 let r = makeRow(i, c); rows.append(r); listStack.addArrangedSubview(r)
-                r.widthAnchor.constraint(equalToConstant: listColW).isActive = true
+                r.widthAnchor.constraint(equalToConstant: columnWidth).isActive = true
             }
         }
 
@@ -640,7 +644,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         scroll.scrollerStyle = .overlay; scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.documentView = listStack
         listWidthConstraint?.isActive = false
-        listWidthConstraint = listStack.widthAnchor.constraint(equalToConstant: listColW)
+        listWidthConstraint = listStack.widthAnchor.constraint(equalToConstant: columnWidth)
         listWidthConstraint?.isActive = true
 
         // Persistent preview pane — created once per refresh, subviews updated in updatePreview.
@@ -653,7 +657,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         previewPane.addSubview(metaV); prevMetaV = metaV
 
         let imgV = NSImageView()
-        imgV.imageScaling = .scaleProportionallyUpOrDown; imgV.imageAlignment = .alignCenter
+        imgV.imageScaling = imageOnlyLayout ? .scaleProportionallyUpOrDown : .scaleProportionallyDown; imgV.imageAlignment = .alignCenter
         imgV.wantsLayer = true
         imgV.layer?.cornerRadius = 6; imgV.layer?.cornerCurve = .continuous; imgV.layer?.masksToBounds = true
         imgV.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -702,7 +706,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
             topSep.heightAnchor.constraint(equalToConstant: 0.5),
 
             scroll.leadingAnchor.constraint(equalTo: fx.leadingAnchor),
-            scroll.widthAnchor.constraint(equalToConstant: listColW),
+            scroll.widthAnchor.constraint(equalToConstant: columnWidth),
             scroll.topAnchor.constraint(equalTo: topSep.bottomAnchor),
             scroll.bottomAnchor.constraint(equalTo: botSep.topAnchor),
 
@@ -885,11 +889,13 @@ final class ClipPicker: NSObject, NSWindowDelegate {
     func makeRow(_ i: Int, _ c: Clip) -> PickRow {
         let row = PickRow(); row.wantsLayer = true
         row.translatesAutoresizingMaskIntoConstraints = false
-        row.heightAnchor.constraint(equalToConstant: c.type == "image" ? 100 : pickerRowH).isActive = true
+        row.heightAnchor.constraint(equalToConstant: imageOnlyLayout ? 92 : pickerRowH).isActive = true
 
         let h = NSStackView()
-        h.orientation = .horizontal; h.alignment = .centerY; h.spacing = 8
-        h.edgeInsets = NSEdgeInsets(top: 6, left: 14, bottom: 6, right: 10)
+        h.orientation = .horizontal; h.alignment = .centerY; h.spacing = imageOnlyLayout ? 6 : 8
+        h.edgeInsets = imageOnlyLayout
+            ? NSEdgeInsets(top: 4, left: 6, bottom: 4, right: 6)
+            : NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 8)
         h.translatesAutoresizingMaskIntoConstraints = false
 
         // Source app icon (18×18) with tooltip showing app name
@@ -951,14 +957,14 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         if c.type == "image" {
             let iv = NSImageView()
             let imgPath = (CLIPS as NSString).appendingPathComponent(c.file)
-            let thumbH: CGFloat = 84
-            var thumbW: CGFloat = 100
+            let thumbH: CGFloat = imageOnlyLayout ? 84 : 28
+            var thumbW: CGFloat = imageOnlyLayout ? 132 : 44
             if let img = NSImage(contentsOfFile: imgPath) {
                 iv.image = img
                 let sz = img.size
-                if sz.height > 0 { thumbW = min(max(thumbH * sz.width / sz.height, 40), 100) }
+                if sz.height > 0 { thumbW = min(max(thumbH * sz.width / sz.height, imageOnlyLayout ? 40 : 20), imageOnlyLayout ? 132 : 56) }
             }
-            iv.imageScaling = .scaleProportionallyDown
+            iv.imageScaling = imageOnlyLayout ? .scaleProportionallyUpOrDown : .scaleProportionallyDown
             iv.wantsLayer = true
             iv.layer?.cornerRadius = 3; iv.layer?.cornerCurve = .continuous; iv.layer?.masksToBounds = true
             iv.translatesAutoresizingMaskIntoConstraints = false
