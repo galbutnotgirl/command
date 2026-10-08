@@ -497,8 +497,8 @@ func focusedElementIsEditable() -> Bool {
 }
 let pickerW: CGFloat = 768
 let pickerH: CGFloat = 565   // fixed height
-let listColW: CGFloat = 359
-let pickerRowH: CGFloat = 28  // compact rows
+let listColW: CGFloat = pickerW * 0.25
+let pickerRowH: CGFloat = 36  // readable text rows
 
 final class PickerPanel: NSWindow {
     override var canBecomeKey: Bool { true }
@@ -609,10 +609,20 @@ final class ClipPicker: NSObject, NSWindowDelegate {
             case .sent:     msg = query.isEmpty ? "Nothing sent via Command yet." : "No matches."
             case .all:      msg = query.isEmpty ? "History empty." : "No matches."
             }
-            let e = NSTextField(labelWithString: msg)
+            let e = NSTextField(wrappingLabelWithString: msg)
             e.font = .systemFont(ofSize: 13); e.textColor = .tertiaryLabelColor
             e.translatesAutoresizingMaskIntoConstraints = false
-            listStack.addArrangedSubview(e)
+            let empty = NSView()
+            empty.translatesAutoresizingMaskIntoConstraints = false
+            empty.addSubview(e)
+            NSLayoutConstraint.activate([
+                empty.widthAnchor.constraint(equalToConstant: listColW),
+                e.leadingAnchor.constraint(equalTo: empty.leadingAnchor, constant: 14),
+                e.trailingAnchor.constraint(equalTo: empty.trailingAnchor, constant: -14),
+                e.topAnchor.constraint(equalTo: empty.topAnchor, constant: 12),
+                e.bottomAnchor.constraint(equalTo: empty.bottomAnchor, constant: -12),
+            ])
+            listStack.addArrangedSubview(empty)
         } else {
             for (i, c) in shown.enumerated() {
                 let r = makeRow(i, c); rows.append(r); listStack.addArrangedSubview(r)
@@ -643,7 +653,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         previewPane.addSubview(metaV); prevMetaV = metaV
 
         let imgV = NSImageView()
-        imgV.imageScaling = .scaleProportionallyDown; imgV.imageAlignment = .alignCenter
+        imgV.imageScaling = .scaleProportionallyUpOrDown; imgV.imageAlignment = .alignCenter
         imgV.wantsLayer = true
         imgV.layer?.cornerRadius = 6; imgV.layer?.cornerCurve = .continuous; imgV.layer?.masksToBounds = true
         imgV.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -875,11 +885,11 @@ final class ClipPicker: NSObject, NSWindowDelegate {
     func makeRow(_ i: Int, _ c: Clip) -> PickRow {
         let row = PickRow(); row.wantsLayer = true
         row.translatesAutoresizingMaskIntoConstraints = false
-        row.heightAnchor.constraint(equalToConstant: pickerRowH).isActive = true
+        row.heightAnchor.constraint(equalToConstant: c.type == "image" ? 100 : pickerRowH).isActive = true
 
         let h = NSStackView()
         h.orientation = .horizontal; h.alignment = .centerY; h.spacing = 8
-        h.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 8)
+        h.edgeInsets = NSEdgeInsets(top: 6, left: 14, bottom: 6, right: 10)
         h.translatesAutoresizingMaskIntoConstraints = false
 
         // Source app icon (18×18) with tooltip showing app name
@@ -941,12 +951,12 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         if c.type == "image" {
             let iv = NSImageView()
             let imgPath = (CLIPS as NSString).appendingPathComponent(c.file)
-            let thumbH: CGFloat = 28
-            var thumbW: CGFloat = 44
+            let thumbH: CGFloat = 84
+            var thumbW: CGFloat = 100
             if let img = NSImage(contentsOfFile: imgPath) {
                 iv.image = img
                 let sz = img.size
-                if sz.height > 0 { thumbW = min(max(thumbH * sz.width / sz.height, 20), 56) }
+                if sz.height > 0 { thumbW = min(max(thumbH * sz.width / sz.height, 40), 100) }
             }
             iv.imageScaling = .scaleProportionallyDown
             iv.wantsLayer = true
