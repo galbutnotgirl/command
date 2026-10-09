@@ -11,8 +11,6 @@ final class VoiceSettingsTests: XCTestCase {
     func testVoiceSettingsKeysStayStableForPersistenceAndImportExport() {
         XCTAssertEqual(VoiceSettingsKeys.fillerRemoval, "proc_filler")
         XCTAssertEqual(VoiceSettingsKeys.smartFormatting, "proc_format")
-        XCTAssertEqual(VoiceSettingsKeys.aiCleanup, "proc_ai")
-        XCTAssertEqual(VoiceSettingsKeys.aiCleanupMigration, "proc_ai_v3")
         XCTAssertEqual(VoiceSettingsKeys.soundsEnabled, "soundsEnabled")
         XCTAssertEqual(VoiceSettingsKeys.soundVolume, "soundVolume")
         XCTAssertEqual(VoiceSettingsKeys.startSound, "startSound")
@@ -25,15 +23,14 @@ final class VoiceSettingsTests: XCTestCase {
 
     func testProcessingSettingsArePartOfVoicePersistenceContract() {
         XCTAssertEqual(
-            Set([VoiceSettingsKeys.fillerRemoval, VoiceSettingsKeys.smartFormatting, VoiceSettingsKeys.aiCleanup]),
-            Set(["proc_filler", "proc_format", "proc_ai"])
+            Set([VoiceSettingsKeys.fillerRemoval, VoiceSettingsKeys.smartFormatting]),
+            Set(["proc_filler", "proc_format"])
         )
     }
 
     func testVoiceSettingsDefaultsStayUserFriendly() {
         XCTAssertTrue(VoiceSettingsDefaults.fillerRemoval)
         XCTAssertTrue(VoiceSettingsDefaults.smartFormatting)
-        XCTAssertTrue(VoiceSettingsDefaults.aiCleanup)
         XCTAssertTrue(VoiceSettingsDefaults.soundsEnabled)
         XCTAssertEqual(VoiceSettingsDefaults.soundVolume, 0.35, accuracy: 0.0001)
         XCTAssertEqual(VoiceSettingsDefaults.startSound, "Purr")

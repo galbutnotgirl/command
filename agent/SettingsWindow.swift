@@ -2473,7 +2473,6 @@ private func currentAppPreferencesPreview() -> [String: Any] {
         VoiceSettingsKeys.dictationAssistant2Provider: settingsModel.dictationAssistant2Provider,
         VoiceSettingsKeys.fillerRemoval: UserDefaults.standard.object(forKey: VoiceSettingsKeys.fillerRemoval) as? Bool ?? VoiceSettingsDefaults.fillerRemoval,
         VoiceSettingsKeys.smartFormatting: UserDefaults.standard.object(forKey: VoiceSettingsKeys.smartFormatting) as? Bool ?? VoiceSettingsDefaults.smartFormatting,
-        VoiceSettingsKeys.aiCleanup: UserDefaults.standard.object(forKey: VoiceSettingsKeys.aiCleanup) as? Bool ?? VoiceSettingsDefaults.aiCleanup
     ]
 }
 
@@ -2502,7 +2501,6 @@ private func defaultAppPreferences() -> [String: Any] {
         VoiceSettingsKeys.dictationAssistant2Provider: VoiceSettingsDefaults.dictationAssistant2Provider,
         VoiceSettingsKeys.fillerRemoval: VoiceSettingsDefaults.fillerRemoval,
         VoiceSettingsKeys.smartFormatting: VoiceSettingsDefaults.smartFormatting,
-        VoiceSettingsKeys.aiCleanup: VoiceSettingsDefaults.aiCleanup
     ]
 }
 
@@ -2550,7 +2548,6 @@ private func globalBundle() -> [String: Any] {
             VoiceSettingsKeys.dictationAssistant2Provider: settingsModel.dictationAssistant2Provider,
             VoiceSettingsKeys.fillerRemoval: UserDefaults.standard.object(forKey: VoiceSettingsKeys.fillerRemoval) as? Bool ?? VoiceSettingsDefaults.fillerRemoval,
             VoiceSettingsKeys.smartFormatting: UserDefaults.standard.object(forKey: VoiceSettingsKeys.smartFormatting) as? Bool ?? VoiceSettingsDefaults.smartFormatting,
-            VoiceSettingsKeys.aiCleanup: UserDefaults.standard.object(forKey: VoiceSettingsKeys.aiCleanup) as? Bool ?? VoiceSettingsDefaults.aiCleanup
     ]
     return bundle
 }
@@ -2727,7 +2724,6 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
         }
         if let v = prefs[VoiceSettingsKeys.fillerRemoval] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.fillerRemoval) }
         if let v = prefs[VoiceSettingsKeys.smartFormatting] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.smartFormatting) }
-        if let v = prefs[VoiceSettingsKeys.aiCleanup] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.aiCleanup) }
         for key in [ClipboardPickerSettingsKeys.newSessionEnabled,
                     ClipboardPickerSettingsKeys.sendAssistantEnabled,
                     ClipboardPickerSettingsKeys.openURLEnabled] {
@@ -4929,7 +4925,6 @@ struct DictSettingsView: View {
                         Divider()
                         Toggle("Filler removal (um, uh, you know…)", isOn: $proc.fillerRemoval)
                         Toggle("Smart formatting (punctuation commands, backtrack, lists)", isOn: $proc.smartFormatting)
-                        Toggle("AI cleanup — Apple Intelligence, on-device (macOS 26+)", isOn: $proc.aiCleanup)
                         Text("Punctuation: \"period\", \"comma\", \"new paragraph\".\nBacktrack: \"scratch that\", \"no wait\", \"i mean\" removes the preceding phrase.")
                             .font(.caption).foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

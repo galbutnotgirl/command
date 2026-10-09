@@ -178,17 +178,12 @@ final class ProcessingSettings: ObservableObject {
 
     @Published var fillerRemoval: Bool   { didSet { UserDefaults.standard.set(fillerRemoval,   forKey: VoiceSettingsKeys.fillerRemoval) } }
     @Published var smartFormatting: Bool { didSet { UserDefaults.standard.set(smartFormatting, forKey: VoiceSettingsKeys.smartFormatting) } }
-    @Published var aiCleanup: Bool       { didSet { UserDefaults.standard.set(aiCleanup,       forKey: VoiceSettingsKeys.aiCleanup) } }
 
     private init() {
         let ud = UserDefaults.standard
         fillerRemoval   = ud.object(forKey: VoiceSettingsKeys.fillerRemoval) as? Bool ?? VoiceSettingsDefaults.fillerRemoval
         smartFormatting = ud.object(forKey: VoiceSettingsKeys.smartFormatting) as? Bool ?? VoiceSettingsDefaults.smartFormatting
-        if ud.object(forKey: VoiceSettingsKeys.aiCleanupMigration) == nil {
-            ud.set(VoiceSettingsDefaults.aiCleanup, forKey: VoiceSettingsKeys.aiCleanup)
-            ud.set(true, forKey: VoiceSettingsKeys.aiCleanupMigration)
-        }
-        aiCleanup = ud.object(forKey: VoiceSettingsKeys.aiCleanup) as? Bool ?? VoiceSettingsDefaults.aiCleanup
+
     }
 }
 

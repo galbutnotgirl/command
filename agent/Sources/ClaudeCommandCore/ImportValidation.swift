@@ -108,7 +108,6 @@ public func isValidImportPayload(_ payload: Any, for section: ImportPayloadSecti
             VoiceSettingsKeys.dictationEnabled,
             VoiceSettingsKeys.fillerRemoval,
             VoiceSettingsKeys.smartFormatting,
-            VoiceSettingsKeys.aiCleanup
         ]
         let booleansValid = boolKeys.allSatisfy { value[$0] == nil || value[$0] is Bool }
         let pickerBooleansValid = [

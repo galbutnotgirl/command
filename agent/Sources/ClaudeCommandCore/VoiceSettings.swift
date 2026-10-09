@@ -3,8 +3,6 @@ import Foundation
 public enum VoiceSettingsKeys {
     public static let fillerRemoval = "proc_filler"
     public static let smartFormatting = "proc_format"
-    public static let aiCleanup = "proc_ai"
-    public static let aiCleanupMigration = "proc_ai_v3"
     public static let soundsEnabled = "soundsEnabled"
     public static let soundVolume = "soundVolume"
     public static let startSound = "startSound"
@@ -18,7 +16,6 @@ public enum VoiceSettingsKeys {
 public enum VoiceSettingsDefaults {
     public static let fillerRemoval = true
     public static let smartFormatting = true
-    public static let aiCleanup = true
     public static let soundsEnabled = true
     public static let soundVolume = 0.35
     public static let startSound = "Purr"
