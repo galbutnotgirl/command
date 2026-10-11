@@ -333,7 +333,7 @@ assert_contains "installed dictation watchdog probe is reachable through owner-o
 assert_contains "installed dictation insert probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "dictationinsertprobe":'
 assert_contains "installed voice dispatch probe is reachable through owner-only socket" "$AGENT_SOURCE" \
-  'case "voicedispatchprobe": return runInstalledVoiceDispatchProbe()'
+  'return runInstalledVoiceDispatchProbe(releaseOrder: order)'
 assert_contains "installed hotkey health probe is reachable through owner-only socket" "$AGENT_SOURCE" \
   'case "hotkeyhealthprobe":'
 assert_contains "installed hotkey health probe posts tagged HID events" "$AGENT_SOURCE" \
