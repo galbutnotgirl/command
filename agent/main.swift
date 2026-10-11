@@ -1702,19 +1702,33 @@ private func physicalModifierMask(cgFlags f: CGEventFlags) -> UInt32 {
     return cm
 }
 
+private func eventModifierMask(_ flags: CGEventFlags) -> UInt32 {
+    var mods: UInt32 = 0
+    if flags.contains(.maskCommand) { mods |= 256 }
+    if flags.contains(.maskShift) { mods |= 512 }
+    if flags.contains(.maskAlternate) { mods |= 2048 }
+    if flags.contains(.maskControl) { mods |= 4096 }
+    return mods
+}
+
 private func isModifierKeyDown(keycode: UInt32, flags: CGEventFlags) -> Bool {
+    // flagsChanged describes the new state. OR-ing stale keyState back in can
+    // turn a real release into another press and leave push-to-talk held forever.
     switch keycode {
-    case 54, 55: return flags.contains(.maskCommand) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
-    case 56, 60: return flags.contains(.maskShift) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
-    case 58, 61: return flags.contains(.maskAlternate) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
-    case 59, 62: return flags.contains(.maskControl) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
-    case 63: return flags.contains(.maskSecondaryFn) || CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
+    case 54, 55: return flags.contains(.maskCommand)
+    case 56, 60: return flags.contains(.maskShift)
+    case 58, 61: return flags.contains(.maskAlternate)
+    case 59, 62: return flags.contains(.maskControl)
+    case 63: return flags.contains(.maskSecondaryFn)
     default: return false
     }
 }
 
+private var _voiceModifierHolds: [UInt32: DictationModifierHold] = [:]
+
 private func releaseVoiceHotkey(keycode: UInt32) {
     _voiceHeldKeycodes.remove(keycode)
+    _voiceModifierHolds.removeValue(forKey: keycode)
     appendLog("[eventTap] voice up kc=\(keycode)")
     DispatchQueue.main.async {
         Task { @MainActor in
@@ -1914,6 +1928,14 @@ func startMediaKeyHook() {
             let isVoiceRouteProbe = probeDisposition == .voiceRoute
             let passthrough = Unmanaged.passUnretained(event)
 
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                // Releases may have been dropped while the tap was suspended.
+                // Finish held capture instead of making the user press again.
+                appendLog("[eventTap] input interrupted; releasing held voice shortcuts")
+                for keycode in Array(_voiceHeldKeycodes) { releaseVoiceHotkey(keycode: keycode) }
+                return passthrough
+            }
+
             // --- media-key mode (NX_SYSDEFINED subtype 8) ---
             if type.rawValue == 14,
                let ns = NSEvent(cgEvent: event), ns.subtype.rawValue == 8 {
@@ -1975,7 +1997,7 @@ func startMediaKeyHook() {
                 // dispatch paused until recorder commits or cancels.
                 if settingsModel.recordingAction != nil && !isVoiceDispatchProbe { return passthrough }
                 let isDown = isModifierKeyDown(keycode: kc, flags: event.flags)
-                let activeMods = physicalModifierMask(cgFlags: event.flags)
+                let activeMods = eventModifierMask(event.flags)
                 let cm = chordModifiers(activeModifiers: activeMods, primaryKeycode: kc)
                 if isVoiceRouteProbe {
                     _ = recordEventTapVoiceRoute(
@@ -1985,6 +2007,19 @@ func startMediaKeyHook() {
                     )
                     return nil
                 }
+                // Release the original chord when either its primary key or a
+                // required modifier goes up, regardless of release order.
+                let released = _voiceModifierHolds.values.filter {
+                    !$0.isHeld(
+                        primaryIsDown: isModifierKeyDown(keycode: $0.keycode, flags: event.flags),
+                        activeModifiers: activeMods
+                    )
+                }.map(\.keycode)
+                for keycode in released {
+                    appendLog("[eventTap] chord release primary=\(keycode) changed=\(kc) mods=\(activeMods)")
+                    releaseVoiceHotkey(keycode: keycode)
+                }
+                if released.contains(kc) { return nil }
                 if isDown {
                     let voiceTarget: VoiceHotkeyTarget? = isVoiceDispatchProbe
                         ? .builtIn(.diagnostic)
@@ -1993,6 +2028,7 @@ func startMediaKeyHook() {
                         if _voiceHeldKeycodes.contains(kc) { return nil }
                         appendLog("[eventTap] modifier voice down kc=\(kc) mods=\(cm)")
                         _voiceHeldKeycodes.insert(kc)
+                        _voiceModifierHolds[kc] = DictationModifierHold(keycode: kc, requiredModifiers: cm)
                         DispatchQueue.main.async {
                             Task { @MainActor in triggerVoiceHotkey(voiceTarget, keycode: CGKeyCode(kc)) }
                         }
@@ -2134,6 +2170,9 @@ func tapWatchdog() {
     if !CGEvent.tapIsEnabled(tap: tap) {
         CGEvent.tapEnable(tap: tap, enable: true)
         appendLog("[tapWatchdog] re-enabled media event tap")
+        DispatchQueue.main.async {
+            for keycode in Array(_voiceHeldKeycodes) { releaseVoiceHotkey(keycode: keycode) }
+        }
     }
     DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 5) { tapWatchdog() }
 }
@@ -3124,7 +3163,7 @@ private func makeVoiceDispatchProbeResult(
     ))
 }
 
-func runInstalledVoiceDispatchProbe() -> String {
+func runInstalledVoiceDispatchProbe(releaseOrder: String? = nil) -> String {
     dispatchPrecondition(condition: .notOnQueue(.main))
     let startedAt = Date()
     let initialHotkey = installedHotkeyRuntimeSnapshot()
@@ -3210,7 +3249,33 @@ func runInstalledVoiceDispatchProbe() -> String {
             failure: "Could not create voice dispatch event source."
         )
     }
+    // Optional chord probes use real flagsChanged transitions. The default
+    // keeps the existing keyDown/keyUp probe as an independent route check.
+    defer {
+        if let releaseOrder, let cleanup = CGEvent(source: source) {
+            cleanup.type = .flagsChanged
+            cleanup.setIntegerValueField(.keyboardEventKeycode, value: releaseOrder == "control-first" ? 63 : 59)
+            cleanup.flags = []
+            cleanup.setIntegerValueField(.eventSourceUserData, value: marker)
+            cleanup.post(tap: .cghidEventTap)
+        }
+    }
     func postVoiceEvent(keyDown: Bool) -> Bool {
+        if let releaseOrder {
+            guard let event = makeEventTapVoiceRouteEvent(
+                source: source,
+                shortcut: HotkeyShortcut(keycode: 63, mods: 4096),
+                marker: marker,
+                keyDown: keyDown
+            ) else { return false }
+            if !keyDown, releaseOrder == "control-first" {
+                event.setIntegerValueField(.keyboardEventKeycode, value: 59)
+                event.flags = .maskSecondaryFn
+            }
+            appendLog("[dictation-probe] chord event order=\(releaseOrder) down=\(keyDown)")
+            event.post(tap: .cghidEventTap)
+            return true
+        }
         guard let event = CGEvent(
             keyboardEventSource: source,
             virtualKey: 63,
@@ -3885,7 +3950,10 @@ func handle(_ line: String) -> String {
             targetBundle: probeArguments[0],
             receiverPath: probeArguments[1]
         )
-    case "voicedispatchprobe": return runInstalledVoiceDispatchProbe()
+    case "voicedispatchprobe":
+        let order = parts.count > 1 ? parts[1] : nil
+        guard order == nil || order == "control-first" || order == "fn-first" else { return "err" }
+        return runInstalledVoiceDispatchProbe(releaseOrder: order)
     case "hotkeyhealthprobe":
         let requested = Int(parts.count > 1 ? parts[1] : "") ?? 20
         return runInstalledHotkeyHealthProbe(requestedEvents: requested)

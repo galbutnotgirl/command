@@ -36,7 +36,10 @@ public struct DictationTriggerCoordinator: Equatable, Sendable {
             mode = .pushToTalk
             pressStartedAt = time
             return .startRecording
-        case .pushToTalk, .awaitingSecondTap:
+        case .pushToTalk:
+            // Repeat/duplicate presses are not a double tap: release must come first.
+            return .none
+        case .awaitingSecondTap:
             mode = .locked
             pressStartedAt = nil
             return .lockRecording

@@ -57,13 +57,13 @@ final class DictationTriggerCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.mode, .idle)
     }
 
-    func testSecondPressBeforeReleaseAlsoLocks() {
+    func testDuplicatePressBeforeReleaseCannotLockRecording() {
         var coordinator = DictationTriggerCoordinator()
 
         XCTAssertEqual(coordinator.press(at: 50), .startRecording)
-        XCTAssertEqual(coordinator.press(at: 50.1), .lockRecording)
-        XCTAssertEqual(coordinator.release(at: 50.2), .none)
-        XCTAssertEqual(coordinator.mode, .locked)
+        XCTAssertEqual(coordinator.press(at: 50.1), .none)
+        XCTAssertEqual(coordinator.release(at: 51), .stopRecording)
+        XCTAssertEqual(coordinator.mode, .idle)
     }
 
     func testFailedStartResetPreventsNextPressBecomingLock() {
@@ -152,7 +152,7 @@ final class DictationTriggerCoordinatorTests: XCTestCase {
             case .lockRecording:
                 XCTAssertEqual(coordinator.mode, .locked, file: file, line: line)
                 XCTAssertTrue(
-                    previousMode == .pushToTalk || previousMode == .awaitingSecondTap,
+                    previousMode == .awaitingSecondTap,
                     file: file,
                     line: line
                 )
