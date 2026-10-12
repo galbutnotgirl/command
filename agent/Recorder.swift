@@ -488,7 +488,7 @@ final class Recorder: ObservableObject {
         captureStartupBegan = true
         inputDeviceName = AVCaptureDevice.default(for: .audio)?.localizedName ?? "unknown"
         activeStreamTaskCount += 1
-        streamTask = Task {
+        streamTask = Task { [self] in
             defer { self.activeStreamTaskCount -= 1 }
             do {
                 let hwFormat = try await engine.prepare()

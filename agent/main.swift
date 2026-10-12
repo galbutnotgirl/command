@@ -2103,7 +2103,7 @@ func startMediaKeyHook() {
                 let voiceTarget = isVoiceDispatchProbe
                     ? VoiceHotkeyTarget.builtIn(.diagnostic)
                     : voiceHotkeyTarget(keycode: kc, mods: cm)
-                if eventTapOwnsVoiceHotkey(keycode: kc), let voiceTarget {
+                if eventTapOwnsVoiceHotkey(keycode: kc) || isVoiceDispatchProbe, let voiceTarget {
                     guard type == .keyDown else {
                         return isVoiceDispatchProbe ? nil : passthrough
                     }
@@ -3056,15 +3056,9 @@ func runInstalledDictationWatchdogProbe(
         )
     }
 
-    var releasedDuringStartup = false
-    if scenario == .startup {
-        DispatchQueue.main.sync {
-            releasedDuringStartup = recorder.state == .starting
-                && recorder.capturedBufferCount == 0
-                && DictationOverlay.shared.isVisible
-            releaseDictationTrigger(at: Date().timeIntervalSinceReferenceDate + 1)
-        }
-    }
+    // Release-before-ready cancellation has its own real-worker probe. Keep
+    // this shortcut held so an unattended stall must still warn and reset.
+    let releasedDuringStartup = false
 
     let watchdogDeadline = Date().addingTimeInterval(10)
     var cleanup = dictationCaptureResourceSnapshot()
@@ -3105,7 +3099,7 @@ func runInstalledDictationWatchdogProbe(
     let scenarioEvidencePassed: Bool
     switch scenario {
     case .startup:
-        scenarioEvidencePassed = releasedDuringStartup
+        scenarioEvidencePassed = !releasedDuringStartup
             && (stalledHealth?.capturedBuffers ?? -1) == 0
     case .midstream:
         scenarioEvidencePassed = !releasedDuringStartup
@@ -3202,7 +3196,7 @@ private func makeVoiceDispatchProbeResult(
     ))
 }
 
-func runInstalledVoiceDispatchProbe(releaseOrder: String? = nil) -> String {
+func runInstalledVoiceDispatchProbe(releaseOrder: String? = nil, keycode: CGKeyCode = 63) -> String {
     dispatchPrecondition(condition: .notOnQueue(.main))
     let startedAt = Date()
     let initialHotkey = installedHotkeyRuntimeSnapshot()
@@ -3317,7 +3311,7 @@ func runInstalledVoiceDispatchProbe(releaseOrder: String? = nil) -> String {
         }
         guard let event = CGEvent(
             keyboardEventSource: source,
-            virtualKey: 63,
+            virtualKey: keycode,
             keyDown: keyDown
         ) else { return false }
         event.setIntegerValueField(.eventSourceUserData, value: marker)
@@ -3992,6 +3986,7 @@ func handle(_ line: String) -> String {
         )
     case "voicedispatchprobe":
         let order = parts.count > 1 ? parts[1] : nil
+        if order == "home" { return runInstalledVoiceDispatchProbe(keycode: 115) }
         guard order == nil || order == "control-first" || order == "fn-first" else { return "err" }
         return runInstalledVoiceDispatchProbe(releaseOrder: order)
     case "hotkeyhealthprobe":

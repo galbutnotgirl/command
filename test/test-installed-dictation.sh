@@ -348,6 +348,8 @@ if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/nul
   exit 1
 fi
 
+"${DIR}/test-installed-voice-chords.sh"
+
 watchdog_reply="$(printf 'dictationwatchdogprobe\n' | nc -U -w 50 "$SOCKET" 2>/dev/null || true)"
 if [[ -z "$watchdog_reply" ]]; then
   print -u2 -- "FAIL: dictation startup-watchdog probe returned no response"
@@ -372,8 +374,8 @@ if result["stalledTerminalStage"] != "cancelled":
     raise SystemExit("startup watchdog did not cancel stalled session")
 if result["warningCount"] != 1 or result["resetCount"] != 1:
     raise SystemExit("startup watchdog did not issue exactly one warning and one reset")
-if result["releasedDuringStartup"] is not True:
-    raise SystemExit("probe did not release shortcut during stalled startup")
+if result["releasedDuringStartup"] is not False:
+    raise SystemExit("watchdog probe must keep shortcut held; cancellation is checked separately")
 cleanup = result["cleanup"]
 if cleanup.get("capturePhase") != "idle" or cleanup.get("fullyReleased") is not True:
     raise SystemExit("startup watchdog left capture resources active")
@@ -602,7 +604,7 @@ print -- "  audio buffers: ${total_buffers} total"
 print -- "  production lifecycle: session ${lifecycle_session}, ${lifecycle_buffers} buffers, ${lifecycle_updates} updates, ${lifecycle_stage}, ${lifecycle_duration} ms"
 print -- "  event-tap voice dispatch: 2/2 tagged events, session ${voice_session}, ${voice_buffers} buffers, ${voice_stage}, ${voice_duration} ms, ${voice_aliases} configured aliases"
 print -- "  insert delivery: pipeline ${insert_raw_chars}->${insert_processed_chars} chars, focused receiver matched, clipboard/focus restored in ${insert_duration} ms"
-print -- "  startup watchdog: session ${watchdog_stalled_session} warned/reset after release; retry ${watchdog_retry_session} captured ${watchdog_retry_buffers} and finished ${watchdog_retry_stage} in ${watchdog_duration} ms"
+print -- "  startup watchdog: session ${watchdog_stalled_session} warned/reset while held; retry ${watchdog_retry_session} captured ${watchdog_retry_buffers} and finished ${watchdog_retry_stage} in ${watchdog_duration} ms"
 print -- "  midstream watchdog: session ${stream_watchdog_stalled_session} stalled after ${stream_watchdog_stalled_buffers} buffers; retry ${stream_watchdog_retry_session} captured ${stream_watchdog_retry_buffers} and finished ${stream_watchdog_retry_stage} in ${stream_watchdog_duration} ms"
 print -- "  failure recovery: ${RECOVERY_RUNS}/${RECOVERY_RUNS} cycles, final cleanup ${recovery_cleanup_phase}, ${recovery_total_duration} ms total"
 print -- "  dictation history: unchanged"

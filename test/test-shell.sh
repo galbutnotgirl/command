@@ -422,8 +422,8 @@ assert_contains "recorder can inject silent stall after live buffers" "$RECORDER
   'armDiagnosticMidstreamStall(afterBuffers: Int = 3)'
 assert_contains "midstream stall removes live production audio tap" "$RECORDER_SOURCE" \
   'injecting silent midstream stall after buffers='
-assert_contains "installed startup stall releases shortcut before watchdog reset" "$AGENT_SOURCE" \
-  'releasedDuringStartup = recorder.state == .starting'
+assert_contains "installed startup stall keeps shortcut held until watchdog reset" "$AGENT_SOURCE" \
+  'let releasedDuringStartup = false'
 assert_contains "installed startup watchdog requires warning and reset" "$AGENT_SOURCE" \
   'warningDelta == 1'
 assert_contains "installed midstream watchdog uses production recorder" "$AGENT_SOURCE" \

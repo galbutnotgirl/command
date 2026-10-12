@@ -275,10 +275,10 @@ final class DictationOverlay: NSObject {
         }
 
         recorder.onFinishedWithoutText = { [weak self] mode in
-            Task { @MainActor in
-                appendLog("[dictation] finished without dispatchable text mode=\(String(describing: mode))")
-                self?.hide()
-            }
+            // Recorder invokes this on main actor. Hide synchronously so a
+            // queued callback cannot hide a new session after fast cancellation.
+            appendLog("[dictation] finished without dispatchable text mode=\(String(describing: mode))")
+            self?.hide()
         }
 
         recorder.onFailure = { [weak self] message, mode in
