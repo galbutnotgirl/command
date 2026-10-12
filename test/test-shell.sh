@@ -270,9 +270,13 @@ DICTATION_FAILURE_SOURCE="$(sed -n '/recorder.onFailure =/,/private func playSto
 RECORDER_SOURCE="$(cat "${DIR}/agent/Recorder.swift")"
 SETTINGS_SOUND_SOURCE="$(cat "${DIR}/agent/SettingsWindow.swift")"
 assert_before "start cue follows live microphone engine" "$RECORDER_SOURCE" \
-  'try engine.start()' 'self.onListening?(self.currentMode)'
-assert_before "queued startup stop suppresses start cue" "$RECORDER_SOURCE" \
-  'if self.stopRequestedDuringStart {' 'self.onListening?(self.currentMode)'
+  'try await engine.start(format: hwFormat)' 'self.markCaptureReadyIfNeeded()'
+assert_not_contains "recorder never opens native engine on main actor" "$RECORDER_SOURCE" \
+  'AVAudioEngine()'
+assert_contains "installed qualification exercises slow native startup release" "$(cat "${DIR}/test/test-installed-dictation.sh")" \
+  'dictationstartupcancelprobe'
+assert_contains "start cue requires actual audio buffers" "$RECORDER_SOURCE" \
+  'guard state == .starting, audioEngine != nil, capturedBufferCount > 0 else { return }'
 assert_contains "start cue wired to microphone readiness" "$DICTATION_OVERLAY_SOURCE" \
   'recorder.onListening = { [weak self] mode in'
 assert_contains "start cue suppressed for finished or diagnostic session" "$DICTATION_OVERLAY_SOURCE" \

@@ -2579,6 +2579,45 @@ private func cancelInstalledDictationLifecycleProbe() {
     }
 }
 
+// Exercise the real audio worker while native startup is deliberately blocked.
+// Socket handler runs off-main; synchronous main hops prove UI/input admission
+// remains responsive. No history, paste, warning panel, or audible cue is used.
+func runInstalledDictationStartupCancelProbe() -> String {
+    let startedAt = Date()
+    var started = false
+    let admissionAt = Date()
+    DispatchQueue.main.sync {
+        guard recorder.armDiagnosticNativeStartupDelay(milliseconds: 3_000) else { return }
+        started = DictationOverlay.shared.show(mode: .diagnostic)
+    }
+    let admissionMilliseconds = Int(Date().timeIntervalSince(admissionAt) * 1_000)
+    guard started else { return #"{"ok":false,"failure":"Recorder busy or model unavailable."}"# }
+    usleep(100_000)
+    let releaseAt = Date()
+    DispatchQueue.main.sync { DictationOverlay.shared.stopRecording() }
+    let releaseMilliseconds = Int(Date().timeIntervalSince(releaseAt) * 1_000)
+    let deadline = Date().addingTimeInterval(8)
+    while Date() < deadline {
+        let resources = dictationCaptureResourceSnapshot()
+        if resources.fullyReleased {
+            let health = latestDictationSessionHealth()
+            let passed = admissionMilliseconds < 250 && releaseMilliseconds < 250
+                && health?.stage == .cancelled && health?.capturedBuffers == 0
+            let result: [String: Any] = [
+                "ok": passed, "admissionMilliseconds": admissionMilliseconds,
+                "releaseMilliseconds": releaseMilliseconds,
+                "durationMilliseconds": Int(Date().timeIntervalSince(startedAt) * 1_000),
+                "resourcesReleased": true, "capturedBuffers": health?.capturedBuffers ?? -1,
+                "terminalStage": health?.stage.rawValue ?? "none"
+            ]
+            let data = try! JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
+            return String(decoding: data, as: UTF8.self)
+        }
+        usleep(20_000)
+    }
+    return #"{"ok":false,"failure":"Cancelled native startup did not release resources."}"#
+}
+
 func runInstalledDictationLifecycleProbe() -> String {
     let startedAt = Date()
     let initial = dictationLifecycleRuntimeSnapshot()
@@ -3929,6 +3968,7 @@ func handle(_ line: String) -> String {
     case "runtimepid": return "\(ProcessInfo.processInfo.processIdentifier)"
     case "dictationprobe": return runInstalledDictationProbe()
     case "dictationlifecycleprobe": return runInstalledDictationLifecycleProbe()
+    case "dictationstartupcancelprobe": return runInstalledDictationStartupCancelProbe()
     case "dictationrecoveryprobe": return runInstalledDictationRecoveryProbe()
     case "dictationwatchdogprobe": return runInstalledDictationWatchdogProbe()
     case "dictationstreamwatchdogprobe": return runInstalledDictationWatchdogProbe(scenario: .midstream)

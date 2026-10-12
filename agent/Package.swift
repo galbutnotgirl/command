@@ -25,7 +25,7 @@ let package = Package(
                 "ClaudeCommandCore",
             ],
             path: ".",
-            exclude: ["icon.png", "Sources", "Tests", "Tools"],
+            exclude: ["icon.png", "Sources", "Tests", "Tools", "Resources"],
             linkerSettings: [
                 .linkedFramework("Carbon"),
             ]

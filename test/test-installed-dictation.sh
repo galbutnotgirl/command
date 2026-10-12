@@ -157,6 +157,20 @@ print("{}\t{}\t{}".format(
   sleep 0.2
 done
 
+startup_cancel_reply="$(printf 'dictationstartupcancelprobe\n' | nc -U -w 12 "$SOCKET" 2>/dev/null || true)"
+python3 - "$startup_cancel_reply" <<'PYTEST'
+import json
+import sys
+result = json.loads(sys.argv[1])
+assert result['ok'] is True, result
+assert result['admissionMilliseconds'] < 250, result
+assert result['releaseMilliseconds'] < 250, result
+assert result['resourcesReleased'] is True, result
+assert result['capturedBuffers'] == 0, result
+assert result['terminalStage'] == 'cancelled', result
+print(f"  slow-start cancellation: admission {result['admissionMilliseconds']}ms, release {result['releaseMilliseconds']}ms; no late capture; resources cleaned")
+PYTEST
+
 lifecycle_reply=""
 for (( readiness_attempt = 1; readiness_attempt <= 100; readiness_attempt++ )); do
   lifecycle_reply="$(printf 'dictationlifecycleprobe\n' | nc -U -w 35 "$SOCKET" 2>/dev/null || true)"

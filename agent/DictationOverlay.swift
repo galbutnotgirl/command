@@ -152,7 +152,7 @@ final class DictationOverlay: NSObject {
         }
         isVisible = true
         isFinishing = false
-        menuBar.setRecording(true)
+        menuBar.setStarting()
         startLevelUpdates()
         startCaptureWatchdog()
         return true
@@ -173,7 +173,7 @@ final class DictationOverlay: NSObject {
         guard isVisible, !isFinishing else { return }
         isFinishing = true
         resetDictTrigMode()
-        if recorder.currentMode != .diagnostic {
+        if recorder.currentMode != .diagnostic, recorder.state == .listening {
             playStopSound()
         }
         recorder.stop()
@@ -185,7 +185,7 @@ final class DictationOverlay: NSObject {
         levelTask?.cancel()
         levelTask = Task { @MainActor [weak self] in
             while let s = self, s.isVisible, !Task.isCancelled {
-                menuBar.updateAudioLevel(recorder.audioLevel)
+                if recorder.state == .listening { menuBar.updateAudioLevel(recorder.audioLevel) }
                 try? await Task.sleep(nanoseconds: 66_000_000)   // ~15 fps
             }
         }
@@ -252,6 +252,7 @@ final class DictationOverlay: NSObject {
         recorder.onPartial = { _ in }
         recorder.onListening = { [weak self] mode in
             guard let self, self.isVisible, !self.isFinishing, mode != .diagnostic else { return }
+            menuBar.setRecording(true)
             playUISound(settingsModel.startSound, role: .start)
         }
 

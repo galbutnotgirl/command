@@ -106,18 +106,18 @@ final class Recorder: ObservableObject {
 
     private var loadedModels: AsrModels?
     private var currentMgr: SlidingWindowAsrManager?
-    private var audioEngine: AVAudioEngine?
-    private var audioTapEngine: AVAudioEngine?
+    private var audioEngine: DictationAudioCapture?
+    private var audioTapEngine: DictationAudioCapture?
     private var silenceTimer: DispatchSourceTimer?
     private var lastTranscript = ""
     private var sessionID = 0
-    private var stopRequestedDuringStart = false
     private var streamTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<OwnedAudioBuffer>.Continuation?
     private var bufferFeederTask: Task<Void, Never>?
     private var activeStreamTaskCount = 0
     private var activeBufferFeederTaskCount = 0
     private var activeManagerCleanupTaskCount = 0
+    private var activeAudioCleanupTaskCount = 0
     private let stopTailPolicy = DEFAULT_DICTATION_STOP_TAIL_POLICY
     private var totalAudioSeconds: Double = 0
     private var activeSpeechSeconds: Double = 0
@@ -134,6 +134,8 @@ final class Recorder: ObservableObject {
     private var diagnosticFailureAfterBufferCount: Int?
     private var diagnosticStallAfterBufferCount: Int?
     private var diagnosticStartupStallArmed = false
+    private var diagnosticNativeStartupDelayMilliseconds = 0
+    private var captureRequestedAt = DispatchTime.now()
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
 
@@ -182,7 +184,7 @@ final class Recorder: ObservableObject {
             capturePhase: state.rawValue,
             overlayVisible: overlayVisible,
             captureStartupBegan: captureStartupBegan,
-            audioEngineActive: audioEngine != nil,
+            audioEngineActive: audioEngine != nil || activeAudioCleanupTaskCount > 0,
             audioTapActive: audioTapEngine != nil,
             streamTaskActive: streamTask != nil || activeStreamTaskCount > 0,
             audioContinuationActive: audioContinuation != nil,
@@ -210,6 +212,12 @@ final class Recorder: ObservableObject {
         return true
     }
 
+    func armDiagnosticNativeStartupDelay(milliseconds: Int) -> Bool {
+        guard state.canStart, !captureResourcesAreActive, !captureProbeInProgress else { return false }
+        diagnosticNativeStartupDelayMilliseconds = min(max(milliseconds, 0), 5_000)
+        return true
+    }
+
     private var captureResourcesAreActive: Bool {
         audioEngine != nil
             || audioTapEngine != nil
@@ -220,6 +228,7 @@ final class Recorder: ObservableObject {
             || activeBufferFeederTaskCount > 0
             || currentMgr != nil
             || activeManagerCleanupTaskCount > 0
+            || activeAudioCleanupTaskCount > 0
             || silenceTimer != nil
             || captureStartupBegan
     }
@@ -228,7 +237,14 @@ final class Recorder: ObservableObject {
         let engine = audioEngine ?? audioTapEngine
         audioEngine = nil
         if let engine { removeProductionAudioTap(from: engine) }
-        engine?.stop()
+        if let engine {
+            engine.cancel()
+            activeAudioCleanupTaskCount += 1
+            Task {
+                await engine.shutdown()
+                self.activeAudioCleanupTaskCount -= 1
+            }
+        }
 
         streamTask?.cancel()
         streamTask = nil
@@ -251,9 +267,9 @@ final class Recorder: ObservableObject {
         audioLevel = 0
     }
 
-    private func removeProductionAudioTap(from engine: AVAudioEngine) {
+    private func removeProductionAudioTap(from engine: DictationAudioCapture) {
         guard audioTapEngine === engine else { return }
-        engine.inputNode.removeTap(onBus: 0)
+        engine.removeTap()
         audioTapEngine = nil
     }
 
@@ -361,7 +377,6 @@ final class Recorder: ObservableObject {
             appendLog("[dictation] previous session interrupted \(previous.diagnosticSummary)")
         }
         currentMode = mode
-        stopRequestedDuringStart = false
         lastTranscript = ""; liveTranscript = ""
         totalAudioSeconds = 0; activeSpeechSeconds = 0
         secondsSinceStopTailActivity = .infinity; noiseFloorRMS = 0.003
@@ -371,6 +386,7 @@ final class Recorder: ObservableObject {
         sessionHealth = DictationSessionHealth(sessionID: mySession, mode: String(describing: mode))
         persistSessionHealth()
         state = .starting
+        captureRequestedAt = .now()
         log("▶ session \(mySession) start mode=\(mode)")
         appendLog("[dictation] start session=\(mySession) mode=\(mode) deviceAuthorization=\(AVCaptureDevice.authorizationStatus(for: .audio).rawValue)")
 
@@ -386,6 +402,7 @@ final class Recorder: ObservableObject {
             AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
                 Task { @MainActor in
                     guard let self = self else { return }
+                    guard self.sessionID == mySession, self.state == .starting else { return }
                     if granted { self.beginStreaming(session: mySession) }
                     else { self.fail("microphone access denied") }
                 }
@@ -419,154 +436,104 @@ final class Recorder: ObservableObject {
         }
 
         captureProbeInProgress = true
-        let engine = AVAudioEngine()
-        let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
+        let engine = DictationAudioCapture()
         let inputDevice = AVCaptureDevice.default(for: .audio)?.localizedName ?? "unknown"
         let duration = min(max(duration, 0.25), 2.0)
         let durationMilliseconds = Int((duration * 1_000).rounded())
-        guard format.sampleRate > 0, format.channelCount > 0 else {
-            captureProbeInProgress = false
-            completion(DictationCaptureProbeResult(
-                status: .inputUnavailable,
-                authorization: authorization,
-                inputDevice: inputDevice,
-                sampleRate: format.sampleRate,
-                channelCount: Int(format.channelCount),
-                durationMilliseconds: durationMilliseconds,
-                failure: "Default microphone has no usable input format."
-            ))
-            return
-        }
-
-        let accumulator = DictationCaptureProbeAccumulator()
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { _, _ in
-            accumulator.recordBuffer()
-        }
-        do {
-            try engine.start()
-        } catch {
-            inputNode.removeTap(onBus: 0)
-            captureProbeInProgress = false
-            completion(DictationCaptureProbeResult(
-                status: .engineStartFailed,
-                authorization: authorization,
-                inputDevice: inputDevice,
-                sampleRate: format.sampleRate,
-                channelCount: Int(format.channelCount),
-                durationMilliseconds: durationMilliseconds,
-                failure: error.localizedDescription
-            ))
-            return
-        }
-
-        appendLog("[dictation-probe] started device=\(inputDevice.debugDescription) durationMs=\(durationMilliseconds)")
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-            inputNode.removeTap(onBus: 0)
-            engine.stop()
-            self?.captureProbeInProgress = false
-            let result = DictationCaptureProbeResult.completed(
-                authorization: authorization,
-                capturedBuffers: accumulator.snapshot(),
-                inputDevice: inputDevice,
-                sampleRate: format.sampleRate,
-                channelCount: Int(format.channelCount),
-                durationMilliseconds: durationMilliseconds
-            )
-            appendLog("[dictation-probe] completed status=\(result.status.rawValue) buffers=\(result.capturedBuffers) device=\(inputDevice.debugDescription)")
-            completion(result)
+        Task {
+            var format: AVAudioFormat?
+            let accumulator = DictationCaptureProbeAccumulator()
+            do {
+                format = try await engine.prepare()
+                try await engine.start(format: format!) { _, _ in accumulator.recordBuffer() }
+                appendLog("[dictation-probe] started device=\(inputDevice.debugDescription) durationMs=\(durationMilliseconds)")
+                // Bluetooth streams may report running before their first callback.
+                // Wait separately for admission, then observe the requested window.
+                let deadline = Date().addingTimeInterval(1.5)
+                while accumulator.snapshot() == 0, Date() < deadline {
+                    try await Task.sleep(nanoseconds: 20_000_000)
+                }
+                try await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+                await engine.shutdown()
+                self.captureProbeInProgress = false
+                let result = DictationCaptureProbeResult.completed(
+                    authorization: authorization,
+                    capturedBuffers: accumulator.snapshot(), inputDevice: inputDevice,
+                    sampleRate: format!.sampleRate, channelCount: Int(format!.channelCount),
+                    durationMilliseconds: durationMilliseconds
+                )
+                appendLog("[dictation-probe] completed status=\(result.status.rawValue) buffers=\(result.capturedBuffers) device=\(inputDevice.debugDescription)")
+                completion(result)
+            } catch {
+                await engine.shutdown()
+                self.captureProbeInProgress = false
+                completion(DictationCaptureProbeResult(
+                    status: .engineStartFailed, authorization: authorization,
+                    inputDevice: inputDevice, sampleRate: format?.sampleRate ?? 0,
+                    channelCount: Int(format?.channelCount ?? 0),
+                    durationMilliseconds: durationMilliseconds, failure: error.localizedDescription
+                ))
+            }
         }
     }
 
     private func beginStreaming(session: Int) {
+        guard sessionID == session, state == .starting else { return }
         guard let models = loadedModels else { fail("loadedModels nil"); return }
         transitionSessionHealth(to: .loadingModel)
-        let engine = AVAudioEngine()
-        let inputNode = engine.inputNode
-        let hwFormat = inputNode.outputFormat(forBus: 0)
+        let delay = currentMode == .diagnostic ? diagnosticNativeStartupDelayMilliseconds : 0
+        diagnosticNativeStartupDelayMilliseconds = 0
+        let engine = DictationAudioCapture(startupDelayMilliseconds: delay)
+        audioTapEngine = engine
+        captureStartupBegan = true
         inputDeviceName = AVCaptureDevice.default(for: .audio)?.localizedName ?? "unknown"
-        log("audio device: \(inputDeviceName); format: \(hwFormat.sampleRate)Hz ch=\(hwFormat.channelCount)")
-
         activeStreamTaskCount += 1
         streamTask = Task {
             defer { self.activeStreamTaskCount -= 1 }
-            let mgr = SlidingWindowAsrManager(config: .default)
-            do { try await mgr.loadModels(models) }
-            catch { self.fail("mgr.loadModels: \(error)"); return }
-            guard self.sessionID == session, !Task.isCancelled else {
-                self.log("startup abandoned before audio tap session=\(session)")
-                return
-            }
-            self.captureStartupBegan = true
-            self.currentMgr = mgr
-
-            var bufCount = 0
-            // Buffers are fed through an AsyncStream (not one detached Task per buffer)
-            // so stop() can deterministically drain every enqueued buffer — including
-            // the last 1-2 captured during the post-stop grace window below — instead
-            // of guessing how long in-flight Tasks need to land.
-            let (bufStream, bufContinuation) = AsyncStream<OwnedAudioBuffer>.makeStream()
-            self.audioContinuation = bufContinuation
-            self.activeBufferFeederTaskCount += 1
-            self.bufferFeederTask = Task {
-                defer { self.activeBufferFeederTaskCount -= 1 }
-                for await buf in bufStream { await mgr.streamAudio(buf.value) }
-                self.log("buffer feeder drained")
-            }
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self] buf, _ in
-                bufCount += 1
-                if let channelData = buf.floatChannelData?[0] {
-                    let n = Int(buf.frameLength); var sum: Float = 0
-                    for i in 0..<n { let s = channelData[i]; sum += s * s }
-                    let rms = n > 0 ? sqrt(sum / Float(n)) : 0
-                    let seconds = hwFormat.sampleRate > 0 ? Double(buf.frameLength) / hwFormat.sampleRate : 0
-                    Task { @MainActor in self?.observeAudioFrame(rms: rms, seconds: seconds) }
+            do {
+                let hwFormat = try await engine.prepare()
+                guard self.sessionID == session, !Task.isCancelled else { throw CancellationError() }
+                self.log("audio device: \(self.inputDeviceName); format: \(hwFormat.sampleRate)Hz ch=\(hwFormat.channelCount)")
+                let mgr = SlidingWindowAsrManager(config: .default)
+                self.currentMgr = mgr
+                try await mgr.loadModels(models)
+                guard self.sessionID == session, !Task.isCancelled else {
+                    self.log("startup abandoned before audio tap session=\(session)")
+                    throw CancellationError()
                 }
-                if let ownedBuffer = copyAudioBuffer(buf) {
-                    bufContinuation.yield(ownedBuffer)
-                } else {
-                    Task { @MainActor in
-                        self?.bufferCopyFailureCount += 1
-                        self?.log("audio buffer copy failed")
+                let (bufStream, bufContinuation) = AsyncStream<OwnedAudioBuffer>.makeStream()
+                self.audioContinuation = bufContinuation
+                self.activeBufferFeederTaskCount += 1
+                self.bufferFeederTask = Task {
+                    defer { self.activeBufferFeederTaskCount -= 1 }
+                    for await buf in bufStream { await mgr.streamAudio(buf.value) }
+                    self.log("buffer feeder drained")
+                }
+                try await mgr.startStreaming(source: .microphone)
+                guard self.sessionID == session, !Task.isCancelled else { throw CancellationError() }
+                try await engine.start(format: hwFormat) { [weak self] buf, _ in
+                    if let channelData = buf.floatChannelData?[0] {
+                        let n = Int(buf.frameLength); var sum: Float = 0
+                        for i in 0..<n { let value = channelData[i]; sum += value * value }
+                        let rms = n > 0 ? sqrt(sum / Float(n)) : 0
+                        let seconds = Double(buf.frameLength) / hwFormat.sampleRate
+                        Task { @MainActor in
+                            guard let self, self.sessionID == session, self.state.canStop || self.state == .finishing else { return }
+                            self.observeAudioFrame(rms: rms, seconds: seconds)
+                        }
+                    }
+                    if let ownedBuffer = copyAudioBuffer(buf) { bufContinuation.yield(ownedBuffer) }
+                    else {
+                        Task { @MainActor in
+                            guard let self, self.sessionID == session else { return }
+                            self.bufferCopyFailureCount += 1
+                        }
                     }
                 }
-            }
-            self.audioTapEngine = engine
-
-            do {
-                try await mgr.startStreaming(source: .microphone)
-                self.log("startStreaming ok")
-                guard self.sessionID == session, !Task.isCancelled else {
-                    self.log("startup abandoned after stream preparation session=\(session)")
-                    self.removeProductionAudioTap(from: engine)
-                    return
-                }
-                do { try engine.start(); self.log("engine started") }
-                catch {
-                    self.fail("engine.start: \(error.localizedDescription)")
-                    self.removeProductionAudioTap(from: engine); return
-                }
+                guard self.sessionID == session, !Task.isCancelled else { throw CancellationError() }
                 self.audioEngine = engine
-                guard self.sessionID == session, !Task.isCancelled else {
-                    engine.stop(); self.removeProductionAudioTap(from: engine)
-                    if self.audioEngine === engine { self.audioEngine = nil }
-                    return
-                }
-                self.state = .listening
-                self.transitionSessionHealth(to: .listening)
-                self.log("🎙 listening")
-                appendLog("[dictation] listening session=\(session) device=\(self.inputDeviceName.debugDescription)")
-                if self.stopRequestedDuringStart {
-                    self.stopRequestedDuringStart = false
-                    self.log("stop was requested during startup — stopping now that audio is live")
-                    self.stop()
-                    return
-                }
-                // Output routing can change when Bluetooth input starts. Announce
-                // readiness only after that switch, and never after a queued stop.
-                self.onListening?(self.currentMode)
-                self.resetSilenceTimer()
-
+                self.log("engine started; waiting for first audio buffer")
+                self.markCaptureReadyIfNeeded()
                 for await update in await mgr.transcriptionUpdates {
                     guard self.sessionID == session, !Task.isCancelled else { break }
                     self.transcriptionUpdateCount += 1
@@ -576,19 +543,26 @@ final class Recorder: ObservableObject {
                     self.liveTranscript = update.text
                     self.lastTranscript = update.text
                     self.onPartial?(update.text)
-                    self.log("partial: \"\(update.text)\"")
                 }
-                self.log("transcriptionUpdates stream ended")
             } catch is CancellationError {
-                self.log("stream task cancelled")
+                self.log("stream task cancelled session=\(session)")
             } catch {
-                guard self.sessionID == session else { return }
-                self.fail("streaming error: \(error.localizedDescription)")
+                if self.sessionID == session { self.fail("streaming error: \(error.localizedDescription)") }
             }
-            engine.stop(); self.removeProductionAudioTap(from: engine)
+            await engine.shutdown()
+            self.removeProductionAudioTap(from: engine)
             if self.audioEngine === engine { self.audioEngine = nil }
-            self.log("engine stopped, buf total=\(bufCount)")
         }
+    }
+
+    private func markCaptureReadyIfNeeded() {
+        guard state == .starting, audioEngine != nil, capturedBufferCount > 0 else { return }
+        state = .listening
+        transitionSessionHealth(to: .capturing)
+        let startupMilliseconds = (DispatchTime.now().uptimeNanoseconds - captureRequestedAt.uptimeNanoseconds) / 1_000_000
+        appendLog("[dictation] listening session=\(sessionID) startupMs=\(startupMilliseconds) buffers=\(capturedBufferCount) device=\(inputDeviceName.debugDescription)")
+        onListening?(currentMode)
+        resetSilenceTimer()
     }
 
     func stop() {
@@ -599,8 +573,10 @@ final class Recorder: ObservableObject {
         log("■ stop wasListening=\(wasListening)")
         cancelSilenceTimer()
         if !wasListening {
-            stopRequestedDuringStart = true
-            log("stop requested while startup still in flight")
+            // Releasing before capture is ready must cancel the native open;
+            // it must not start another recording after the shortcut is gone.
+            cancel()
+            onFinishedWithoutText?(mode)
             return
         }
         let mgr = currentMgr; currentMgr = nil
@@ -636,7 +612,7 @@ final class Recorder: ObservableObject {
         Task {
             try? await Task.sleep(nanoseconds: stopTailNanoseconds)
             if let engineToStop { self.removeProductionAudioTap(from: engineToStop) }
-            engineToStop?.stop()
+            await engineToStop?.shutdown()
 
             // The buffers captured during the grace window above are still sitting in
             // the feeder's queue. Finishing the continuation and awaiting the feeder
@@ -705,7 +681,6 @@ final class Recorder: ObservableObject {
         appendLog("[dictation] cancel session=\(sessionID) phase=\(state.rawValue) buffers=\(capturedBufferCount)")
         transitionSessionHealth(to: .cancelled)
         sessionID += 1
-        stopRequestedDuringStart = false
         diagnosticFailureAfterBufferCount = nil
         diagnosticStallAfterBufferCount = nil
         diagnosticStartupStallArmed = false
@@ -737,6 +712,7 @@ final class Recorder: ObservableObject {
            stage == .loadingModel || stage == .listening {
             transitionSessionHealth(to: .capturing)
         }
+        markCaptureReadyIfNeeded()
         peakRMS = max(peakRMS, rms)
         totalAudioSeconds += seconds
         let gate = DictationActivityGate(minimumDuration: minimumDictationDuration())
@@ -784,7 +760,6 @@ final class Recorder: ObservableObject {
         if state == .loading || state == .starting || state == .listening || state == .finishing {
             transitionSessionHealth(to: .failed, failure: msg)
         }
-        stopRequestedDuringStart = false
         diagnosticFailureAfterBufferCount = nil
         diagnosticStallAfterBufferCount = nil
         diagnosticStartupStallArmed = false

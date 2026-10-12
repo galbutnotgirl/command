@@ -13,8 +13,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     func install() { if !UserDefaults.standard.bool(forKey: "hideMenuBarIcon") { showIcon() } }
 
+    func setStarting() {
+        statusItem?.button?.image = NSImage(systemSymbolName: "hourglass", accessibilityDescription: "Starting microphone")
+        statusItem?.button?.toolTip = "Starting microphone — wait for the start sound"
+    }
+
     func setRecording(_ on: Bool) {
         statusItem?.length = statusIconWidth
+        statusItem?.button?.toolTip = on ? "Recording audio" : "Command"
         statusItem?.button?.image = on ? waveformIcon(level: 0) : brandIcon()
     }
 
