@@ -386,7 +386,7 @@ assert_contains "installed restart can identify socket-owning process" "$AGENT_S
   'case "runtimepid": return "\(ProcessInfo.processInfo.processIdentifier)"'
 assert_contains "installed restart requires socket PID to match launchd" "$(cat "${DIR}/test/test-installed-restart.sh")" \
   '[[ "$(socket_runtime_pid)" == "$candidate" ]]'
-assert_contains "installed microphone probe captures through AVAudioEngine" "$RECORDER_SOURCE" \
+assert_contains "installed microphone probe captures through native audio worker" "$RECORDER_SOURCE" \
   'func runCaptureProbe('
 assert_contains "installed microphone probe rejects zero buffers" "$DICTATION_PROBE_SOURCE" \
   'capturedBuffers > 0 ? .passed : .noAudioBuffers'

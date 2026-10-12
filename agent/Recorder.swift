@@ -437,14 +437,16 @@ final class Recorder: ObservableObject {
 
         captureProbeInProgress = true
         let engine = DictationAudioCapture()
-        let inputDevice = AVCaptureDevice.default(for: .audio)?.localizedName ?? "unknown"
+        var inputDevice = "unknown"
         let duration = min(max(duration, 0.25), 2.0)
         let durationMilliseconds = Int((duration * 1_000).rounded())
         Task {
             var format: AVAudioFormat?
             let accumulator = DictationCaptureProbeAccumulator()
             do {
-                format = try await engine.prepare()
+                let prepared = try await engine.prepare()
+                format = prepared.format
+                inputDevice = prepared.deviceName
                 try await engine.start(format: format!) { _, _ in accumulator.recordBuffer() }
                 appendLog("[dictation-probe] started device=\(inputDevice.debugDescription) durationMs=\(durationMilliseconds)")
                 // Bluetooth streams may report running before their first callback.
@@ -486,13 +488,14 @@ final class Recorder: ObservableObject {
         let engine = DictationAudioCapture(startupDelayMilliseconds: delay)
         audioTapEngine = engine
         captureStartupBegan = true
-        inputDeviceName = AVCaptureDevice.default(for: .audio)?.localizedName ?? "unknown"
         activeStreamTaskCount += 1
         streamTask = Task { [self] in
             defer { self.activeStreamTaskCount -= 1 }
             do {
-                let hwFormat = try await engine.prepare()
+                let prepared = try await engine.prepare()
+                let hwFormat = prepared.format
                 guard self.sessionID == session, !Task.isCancelled else { throw CancellationError() }
+                self.inputDeviceName = prepared.deviceName
                 self.log("audio device: \(self.inputDeviceName); format: \(hwFormat.sampleRate)Hz ch=\(hwFormat.channelCount)")
                 let mgr = SlidingWindowAsrManager(config: .default)
                 self.currentMgr = mgr
@@ -516,7 +519,7 @@ final class Recorder: ObservableObject {
                         let n = Int(buf.frameLength); var sum: Float = 0
                         for i in 0..<n { let value = channelData[i]; sum += value * value }
                         let rms = n > 0 ? sqrt(sum / Float(n)) : 0
-                        let seconds = Double(buf.frameLength) / hwFormat.sampleRate
+                        let seconds = Double(buf.frameLength) / buf.format.sampleRate
                         Task { @MainActor in
                             guard let self, self.sessionID == session, self.state.canStop || self.state == .finishing else { return }
                             self.observeAudioFrame(rms: rms, seconds: seconds)

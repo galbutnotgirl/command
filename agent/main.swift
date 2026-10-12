@@ -2989,7 +2989,7 @@ func runInstalledDictationWatchdogProbe(
     }
 
     let previousHealth = latestDictationSessionHealth()
-    let countsBefore = dictationWatchdogCounts()
+    var countsBefore = dictationWatchdogCounts()
     var armed = false
     DispatchQueue.main.sync {
         switch scenario {
@@ -3055,6 +3055,10 @@ func runInstalledDictationWatchdogProbe(
             failure: "Diagnostic \(scenario.rawValue) stall did not reach its capture checkpoint."
         )
     }
+
+    // A slow but successful startup may have warned before live capture.
+    // Measure only the injected midstream stall's warning/reset here.
+    if scenario == .midstream { countsBefore = dictationWatchdogCounts() }
 
     // Release-before-ready cancellation has its own real-worker probe. Keep
     // this shortcut held so an unattended stall must still warn and reset.
