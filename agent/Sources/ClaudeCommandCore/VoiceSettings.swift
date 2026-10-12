@@ -18,7 +18,7 @@ public enum VoiceSettingsDefaults {
     public static let smartFormatting = true
     public static let soundsEnabled = true
     public static let soundVolume = 0.35
-    public static let startSound = "Purr"
+    public static let startSound = "Recording Start"
     public static let stopSound = "Purr"
     public static let dictationEnabled = false
     public static let minDictationDuration = 0.2

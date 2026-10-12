@@ -79,6 +79,8 @@ PLIST
 
 # Bundle runtime helpers into Resources.
 mkdir -p "${APP}/Contents/Resources"
+mkdir -p "${APP}/Contents/Resources/Audio"
+cp "${SRC_DIR}/Resources/Audio/"* "${APP}/Contents/Resources/Audio/"
 ATTESTATION_VERIFIER="${DIR}/verify-regression-attestation.sh"
 if [ -f "$ATTESTATION_VERIFIER" ]; then
   cp "$ATTESTATION_VERIFIER" "${APP}/Contents/Resources/verify-regression-attestation.sh"

@@ -33,7 +33,7 @@ final class VoiceSettingsTests: XCTestCase {
         XCTAssertTrue(VoiceSettingsDefaults.smartFormatting)
         XCTAssertTrue(VoiceSettingsDefaults.soundsEnabled)
         XCTAssertEqual(VoiceSettingsDefaults.soundVolume, 0.35, accuracy: 0.0001)
-        XCTAssertEqual(VoiceSettingsDefaults.startSound, "Purr")
+        XCTAssertEqual(VoiceSettingsDefaults.startSound, "Recording Start")
         XCTAssertEqual(VoiceSettingsDefaults.stopSound, "Purr")
         XCTAssertFalse(VoiceSettingsDefaults.dictationEnabled)
         XCTAssertEqual(VoiceSettingsDefaults.minDictationDuration, 0.2, accuracy: 0.0001)

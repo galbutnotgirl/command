@@ -555,7 +555,13 @@ private final class UISoundPlayer: NSObject, AVAudioPlayerDelegate {
     }
 
     private func makePlayer(for name: String, volume: Float) -> AVAudioPlayer? {
-        let url = URL(fileURLWithPath: "/System/Library/Sounds/\(name).aiff")
+        let url: URL
+        if name == "Recording Start" {
+            guard let resource = Bundle.main.resourceURL else { return nil }
+            url = resource.appendingPathComponent("Audio/startRecording.mp3")
+        } else {
+            url = URL(fileURLWithPath: "/System/Library/Sounds/\(name).aiff")
+        }
         guard FileManager.default.fileExists(atPath: url.path) else {
             appendLog("[sound] missing \(url.path)")
             return nil
@@ -4727,7 +4733,7 @@ struct DictVocabularyView: View {
 
 // ---- Sound browser -----------------------------------------------------------
 
-private let kAllSounds = ["Basso","Blow","Bottle","Frog","Funk","Glass","Hero",
+private let kAllSounds = ["Recording Start","Basso","Blow","Bottle","Frog","Funk","Glass","Hero",
                           "Morse","Ping","Pop","Purr","Sosumi","Submarine","Tink"]
 
 struct SoundBrowserView: View {
