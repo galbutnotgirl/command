@@ -97,6 +97,7 @@ final class Recorder: ObservableObject {
 
     var onFinal:   ((String, DictMode) -> Void)?
     var onPartial: ((String) -> Void)?
+    var onListening: ((DictMode) -> Void)?
     var onFinishedWithoutText: ((DictMode) -> Void)?
     var onFailure: ((String, DictMode) -> Void)?
 
@@ -561,6 +562,9 @@ final class Recorder: ObservableObject {
                     self.stop()
                     return
                 }
+                // Output routing can change when Bluetooth input starts. Announce
+                // readiness only after that switch, and never after a queued stop.
+                self.onListening?(self.currentMode)
                 self.resetSilenceTimer()
 
                 for await update in await mgr.transcriptionUpdates {

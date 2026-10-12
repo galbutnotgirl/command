@@ -526,12 +526,18 @@ private final class UISoundPlayer: NSObject, AVAudioPlayerDelegate {
 
     func play(_ name: String, role: DictationCueRole = .preview, volume: Float) {
         let clampedVolume = min(max(volume, 0), 1)
-        if let player = preparedPlayer(for: name, role: role, volume: clampedVolume) {
+        // A cached output player can retain the route from before Bluetooth
+        // microphone startup. Build the start cue on the now-active route.
+        let player = role == .start
+            ? makePlayer(for: name, volume: clampedVolume)
+            : preparedPlayer(for: name, role: role, volume: clampedVolume)
+        if let player {
+            if role == .start { activePlayers.append(player) }
             player.volume = clampedVolume
             player.currentTime = 0
-            if !player.play() {
-                appendLog("[sound] play failed name=\(name)")
-            }
+            let started = player.play()
+            appendLog("[sound] role=\(role.rawValue) name=\(name) started=\(started)")
+            if !started { activePlayers.removeAll { $0 === player } }
             return
         }
     }

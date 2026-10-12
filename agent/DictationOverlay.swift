@@ -153,9 +153,6 @@ final class DictationOverlay: NSObject {
         isVisible = true
         isFinishing = false
         menuBar.setRecording(true)
-        if mode != .diagnostic {
-            playUISound(settingsModel.startSound, role: .start)
-        }
         startLevelUpdates()
         startCaptureWatchdog()
         return true
@@ -253,6 +250,10 @@ final class DictationOverlay: NSObject {
 
     private func wireRecorder() {
         recorder.onPartial = { _ in }
+        recorder.onListening = { [weak self] mode in
+            guard let self, self.isVisible, !self.isFinishing, mode != .diagnostic else { return }
+            playUISound(settingsModel.startSound, role: .start)
+        }
 
         recorder.onFinal = { [weak self] rawText, mode in
             guard let self = self else { return }

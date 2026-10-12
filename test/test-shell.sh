@@ -268,6 +268,18 @@ DICTATION_DELIVERY_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/Dictati
 DICTATION_MODEL_PROBE_SOURCE="$(cat "${DIR}/agent/Tools/DictationModelProbe/main.swift")"
 DICTATION_FAILURE_SOURCE="$(sed -n '/recorder.onFailure =/,/private func playStopSound/p' "${DIR}/agent/DictationOverlay.swift")"
 RECORDER_SOURCE="$(cat "${DIR}/agent/Recorder.swift")"
+SETTINGS_SOUND_SOURCE="$(cat "${DIR}/agent/SettingsWindow.swift")"
+assert_before "start cue follows live microphone engine" "$RECORDER_SOURCE" \
+  'try engine.start()' 'self.onListening?(self.currentMode)'
+assert_before "queued startup stop suppresses start cue" "$RECORDER_SOURCE" \
+  'if self.stopRequestedDuringStart {' 'self.onListening?(self.currentMode)'
+assert_contains "start cue wired to microphone readiness" "$DICTATION_OVERLAY_SOURCE" \
+  'recorder.onListening = { [weak self] mode in'
+assert_contains "start cue suppressed for finished or diagnostic session" "$DICTATION_OVERLAY_SOURCE" \
+  'guard let self, self.isVisible, !self.isFinishing, mode != .diagnostic else { return }'
+assert_contains "start cue creates player on current output route" "$SETTINGS_SOUND_SOURCE" \
+  '? makePlayer(for: name, volume: clampedVolume)'
+
 DICTATION_HEALTH_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationSessionHealth.swift")"
 DICTATION_PROBE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationCaptureProbe.swift")"
 DICTATION_LIFECYCLE_SOURCE="$(cat "${DIR}/agent/Sources/ClaudeCommandCore/DictationLifecycleProbe.swift")"
