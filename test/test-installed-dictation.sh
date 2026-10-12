@@ -348,6 +348,20 @@ if [[ "$current_pid" != "$initial_pid" ]] || ! kill -0 "$initial_pid" 2>/dev/nul
   exit 1
 fi
 
+long_capture_reply="$(printf 'dictationlongcaptureprobe\n' | nc -U -w 35 "$SOCKET" 2>/dev/null || true)"
+python3 - "$long_capture_reply" <<'PYTEST'
+import json
+import sys
+result = json.loads(sys.argv[1])
+assert result['ok'] is True and result['status'] == 'passed', result
+assert result['minimumCaptureSeconds'] == 8, result
+assert result['durationMilliseconds'] >= 8_000, result
+assert result['capturedBuffers'] >= 4, result
+assert result['resourcesReleased'] is True and result['capturePhase'] == 'idle', result
+assert result['maximumMainHopMilliseconds'] < 250, result
+print(f"  sustained capture: {result['capturedBuffers']} buffers over 8s; maximum UI hop {result['maximumMainHopMilliseconds']}ms; resources cleaned")
+PYTEST
+
 "${DIR}/test-installed-voice-chords.sh"
 
 watchdog_reply="$(printf 'dictationwatchdogprobe\n' | nc -U -w 50 "$SOCKET" 2>/dev/null || true)"

@@ -2618,7 +2618,7 @@ func runInstalledDictationStartupCancelProbe() -> String {
     return #"{"ok":false,"failure":"Cancelled native startup did not release resources."}"#
 }
 
-func runInstalledDictationLifecycleProbe() -> String {
+func runInstalledDictationLifecycleProbe(minimumCaptureSeconds: TimeInterval = 0) -> String {
     let startedAt = Date()
     let initial = dictationLifecycleRuntimeSnapshot()
     guard initial.modelReady else {
@@ -2650,10 +2650,15 @@ func runInstalledDictationLifecycleProbe() -> String {
         triggerDictation(mode: .diagnostic, keycode: nil, pollForRelease: false)
     }
 
-    let captureDeadline = Date().addingTimeInterval(12)
+    let minimumCaptureSeconds = min(max(minimumCaptureSeconds, 0), 15)
+    let captureDeadline = Date().addingTimeInterval(max(12, minimumCaptureSeconds + 4))
     var probeHealth: DictationSessionHealth?
+    var maximumMainHopMilliseconds = 0
     while Date() < captureDeadline {
+        let hopStartedAt = Date()
         let runtime = dictationLifecycleRuntimeSnapshot()
+        maximumMainHopMilliseconds = max(maximumMainHopMilliseconds,
+            Int(Date().timeIntervalSince(hopStartedAt) * 1_000))
         if let health = latestDictationSessionHealth(),
            health.mode == String(describing: DictMode.diagnostic),
            health != previousHealth {
@@ -2669,7 +2674,8 @@ func runInstalledDictationLifecycleProbe() -> String {
                     failure: health.failure ?? "Production dictation capture failed before release."
                 )
             }
-            if runtime.capturedBuffers >= 4 { break }
+            if runtime.capturedBuffers >= 4,
+               Date().timeIntervalSince(startedAt) >= minimumCaptureSeconds { break }
         }
         if runtime.capturePhase == DictationCapturePhase.error.rawValue {
             cancelInstalledDictationLifecycleProbe()
@@ -2734,13 +2740,21 @@ func runInstalledDictationLifecycleProbe() -> String {
                runtime.capturePhase == DictationCapturePhase.idle.rawValue,
                !runtime.overlayVisible {
                 appendLog("[dictation-probe] lifecycle passed \(health.diagnosticSummary)")
-                return makeDictationLifecycleProbeResult(
-                    status: .passed,
-                    startedAt: startedAt,
-                    modelStatus: initial.modelStatus,
-                    runtime: runtime,
-                    health: health
+                let encoded = makeDictationLifecycleProbeResult(
+                    status: .passed, startedAt: startedAt, modelStatus: initial.modelStatus,
+                    runtime: runtime, health: health
                 )
+                if minimumCaptureSeconds > 0,
+                   let data = encoded.data(using: .utf8),
+                   var result = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+                    result["maximumMainHopMilliseconds"] = maximumMainHopMilliseconds
+                    result["minimumCaptureSeconds"] = minimumCaptureSeconds
+                    result["resourcesReleased"] = dictationCaptureResourceSnapshot().fullyReleased
+                    if let extended = try? JSONSerialization.data(withJSONObject: result, options: [.sortedKeys]) {
+                        return String(decoding: extended, as: UTF8.self)
+                    }
+                }
+                return encoded
             }
         }
         usleep(50_000)
@@ -3966,6 +3980,7 @@ func handle(_ line: String) -> String {
     case "runtimepid": return "\(ProcessInfo.processInfo.processIdentifier)"
     case "dictationprobe": return runInstalledDictationProbe()
     case "dictationlifecycleprobe": return runInstalledDictationLifecycleProbe()
+    case "dictationlongcaptureprobe": return runInstalledDictationLifecycleProbe(minimumCaptureSeconds: 8)
     case "dictationstartupcancelprobe": return runInstalledDictationStartupCancelProbe()
     case "dictationrecoveryprobe": return runInstalledDictationRecoveryProbe()
     case "dictationwatchdogprobe": return runInstalledDictationWatchdogProbe()

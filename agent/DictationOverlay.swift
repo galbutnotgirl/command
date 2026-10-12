@@ -172,6 +172,7 @@ final class DictationOverlay: NSObject {
     func stopRecording() {
         guard isVisible, !isFinishing else { return }
         isFinishing = true
+        menuBar.setFinishing()
         resetDictTrigMode()
         if recorder.currentMode != .diagnostic, recorder.state == .listening {
             playStopSound()
@@ -186,6 +187,7 @@ final class DictationOverlay: NSObject {
         levelTask = Task { @MainActor [weak self] in
             while let s = self, s.isVisible, !Task.isCancelled {
                 if recorder.state == .listening { menuBar.updateAudioLevel(recorder.audioLevel) }
+                else if recorder.state == .finishing { menuBar.setFinishing() }
                 try? await Task.sleep(nanoseconds: 66_000_000)   // ~15 fps
             }
         }
